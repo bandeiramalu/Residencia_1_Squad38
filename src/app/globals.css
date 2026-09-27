@@ -1,0 +1,136 @@
+@import "tailwindcss";
+
+/*
+ * Design System — Portal do Aluno (Squad 38)
+ * Paleta oficial do documento "Design System": tons de verde, visual limpo,
+ * cantos arredondados e espaçamento em múltiplos de 4 px (escala nativa do Tailwind).
+ */
+@theme {
+  --color-verde: #1e7149; /* Verde principal — botões, ações principais, destaques */
+  --color-verde-2: #288f5d; /* Verde secundário — elementos ativos e componentes */
+  --color-verde-claro: #e3f4eb; /* Fundos de destaque, badges e estados ativos */
+  --color-verde-mclaro: #f0fbf5; /* Áreas suaves e cartões */
+  --color-verde-suave: #c4e1d3; /* Barras de progresso e elementos secundários */
+  --color-fundo: #f2f9f5; /* Fundo geral e áreas de separação */
+  --color-texto: #445e53; /* Títulos e informações principais */
+  --color-texto-2: #6f8178; /* Descrições e informações auxiliares */
+
+  /* Extensões do DS (derivadas da paleta) */
+  --color-tinta: #1b3a2c; /* títulos de página — "cor escura" */
+  --color-borda: #dcebe3; /* borda fina dos cards */
+  --color-cepi: #1050a6; /* azul da marca CEPI Expansão */
+  --color-ambar: #d97706; /* chama da sequência */
+  --color-alerta: #b42318;
+
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-manuscrita: var(--font-caveat), cursive;
+
+  --radius-card: 1rem;
+  --shadow-flutuante: 0 10px 30px -8px rgb(27 58 44 / 0.25);
+  --shadow-card: 0 1px 2px rgb(27 58 44 / 0.04);
+
+  --animate-brilho: brilho 2.4s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+
+  @keyframes brilho {
+    0%,
+    100% {
+      box-shadow: 0 0 0 2px #fff, 0 0 10px 2px rgb(40 143 93 / 0.45);
+    }
+    50% {
+      box-shadow: 0 0 0 2px #fff, 0 0 20px 6px rgb(46 204 113 / 0.65);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-fundo);
+  color: var(--color-texto);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@media (min-width: 640px) {
+  body {
+    background:
+      radial-gradient(1200px 600px at 10% -10%, #d7efe2 0%, transparent 60%),
+      radial-gradient(900px 500px at 110% 110%, #dbe7f7 0%, transparent 55%),
+      var(--color-fundo);
+    background-attachment: fixed;
+  }
+}
+
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-verde-2);
+  outline-offset: 2px;
+}
+
+.sem-scrollbar {
+  scrollbar-width: none;
+}
+.sem-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.pb-nav {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #e8f3ed 25%, #f5fbf8 50%, #e8f3ed 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Capa "Caderno Pautado" (item da Loja) */
+.capa-pautada {
+  background-color: #fff;
+  background-image:
+    linear-gradient(90deg, transparent 38px, rgb(244 114 114 / 0.35) 38px, rgb(244 114 114 / 0.35) 40px, transparent 40px),
+    repeating-linear-gradient(180deg, transparent 0 19px, rgb(16 80 166 / 0.14) 19px 20px);
+}
+
+/* Tema "Bosque" (item da Loja) */
+.tema-bosque {
+  background:
+    radial-gradient(circle at 20% 120%, #1e7149 0 30%, transparent 31%),
+    radial-gradient(circle at 70% 130%, #288f5d 0 35%, transparent 36%),
+    radial-gradient(circle at 95% 110%, #1b3a2c 0 22%, transparent 23%),
+    linear-gradient(180deg, #e3f4eb, #c4e1d3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
