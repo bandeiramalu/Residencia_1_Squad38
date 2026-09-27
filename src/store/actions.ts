@@ -3,6 +3,7 @@
  * (muda o estado, mostra notificações e agenda eventos simulados).
  * Os componentes chamam estas funções — nunca o reducer direto.
  */
+import { RESPOSTAS_DM } from "@/data/conversas";
 import { ESCOLA, type Disciplina } from "@/data/escola";
 import { pontosDaSequencia } from "@/data/missoes";
 import { itemPorId } from "@/data/loja";
@@ -16,7 +17,7 @@ import type { Acao } from "./reducer";
 import { criarEstadoInicial } from "./seed";
 import { despachar, obterEstado } from "./store";
 import type { EspacoId, Post, TipoPost } from "./types";
-import { celebrar, toast } from "./ui";
+import { celebrar, definirDigitando, lerUI, toast } from "./ui";
 
 /* ───────────── Infraestrutura ───────────── */
 
@@ -409,6 +410,83 @@ export function equipar(itemId: string, valor: boolean) {
   toast({ tipo: "info", titulo: valor ? "Equipado no seu perfil" : "Removido do seu perfil", mensagem: itemPorId(itemId)?.nome }, 2200);
 }
 
+/* ───────────── Mensagens diretas (US01) ───────────── */
+
+/** Conversas com resposta simulada já agendada — uma resposta por rajada de mensagens. */
+const respostasPendentes = new Set<string>();
+
+/** Abre (ou cria) a conversa individual com uma pessoa e devolve o id. */
+export function iniciarConversa(pessoaId: string) {
+  const existente = obterEstado().conversas.find((c) => !c.titulo && c.participantes.length === 2 && c.participantes.includes(pessoaId));
+  if (existente) return existente.id;
+  const conversa = { id: `c-${pessoaId}`, participantes: [USUARIO_ID, pessoaId], mensagens: [], naoLidas: 0 };
+  commit({ type: "criarConversa", conversa });
+  return conversa.id;
+}
+
+export function abrirConversa(conversaId: string) {
+  commit({ type: "abrirConversa", conversaId });
+}
+
+function respostaSimulada(conversaId: string, respondenteId: string) {
+  const conversa = obterEstado().conversas.find((c) => c.id === conversaId);
+  const papel = pessoa(respondenteId)?.papel;
+  const opcoes =
+    RESPOSTAS_DM[respondenteId] ?? (papel === "professor" ? RESPOSTAS_DM.professor : papel === "escola" ? RESPOSTAS_DM.coord : ["👍"]);
+  const jaRespondidas = conversa?.mensagens.filter((m) => m.autorId === respondenteId).length ?? 0;
+  return opcoes[jaRespondidas % opcoes.length];
+}
+
+export function enviarMensagem(conversaId: string, texto: string) {
+  const conversa = obterEstado().conversas.find((c) => c.id === conversaId);
+  if (!conversa || !texto.trim()) return;
+  const moderacao = verificarPublicacao(texto);
+  commit({
+    type: "enviarMensagem",
+    conversaId,
+    mensagem: { id: gerarId("m"), autorId: USUARIO_ID, texto: texto.trim(), criadoEm: Date.now(), lida: false, retida: moderacao.sinalizado || undefined },
+  });
+
+  if (moderacao.sinalizado) {
+    toast(
+      {
+        tipo: "alerta",
+        titulo: "Mensagem retida para revisão",
+        mensagem: `A triagem automática sinalizou possível ${moderacao.motivo.toLowerCase()}. Ela só será entregue após revisão da coordenação.`,
+      },
+      5200,
+    );
+    return;
+  }
+
+  agendar(900, () => commit({ type: "confirmarLeitura", conversaId, autorId: USUARIO_ID }));
+  if (respostasPendentes.has(conversaId)) return;
+
+  const outros = conversa.participantes.filter((id) => id !== USUARIO_ID);
+  const respondente = outros[conversa.mensagens.length % outros.length];
+  const resposta = respostaSimulada(conversaId, respondente);
+  const pensar = 1300;
+  const digitar = 1100 + Math.min(2200, resposta.length * 28);
+  respostasPendentes.add(conversaId);
+
+  agendar(pensar, () => definirDigitando(conversaId, respondente));
+  agendar(pensar + digitar, () => {
+    respostasPendentes.delete(conversaId);
+    definirDigitando(conversaId, null);
+    if (!obterEstado().conversas.some((c) => c.id === conversaId)) return;
+    const aberta = lerUI().conversaAberta === conversaId;
+    commit({
+      type: "receberMensagem",
+      conversaId,
+      naoLida: !aberta,
+      mensagem: { id: gerarId("m"), autorId: respondente, texto: resposta, criadoEm: Date.now(), lida: aberta },
+    });
+    if (!aberta) {
+      toast({ tipo: "mensagem", titulo: `Nova mensagem de ${primeiroNome(pessoa(respondente)?.nome ?? "")}`, mensagem: resposta, href: `/mensagens/${conversaId}` }, 4200);
+    }
+  });
+}
+
 /* ───────────── Perfil e preferências ───────────── */
 
 export function ocultarRanking(valor: boolean) {
@@ -424,6 +502,8 @@ export function alternarLembrete(eventoId: string, titulo: string) {
 
 export function resetarDemonstracao() {
   epoca++;
+  respostasPendentes.clear();
+  for (const conversaId of Object.keys(lerUI().digitando)) definirDigitando(conversaId, null);
   despachar({ type: "resetar", estado: criarEstadoInicial(Date.now()) });
   toast({ tipo: "info", titulo: "Demonstração reiniciada", mensagem: "Todos os dados voltaram ao estado inicial." });
 }

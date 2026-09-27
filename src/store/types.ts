@@ -155,6 +155,27 @@ export interface Medalha {
   desbloqueadaEm?: number;
 }
 
+export interface Mensagem {
+  id: string;
+  autorId: string;
+  texto: string;
+  criadoEm: number;
+  /** Lida pelo destinatário (✓✓). */
+  lida: boolean;
+  /** US06 — retida pela triagem automática até a revisão humana. */
+  retida?: boolean;
+}
+
+/** Conversa privada (2 pessoas) ou em grupo (US01 — mensagens diretas). */
+export interface Conversa {
+  id: string;
+  participantes: string[];
+  /** Nome do grupo; conversas individuais usam o nome do contato. */
+  titulo?: string;
+  mensagens: Mensagem[];
+  naoLidas: number;
+}
+
 export interface AppState {
   versao: number;
   criadoEm: number;
@@ -172,4 +193,5 @@ export interface AppState {
   lembretes: string[];
   materiaisAbertos: string[];
   espaco: EspacoId;
+  conversas: Conversa[];
 }

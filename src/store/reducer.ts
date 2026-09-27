@@ -1,7 +1,7 @@
 import type { Disciplina } from "@/data/escola";
 import { FLASHCARDS } from "@/data/missoes";
 import { itemPorId } from "@/data/loja";
-import type { AppState, Compra, Denuncia, EspacoId, Post, Relato, Resposta, StatusDia } from "./types";
+import type { AppState, Compra, Conversa, Denuncia, EspacoId, Mensagem, Post, Relato, Resposta, StatusDia } from "./types";
 
 export type Acao =
   | { type: "premiar"; pontos: number; xp: number; disciplina?: Disciplina }
@@ -31,6 +31,11 @@ export type Acao =
   | { type: "concluirDesafio"; disciplina: Disciplina; acertos: number }
   | { type: "alternarLembrete"; eventoId: string }
   | { type: "selecionarEspaco"; espaco: EspacoId }
+  | { type: "criarConversa"; conversa: Conversa }
+  | { type: "enviarMensagem"; conversaId: string; mensagem: Mensagem }
+  | { type: "receberMensagem"; conversaId: string; mensagem: Mensagem; naoLida: boolean }
+  | { type: "abrirConversa"; conversaId: string }
+  | { type: "confirmarLeitura"; conversaId: string; autorId: string }
   | { type: "resetar"; estado: AppState };
 
 /** Limite de cartas exibidas numa rodada de prática (inclui as revistas). */
@@ -38,6 +43,10 @@ export const MAX_CARTAS_RODADA = FLASHCARDS.length + 3;
 
 function mapPost(estado: AppState, postId: string, fn: (p: Post) => Post): AppState {
   return { ...estado, posts: estado.posts.map((p) => (p.id === postId ? fn(p) : p)) };
+}
+
+function mapConversa(estado: AppState, conversaId: string, fn: (c: Conversa) => Conversa): AppState {
+  return { ...estado, conversas: estado.conversas.map((c) => (c.id === conversaId ? fn(c) : c)) };
 }
 
 function mapResposta(post: Post, respostaId: string, fn: (r: Resposta) => Resposta): Post {
@@ -241,6 +250,39 @@ export function reducer(estado: AppState, acao: Acao): AppState {
 
     case "selecionarEspaco":
       return { ...estado, espaco: acao.espaco };
+
+    case "criarConversa":
+      return estado.conversas.some((c) => c.id === acao.conversa.id)
+        ? estado
+        : { ...estado, conversas: [acao.conversa, ...estado.conversas] };
+
+    case "enviarMensagem":
+      return mapConversa(estado, acao.conversaId, (c) => ({ ...c, mensagens: [...c.mensagens, acao.mensagem] }));
+
+    case "receberMensagem":
+      return mapConversa(estado, acao.conversaId, (c) => ({
+        ...c,
+        mensagens: [...c.mensagens, acao.mensagem],
+        naoLidas: c.naoLidas + (acao.naoLida ? 1 : 0),
+      }));
+
+    case "abrirConversa":
+      // Marca como lidas só as mensagens recebidas; as enviadas dependem do destinatário.
+      return mapConversa(estado, acao.conversaId, (c) =>
+        c.naoLidas === 0 && c.mensagens.every((m) => m.lida || m.autorId === estado.usuario.id)
+          ? c
+          : {
+              ...c,
+              naoLidas: 0,
+              mensagens: c.mensagens.map((m) => (m.lida || m.autorId === estado.usuario.id ? m : { ...m, lida: true })),
+            },
+      );
+
+    case "confirmarLeitura":
+      return mapConversa(estado, acao.conversaId, (c) => ({
+        ...c,
+        mensagens: c.mensagens.map((m) => (m.autorId === acao.autorId && !m.lida && !m.retida ? { ...m, lida: true } : m)),
+      }));
 
     case "resetar":
       return acao.estado;

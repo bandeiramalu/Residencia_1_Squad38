@@ -1,31 +1,41 @@
 /**
- * Estado de interface que NÃO é salvo: notificações (toasts), comemorações
- * e a publicação que o feed deve destacar ao abrir.
+ * Estado de interface que NÃO é salvo: notificações (toasts), comemorações,
+ * a publicação que o feed deve destacar e quem está "digitando" nas conversas.
  */
 import { useSyncExternalStore } from "react";
 
-export type TipoToast = "ganho" | "gasto" | "info" | "sequencia" | "alerta" | "medalha" | "nivel" | "xp";
+export type TipoToast = "ganho" | "gasto" | "info" | "sequencia" | "alerta" | "medalha" | "nivel" | "xp" | "mensagem";
 
 export interface Toast {
   id: number;
   tipo: TipoToast;
   titulo: string;
   mensagem?: string;
+  /** Rota aberta ao tocar na notificação. */
+  href?: string;
 }
 
 interface EstadoUI {
   toasts: Toast[];
   celebracao: number;
   focoPost: string | null;
+  /** conversaId → id de quem está digitando. */
+  digitando: Record<string, string>;
+  conversaAberta: string | null;
 }
 
-let ui: EstadoUI = { toasts: [], celebracao: 0, focoPost: null };
+const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null, digitando: {}, conversaAberta: null };
+let ui: EstadoUI = inicial;
 const ouvintes = new Set<() => void>();
 let proximoId = 1;
 
 function atualizar(parcial: Partial<EstadoUI>) {
   ui = { ...ui, ...parcial };
   ouvintes.forEach((o) => o());
+}
+
+export function lerUI() {
+  return ui;
 }
 
 export function toast(t: Omit<Toast, "id">, duracao = 3400) {
@@ -47,7 +57,16 @@ export function focarPost(id: string | null) {
   atualizar({ focoPost: id });
 }
 
-const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null };
+export function definirDigitando(conversaId: string, autorId: string | null) {
+  const digitando = { ...ui.digitando };
+  if (autorId) digitando[conversaId] = autorId;
+  else delete digitando[conversaId];
+  atualizar({ digitando });
+}
+
+export function definirConversaAberta(conversaId: string | null) {
+  atualizar({ conversaAberta: conversaId });
+}
 
 export function useUI() {
   return useSyncExternalStore(

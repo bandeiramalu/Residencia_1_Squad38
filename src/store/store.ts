@@ -8,7 +8,7 @@
  */
 import { useSyncExternalStore } from "react";
 import { reducer, type Acao } from "./reducer";
-import { VERSAO_ESTADO, criarEstadoInicial } from "./seed";
+import { criarEstadoInicial, migrarEstado } from "./seed";
 import type { AppState } from "./types";
 
 const CHAVE = "cepi-portal-do-aluno";
@@ -22,8 +22,8 @@ function carregar(): AppState {
   try {
     const salvo = localStorage.getItem(CHAVE);
     if (salvo) {
-      const dados = JSON.parse(salvo) as AppState;
-      if (dados?.versao === VERSAO_ESTADO) return dados;
+      const dados = migrarEstado(JSON.parse(salvo) as AppState);
+      if (dados) return dados;
     }
   } catch {
     // localStorage indisponível (aba anônima, bloqueio): segue com o estado inicial.
