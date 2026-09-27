@@ -1,0 +1,366 @@
+import type { Post } from "@/store/types";
+
+const MIN = 60_000;
+const H = 60 * MIN;
+const D = 24 * H;
+
+/** Publicações iniciais do feed, com horários relativos ao primeiro acesso. */
+export function criarPosts(agora: number): Post[] {
+  const t = (ms: number) => agora - ms;
+  const base = { curtido: false, salvo: false };
+
+  return [
+    {
+      ...base,
+      id: "p1",
+      tipo: "material",
+      autorId: "prof_ricardo",
+      espaco: "9A",
+      disciplina: "Matemática",
+      texto:
+        "Postei a lista 7 de funções afins com gabarito comentado. Ela faz parte da missão da semana do 9º Ano A: quem resolver as 10 questões garante o XP do plano de aula. #funcaoafim #lista7",
+      tags: ["funcaoafim", "lista7"],
+      anexo: { nome: "lista-7-funcoes-afins.pdf", paginas: 4, tamanho: "212 KB" },
+      criadoEm: t(15 * MIN),
+      curtidas: 14,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p2",
+      tipo: "duvida",
+      autorId: "ana",
+      espaco: "9A",
+      disciplina: "Matemática",
+      texto:
+        'Travei no item b da lista 7: por que a reta desce quando o coeficiente angular é negativo? Alguém explica de um jeito que não seja "porque a fórmula manda"?',
+      tags: ["funcaoafim"],
+      criadoEm: t(55 * MIN),
+      curtidas: 6,
+      respostas: [
+        {
+          id: "r1",
+          autorId: "lucas",
+          texto:
+            "Pensa assim: o coeficiente é o quanto o y anda a cada passo no x. Se ele é negativo, cada passo para a direita faz o y cair — por isso a reta desce.",
+          criadoEm: t(30 * MIN),
+          uteis: 4,
+          util: false,
+        },
+        {
+          id: "r2",
+          autorId: "julia",
+          texto:
+            "Eu fixei desenhando duas retas no mesmo plano: uma com a = 2 e outra com a = −2. Fica óbvio na hora da prova.",
+          criadoEm: t(22 * MIN),
+          uteis: 2,
+          util: false,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p3",
+      tipo: "duvida",
+      autorId: "julia",
+      espaco: "9A",
+      disciplina: "Biologia",
+      texto:
+        "Crossing-over acontece na prófase I ou na prófase II? Meu caderno diz uma coisa, o livro diz outra e a Profª. Denise falou de um jeito diferente. #meiose",
+      tags: ["meiose"],
+      criadoEm: t(1 * H),
+      curtidas: 9,
+      respostas: [
+        {
+          id: "r3",
+          autorId: "ana",
+          texto:
+            "É na prófase I, quando os cromossomos homólogos pareiam e trocam pedaços. Na meiose II só separam as cromátides-irmãs, sem troca.",
+          criadoEm: t(48 * MIN),
+          uteis: 3,
+          util: true,
+        },
+        {
+          id: "r4",
+          autorId: "camila",
+          texto:
+            "O livro está certo. Dica: I = redução (2n para n), II = separação. O crossing-over só ocorre na I, porque precisa dos homólogos juntos.",
+          criadoEm: t(40 * MIN),
+          uteis: 1,
+          util: false,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p4",
+      tipo: "material",
+      autorId: "prof_denise",
+      espaco: "9A",
+      disciplina: "Biologia",
+      texto:
+        "Slides da aula 12 de citologia e o mapa mental que montamos em sala. Usem o mapa para a missão de revisão antes do relatório da aula prática no laboratório. #citologia",
+      tags: ["citologia"],
+      anexo: { nome: "aula-12-citologia-mapa-mental.pdf", paginas: 9, tamanho: "1,4 MB" },
+      criadoEm: t(2 * H),
+      curtidas: 22,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p5",
+      tipo: "aviso",
+      autorId: "coord",
+      espaco: "escola",
+      texto:
+        "Aviso: as inscrições para a Feira de Ciências do CEPI vão até sexta-feira, na secretaria. Cada grupo deve ter de 3 a 5 integrantes e apresentar o projeto em até 10 minutos. Projetos de robótica são bem-vindos!",
+      tags: ["feiradeciencias"],
+      criadoEm: t(3 * H),
+      curtidas: 31,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p6",
+      tipo: "duvida",
+      autorId: "marina",
+      espaco: "9A",
+      disciplina: "História",
+      texto:
+        "Alguém sabe diferenciar de verdade as causas estruturais do estopim da Primeira Guerra? Na hora da prova eu misturo tudo e escrevo o que não deve.",
+      tags: ["primeiraguerra"],
+      criadoEm: t(5 * H),
+      curtidas: 7,
+      respostas: [
+        {
+          id: "r6",
+          autorId: "lucas",
+          texto:
+            "Estrutural é o que vinha se acumulando havia décadas (imperialismo, corrida armamentista, nacionalismo). Estopim é o evento que disparou tudo: o atentado de Sarajevo, em 1914.",
+          criadoEm: t(4 * H),
+          uteis: 2,
+          util: false,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p7",
+      tipo: "publicacao",
+      autorId: "lucas",
+      espaco: "9A",
+      disciplina: "Matemática",
+      texto:
+        "Grupo de estudos de Matemática confirmado: quinta, 14h, na biblioteca. Levo a lista 7 impressa e a minha tabela de sinais. Cabem mais 4 pessoas — comenta aqui embaixo.",
+      tags: [],
+      criadoEm: t(6 * H),
+      curtidas: 18,
+      respostas: [
+        {
+          id: "r7c",
+          autorId: "sofia",
+          texto: "Tô dentro! Levo os flashcards de Química pra gente revisar no final.",
+          criadoEm: t(5 * H),
+          uteis: 0,
+          util: false,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p8",
+      tipo: "duvida",
+      autorId: "pedro",
+      espaco: "9A",
+      disciplina: "Português",
+      texto:
+        'Em "seus olhos são duas luas" a figura de linguagem é metáfora ou comparação? A Profª. Cláudia pediu para justificar e eu não sei o que escrever.',
+      tags: ["figurasdelinguagem"],
+      criadoEm: t(8 * H),
+      curtidas: 11,
+      respostas: [
+        {
+          id: "r8o",
+          autorId: "prof_claudia",
+          texto:
+            'É metáfora. Repare que não há conectivo comparativo ("como", "tal qual"): a relação de semelhança é implícita. Na comparação, o conectivo aparece: "olhos como duas luas".',
+          criadoEm: t(6 * H),
+          uteis: 12,
+          util: false,
+          oficial: true,
+        },
+        {
+          id: "r8",
+          autorId: "marina",
+          texto:
+            "Metáfora. A comparação exigiria um conectivo. Aqui a afirmação é direta: comparação implícita = metáfora.",
+          criadoEm: t(7 * H),
+          uteis: 3,
+          util: false,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p9",
+      tipo: "publicacao",
+      autorId: "prof_tiago",
+      espaco: "robotica",
+      disciplina: "Física",
+      texto:
+        "Clube de Robótica: nesta quinta vamos montar o seguidor de linha com sensores infravermelhos. Tragam o caderno de protótipos e pensem em como a velocidade dos motores muda nas curvas. #robotica",
+      tags: ["robotica"],
+      criadoEm: t(20 * H),
+      curtidas: 26,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p10",
+      tipo: "material",
+      autorId: "prof_daniel",
+      espaco: "bilingue",
+      disciplina: "Inglês",
+      texto:
+        "Vocabulary list da Unit 5 (Present Perfect) do Programa Bilíngue Cultura Inglesa. Revisem os exemplos com 'already', 'yet' e 'ever' antes do simulado.",
+      tags: ["presentperfect"],
+      anexo: { nome: "unit-5-present-perfect.pdf", paginas: 3, tamanho: "180 KB" },
+      criadoEm: t(1 * D),
+      curtidas: 17,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p11",
+      tipo: "aviso",
+      autorId: "coord",
+      espaco: "escola",
+      texto:
+        "Semana da Criança: o passeio ciclístico das famílias abre a programação no sábado, às 8h, com saída do pátio do CEPI. Capacete obrigatório!",
+      tags: ["semanadacrianca"],
+      criadoEm: t(1 * D + 3 * H),
+      curtidas: 44,
+      respostas: [],
+    },
+    {
+      ...base,
+      id: "p12",
+      tipo: "duvida",
+      autorId: "sofia",
+      espaco: "9A",
+      disciplina: "Matemática",
+      texto: "Como achar o coeficiente angular a partir de dois pontos do gráfico da função afim?",
+      tags: ["funcaoafim"],
+      criadoEm: t(3 * D),
+      curtidas: 15,
+      respostas: [
+        {
+          id: "r12o",
+          autorId: "prof_ricardo",
+          texto:
+            "Use a = (y₂ − y₁) ÷ (x₂ − x₁). Exemplo: pontos (1, 3) e (3, 7) → a = (7 − 3) ÷ (3 − 1) = 2. Se o resultado for negativo, a reta é decrescente.",
+          criadoEm: t(3 * D - 2 * H),
+          uteis: 18,
+          util: true,
+          oficial: true,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p13",
+      tipo: "duvida",
+      autorId: "camila",
+      espaco: "escola",
+      disciplina: "Biologia",
+      texto: "Qual é a diferença principal entre mitose e meiose? Sempre confundo o número de células no final.",
+      tags: ["meiose", "mitose"],
+      criadoEm: t(4 * D),
+      curtidas: 12,
+      respostas: [
+        {
+          id: "r13o",
+          autorId: "prof_denise",
+          texto:
+            "Mitose: 1 célula gera 2 células iguais (2n → 2n), para crescimento e reparo. Meiose: 1 célula gera 4 células com metade dos cromossomos (2n → n), para formar gametas — e é nela que acontece o crossing-over.",
+          criadoEm: t(4 * D - 3 * H),
+          uteis: 21,
+          util: true,
+          oficial: true,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p14",
+      tipo: "duvida",
+      autorId: "otavio",
+      espaco: "9A",
+      disciplina: "Química",
+      texto: "Como balancear a equação H₂ + O₂ → H₂O? Não entendo de onde sai o 2 na frente.",
+      tags: ["reacoesquimicas"],
+      criadoEm: t(5 * D),
+      curtidas: 8,
+      respostas: [
+        {
+          id: "r14o",
+          autorId: "prof_andre",
+          texto:
+            "Conte os átomos dos dois lados: há 2 O na esquerda e 1 na direita, então coloque 2 H₂O. Agora há 4 H na direita, então 2 H₂. Resultado: 2 H₂ + O₂ → 2 H₂O.",
+          criadoEm: t(5 * D - 1 * H),
+          uteis: 9,
+          util: true,
+          oficial: true,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p15",
+      tipo: "duvida",
+      autorId: "rafael",
+      espaco: "escola",
+      disciplina: "História",
+      texto: "O que era a política de alianças antes da Primeira Guerra? Tríplice Aliança e Tríplice Entente tinham quais países?",
+      tags: ["primeiraguerra"],
+      criadoEm: t(2 * D),
+      curtidas: 10,
+      respostas: [
+        {
+          id: "r15o",
+          autorId: "prof_marcos",
+          texto:
+            "Tríplice Aliança: Alemanha, Império Austro-Húngaro e Itália. Tríplice Entente: Reino Unido, França e Rússia. Essas alianças transformaram um conflito regional (Sarajevo) em guerra mundial.",
+          criadoEm: t(2 * D - 4 * H),
+          uteis: 14,
+          util: true,
+          oficial: true,
+        },
+      ],
+    },
+    {
+      ...base,
+      id: "p16",
+      tipo: "duvida",
+      autorId: "pedro",
+      espaco: "9A",
+      disciplina: "Física",
+      texto: "Por que a velocidade média não é a média das velocidades? Errei essa na prova passada.",
+      tags: ["cinematica"],
+      criadoEm: t(6 * D),
+      curtidas: 6,
+      respostas: [
+        {
+          id: "r16o",
+          autorId: "prof_tiago",
+          texto:
+            "Porque ela é distância total ÷ tempo total. Se você passa mais tempo no trecho lento, ele pesa mais. Ex.: 60 km a 60 km/h (1 h) + 60 km a 30 km/h (2 h) = 120 km em 3 h = 40 km/h, não 45.",
+          criadoEm: t(6 * D - 5 * H),
+          uteis: 11,
+          util: true,
+          oficial: true,
+        },
+      ],
+    },
+  ];
+}
