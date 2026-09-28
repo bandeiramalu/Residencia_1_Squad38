@@ -39,7 +39,9 @@ Navegação por **barra inferior fixa com 5 abas** e modais inferiores (bottom s
 | **Loja**     | saldo de pontos × XP · abas Avatar / Perfil / Recompensas da escola · raridades Comum → Exclusivo · modal "Confirmar troca" com saldo antes/depois · histórico de trocas · vouchers para retirar na secretaria                                         |
 | **Perfil**   | avatar com os itens equipados · nível e barra de XP · métricas · 8 medalhas com modal de progresso · desempenho por disciplina · personalização · ocultar posição pública                                                                                 |
 
-No cabeçalho: seletor de **turma/espaço** (Toda a escola, 9º Ano A, Clube de Robótica, Bilíngue Cultura Inglesa), **calendário** de provas e prazos e o **saldo** de pontos/XP.
+No cabeçalho: seletor de **turma/espaço** (Toda a escola, 9º Ano A, Clube de Robótica, Bilíngue Cultura Inglesa), **calendário** de provas e prazos, **mensagens diretas** (com contador de não lidas) e o **saldo** de pontos/XP.
+
+**Mensagens diretas** (`/mensagens` e `/mensagens/[id]`): conversas individuais e em grupo com colegas, professores e coordenação · nova conversa a partir da lista de contatos ou do menu "⋯" de qualquer publicação · respostas simuladas com indicador "digitando…" · confirmação de leitura (✓/✓✓) · separação por dia · sugestões rápidas · notificação ao chegar mensagem com a conversa fechada · mensagens ofensivas ficam **retidas para revisão** (US06).
 
 ### Fluxos do documento "Navegação e fluxos"
 
@@ -55,12 +57,12 @@ No cabeçalho: seletor de **turma/espaço** (Toda a escola, 9º Ano A, Clube de 
 
 | História | Onde está                                                                                       | Papel da IA no protótipo                                           |
 | -------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| US01     | Feed: publicar, comentar, curtir, salvar                                                        | —                                                                  |
+| US01     | Feed: publicar, comentar, curtir, salvar · **Mensagens diretas** e grupos                       | —                                                                  |
 | US02     | Modal "Nova publicação" → Dúvida                                                                | sugestão de disciplina e tags + dúvidas similares (`lib/busca.ts`) |
 | US03     | Busca do Feed · respostas oficiais fixadas                                                      | busca semântica por conceitos (`lib/busca.ts`)                     |
 | US04     | Calendário no cabeçalho · lembretes                                                             | **regra determinística** (3+ avaliações na semana), não predição  |
 | US05     | Feed → ⋯ → Denunciar publicação                                                                 | classifica e prioriza; não decide nem pune (`lib/moderacao.ts`)    |
-| US06     | Publicação com termos ofensivos vai para **revisão humana**                                     | sinaliza para a coordenação (`lib/moderacao.ts`)                   |
+| US06     | Publicação ou mensagem com termos ofensivos vai para **revisão humana**                         | sinaliza para a coordenação (`lib/moderacao.ts`)                   |
 | US07     | Pontos, XP, níveis, sequência, medalhas                                                         | —                                                                  |
 | US08     | Loja, itens de perfil, **desconto na cantina** e outras recompensas da escola                   | —                                                                  |
 | US09B    | Missões → Desafios para você (disciplinas com menor domínio)                                    | personalização pelo histórico do aluno                             |
@@ -77,11 +79,12 @@ src/
 │   ├── layout.tsx        Layout raiz: fontes, metadados e a moldura do app
 │   ├── template.tsx      Transição de entrada entre as abas
 │   ├── feed/ missoes/ ranking/ loja/ perfil/   page.tsx de cada aba (Server Components)
+│   ├── mensagens/        Lista de conversas e mensagens/[id] (rota dinâmica da conversa)
 │   └── globals.css       Tokens do Design System (Tailwind v4 @theme)
 ├── components/
 │   ├── shell/            Cabeçalho, barra inferior, esqueleto de carregamento
 │   ├── ui/               Componentes do Design System (Button, Card, Badge, Avatar, Sheet…)
-│   ├── feed/ missoes/ ranking/ loja/ perfil/ calendario/   componentes de cada tela
+│   ├── feed/ missoes/ ranking/ loja/ perfil/ calendario/ mensagens/   componentes de cada tela
 ├── data/                 Dados de exemplo (pessoas, posts, missões, loja, medalhas, ranking)
 ├── lib/                  Regras puras: gamificação, busca semântica, moderação, PDF, datas
 ├── hooks/                useAgora (relógio compartilhado), useFecharFora
