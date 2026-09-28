@@ -1,3 +1,4 @@
+import { criarConversas } from "@/data/conversas";
 import { COLETIVA, FLASHCARDS, MISSOES } from "@/data/missoes";
 import { PESSOAS } from "@/data/pessoas";
 import { criarPosts } from "@/data/posts";
@@ -5,7 +6,7 @@ import { USUARIO_INICIAL } from "@/data/usuario";
 import { diaDaSemana } from "@/lib/tempo";
 import type { AppState, StatusDia } from "./types";
 
-export const VERSAO_ESTADO = 1;
+export const VERSAO_ESTADO = 2;
 const D = 24 * 60 * 60 * 1000;
 
 export function criarEstadoInicial(agora: number): AppState {
@@ -52,5 +53,13 @@ export function criarEstadoInicial(agora: number): AppState {
     lembretes: ["e2"],
     materiaisAbertos: [],
     espaco: "escola",
+    conversas: criarConversas(agora),
   };
+}
+
+/** Atualiza um estado salvo por uma versão anterior sem perder o progresso. */
+export function migrarEstado(dados: AppState): AppState | null {
+  if (dados?.versao === VERSAO_ESTADO) return dados;
+  if (dados?.versao === 1) return { ...dados, versao: VERSAO_ESTADO, conversas: criarConversas(Date.now()) };
+  return null;
 }

@@ -1,8 +1,10 @@
 "use client";
 
-import { CalendarDays, Check, ChevronDown, Coins, Sparkles } from "lucide-react";
+import { CalendarDays, Check, ChevronDown, Coins, MessageCircle, Sparkles } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import { CalendarioSheet } from "@/components/calendario/CalendarioSheet";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
@@ -16,7 +18,9 @@ import { CarteiraSheet } from "./CarteiraSheet";
 
 /** Cabeçalho fixo: identificação, seletor de turma/espaço e saldo de pontos/XP. */
 export function Header() {
-  const { usuario, espaco } = useEstado();
+  const { usuario, espaco, conversas } = useEstado();
+  const pathname = usePathname();
+  const naoLidas = conversas.reduce((soma, c) => soma + c.naoLidas, 0);
   const [menuAberto, setMenuAberto] = useState(false);
   const [calendario, setCalendario] = useState(false);
   const [carteira, setCarteira] = useState(false);
@@ -97,17 +101,45 @@ export function Header() {
           </AnimatePresence>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setCalendario(true)}
-          aria-label={`Calendário: ${eventosDaSemana} compromissos nos próximos 7 dias`}
-          className="relative grid size-9 shrink-0 place-items-center rounded-full text-texto transition-colors hover:bg-verde-mclaro hover:text-verde active:scale-90"
-        >
-          <CalendarDays className="size-5" />
-          <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-verde px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-white">
-            {eventosDaSemana}
-          </span>
-        </button>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => setCalendario(true)}
+            aria-label={`Calendário: ${eventosDaSemana} compromissos nos próximos 7 dias`}
+            className="relative grid size-9 place-items-center rounded-full text-texto transition-colors hover:bg-verde-mclaro hover:text-verde active:scale-90"
+          >
+            <CalendarDays className="size-5" />
+            <span className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-verde px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-white">
+              {eventosDaSemana}
+            </span>
+          </button>
+
+          <Link
+            href="/mensagens"
+            aria-label={naoLidas ? `Mensagens: ${naoLidas} não lidas` : "Mensagens"}
+            aria-current={pathname === "/mensagens" ? "page" : undefined}
+            className={cn(
+              "relative grid size-9 place-items-center rounded-full transition-colors hover:bg-verde-mclaro hover:text-verde active:scale-90",
+              pathname === "/mensagens" ? "bg-verde-claro text-verde" : "text-texto",
+            )}
+          >
+            <MessageCircle className="size-5" />
+            <AnimatePresence>
+              {naoLidas > 0 && (
+                <motion.span
+                  key={naoLidas}
+                  initial={{ scale: 0.4 }}
+                  animate={{ scale: 1 }}
+                  exit={{ scale: 0 }}
+                  transition={{ type: "spring", stiffness: 600, damping: 18 }}
+                  className="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-alerta px-1 text-[10px] font-bold leading-4 text-white ring-2 ring-white"
+                >
+                  {naoLidas}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </Link>
+        </div>
 
         <button
           type="button"
@@ -118,7 +150,7 @@ export function Header() {
           <Coins className="mr-1 size-3.5 text-verde" />
           <AnimatedNumber valor={usuario.pontos} />
           {/* Em telas muito estreitas o XP fica só na Carteira e no Perfil. */}
-          <span className="flex items-center max-[379px]:hidden">
+          <span className="flex items-center max-[399px]:hidden">
             <span className="mx-1.5 h-3 w-px bg-verde-suave" />
             <Sparkles className="mr-0.5 size-3.5 text-verde-2" />
             <AnimatedNumber valor={usuario.xp} />

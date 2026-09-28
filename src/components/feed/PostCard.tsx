@@ -11,10 +11,12 @@ import {
   Heart,
   MessageCircle,
   Pin,
+  Send,
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
@@ -26,7 +28,7 @@ import { cn } from "@/lib/cn";
 import { fmt, primeiroNome } from "@/lib/format";
 import { nivelDe } from "@/lib/gamificacao";
 import { tempoRelativo } from "@/lib/tempo";
-import { baixarMaterial, curtir, marcarUtil, responder, salvar } from "@/store/actions";
+import { baixarMaterial, curtir, iniciarConversa, marcarUtil, responder, salvar } from "@/store/actions";
 import type { Pessoa, Post, Resposta } from "@/store/types";
 
 const ROTULO_TIPO: Record<Post["tipo"], string> = {
@@ -79,6 +81,7 @@ export function PostCard({ post, pessoas, agora, equipados, destacado, onAbrirMa
   const [menu, setMenu] = useState(false);
   const [texto, setTexto] = useState("");
   const campo = useRef<HTMLTextAreaElement>(null);
+  const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
   const fecharMenu = useCallback(() => setMenu(false), []);
   useFecharFora(menuRef, menu, fecharMenu);
@@ -152,8 +155,19 @@ export function PostCard({ post, pessoas, agora, equipados, destacado, onAbrirMa
                     exit={{ opacity: 0, scale: 0.95, y: -4 }}
                     transition={{ duration: 0.14 }}
                     style={{ transformOrigin: "top right" }}
-                    className="absolute right-0 top-full z-20 mt-1 w-52 rounded-xl border border-borda bg-white p-1 shadow-flutuante"
+                    className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-borda bg-white p-1 shadow-flutuante"
                   >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenu(false);
+                        router.push(`/mensagens/${iniciarConversa(post.autorId)}`);
+                      }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-texto transition-colors hover:bg-verde-mclaro hover:text-verde"
+                    >
+                      <Send className="size-4" />
+                      Enviar mensagem para {primeiroNome(autor?.nome ?? "")}
+                    </button>
                     <button
                       type="button"
                       disabled={!!post.denuncia}

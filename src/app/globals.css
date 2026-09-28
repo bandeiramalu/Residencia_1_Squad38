@@ -74,16 +74,19 @@ body {
   }
 }
 
-button {
-  cursor: pointer;
-}
-button:disabled {
-  cursor: not-allowed;
-}
+/* Na camada base para que utilitários como `outline-none` possam sobrescrever. */
+@layer base {
+  button {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
 
-:focus-visible {
-  outline: 2px solid var(--color-verde-2);
-  outline-offset: 2px;
+  :focus-visible {
+    outline: 2px solid var(--color-verde-2);
+    outline-offset: 2px;
+  }
 }
 
 .sem-scrollbar {

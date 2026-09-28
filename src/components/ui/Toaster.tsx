@@ -1,7 +1,8 @@
 "use client";
 
-import { Award, Coins, Flame, Info, ShoppingBag, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
+import { Award, ChevronRight, Coins, Flame, Info, MessageCircle, ShoppingBag, Sparkles, TrendingUp, TriangleAlert } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
+import { useRouter } from "next/navigation";
 import { removerToast, useUI, type TipoToast } from "@/store/ui";
 import { cn } from "@/lib/cn";
 
@@ -14,11 +15,17 @@ const ICONES: Record<TipoToast, { icone: typeof Info; cor: string }> = {
   alerta: { icone: TriangleAlert, cor: "bg-red-50 text-alerta" },
   medalha: { icone: Award, cor: "bg-verde text-white" },
   nivel: { icone: TrendingUp, cor: "bg-verde text-white" },
+  mensagem: { icone: MessageCircle, cor: "bg-verde text-white" },
 };
 
-/** Notificações empilhadas acima da barra inferior. Arraste para o lado para dispensar. */
+/**
+ * Notificações empilhadas acima da barra inferior. Arraste para o lado para
+ * dispensar; as que têm destino (ex.: nova mensagem) abrem a tela ao toque.
+ */
 export function Toaster() {
   const { toasts } = useUI();
+  const router = useRouter();
+
   return (
     <div
       aria-live="polite"
@@ -41,7 +48,15 @@ export function Toaster() {
               onDragEnd={(_, info) => {
                 if (Math.abs(info.offset.x) > 80) removerToast(t.id);
               }}
-              className="pointer-events-auto flex cursor-grab items-start gap-3 rounded-2xl border border-borda bg-white/95 p-3 shadow-flutuante backdrop-blur active:cursor-grabbing"
+              onTap={() => {
+                if (!t.href) return;
+                removerToast(t.id);
+                router.push(t.href);
+              }}
+              className={cn(
+                "pointer-events-auto flex items-start gap-3 rounded-2xl border border-borda bg-white/95 p-3 shadow-flutuante backdrop-blur",
+                t.href ? "cursor-pointer" : "cursor-grab active:cursor-grabbing",
+              )}
               role="status"
             >
               <span className={cn("grid size-9 shrink-0 place-items-center rounded-xl", cor)}>
@@ -49,8 +64,9 @@ export function Toaster() {
               </span>
               <div className="min-w-0 flex-1 pt-0.5">
                 <p className="text-sm font-bold leading-tight text-tinta">{t.titulo}</p>
-                {t.mensagem && <p className="mt-0.5 text-[13px] leading-snug text-texto-2">{t.mensagem}</p>}
+                {t.mensagem && <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-texto-2">{t.mensagem}</p>}
               </div>
+              {t.href && <ChevronRight className="mt-2 size-4 shrink-0 text-texto-2" />}
             </motion.div>
           );
         })}
