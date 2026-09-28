@@ -42,6 +42,16 @@ export function PainelApresentacao() {
           </li>
         ))}
       </ol>
+      <Link
+        href="/mensagens"
+        className="group mt-2 flex gap-3 rounded-xl border border-transparent p-2 transition-colors hover:border-borda hover:bg-white"
+      >
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-verde text-[10px] font-bold text-white">US01</span>
+        <span>
+          <span className="block text-[13px] font-semibold text-tinta group-hover:text-verde">Mensagens diretas</span>
+          <span className="block text-[11.5px] leading-snug text-texto-2">Cabeçalho → balão de mensagens → conversa → enviar</span>
+        </span>
+      </Link>
       <p className="mt-6 text-[11.5px] leading-snug text-texto-2">
         Os dados ficam salvos neste navegador. Para recomeçar, use <b className="text-texto">Perfil → Reiniciar demonstração</b>.
       </p>

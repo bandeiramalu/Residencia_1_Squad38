@@ -3,14 +3,14 @@
 import { motion } from "motion/react";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { indiceDaAba } from "@/components/shell/abas";
+import { ordemDaRota } from "@/components/shell/abas";
 
-// Última aba visitada: define se a nova tela entra pela direita ou pela esquerda.
+// Última tela visitada: define se a nova tela entra pela direita ou pela esquerda.
 let ultimaAba = -1;
 
-/** Transição de entrada entre as abas, no sentido da barra inferior. */
+/** Transição de entrada entre as telas, no sentido da barra inferior. */
 export default function Template({ children }: { children: React.ReactNode }) {
-  const aba = indiceDaAba(usePathname());
+  const aba = ordemDaRota(usePathname());
   const [direcao] = useState(() => (ultimaAba < 0 || aba < 0 ? 0 : Math.sign(aba - ultimaAba)));
 
   useEffect(() => {
