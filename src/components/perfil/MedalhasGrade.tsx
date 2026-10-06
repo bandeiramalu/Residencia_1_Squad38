@@ -1,19 +1,37 @@
 "use client";
 
-import { Lock } from "lucide-react";
-import { motion } from "motion/react";
+import { Download, Lock } from "lucide-react";
+import { m as motion } from "motion/react";
 import { useState } from "react";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Sheet } from "@/components/ui/Sheet";
+import { ESCOLA } from "@/data/escola";
 import { MEDALHAS, type MedalhaDef } from "@/data/medalhas";
 import { cn } from "@/lib/cn";
 import { progressoMedalha } from "@/lib/gamificacao";
+import { baixarArquivo, gerarPdfDocumento } from "@/lib/pdf";
 import { dataCurta } from "@/lib/tempo";
 import { useEstado } from "@/store/store";
 import { MedalhaIcone } from "./MedalhaIcone";
+
+function baixarCertificado(medalha: MedalhaDef, nome: string, em: number) {
+  const data = new Date(em).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
+  const { blob } = gerarPdfDocumento({
+    escola: ESCOLA.nome,
+    titulo: "Certificado de medalha",
+    subtitulo: medalha.nome,
+    blocos: [
+      { tipo: "paragrafo", texto: `Certificamos que ${nome} conquistou a medalha "${medalha.nome}" no Portal do Aluno do ${ESCOLA.nome}.` },
+      { tipo: "quadro", titulo: "Critério da medalha", texto: medalha.criterio },
+      { tipo: "tabela", colunas: ["Aluno(a)", "Medalha", "Conquistada em"], linhas: [[nome, medalha.nome, data]] },
+      { tipo: "paragrafo", texto: `${ESCOLA.cidade} · emitido em ${new Date().toLocaleDateString("pt-BR")}.` },
+    ],
+  });
+  baixarArquivo(blob, `certificado-${medalha.id}.pdf`);
+}
 
 /** Galeria de medalhas desbloqueáveis; o toque abre o progresso (fluxo 3.5). */
 export function MedalhasGrade() {
@@ -23,36 +41,33 @@ export function MedalhasGrade() {
 
   return (
     <>
-      <ul className="grid grid-cols-4 gap-2">
+      <ul className="grid grid-cols-4 gap-1 sm:gap-2">
         {MEDALHAS.map((m, i) => {
           const em = desbloqueio(m.id);
           const prog = progressoMedalha(m, estado);
           return (
-            <motion.li key={m.id} initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: i * 0.04, type: "spring", stiffness: 400, damping: 22 }}>
+            <motion.li key={m.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.02, duration: 0.18 }}>
               <button
                 type="button"
                 onClick={() => setAberta(m)}
                 aria-label={`Medalha ${m.nome}${em ? ", conquistada" : ", bloqueada"}`}
-                className={cn(
-                  "flex h-full w-full flex-col items-center gap-1.5 rounded-2xl border px-1 py-2.5 text-center transition-all duration-200 hover:-translate-y-0.5 active:scale-95",
-                  em ? "border-verde-claro bg-verde-mclaro" : "border-dashed border-verde-suave bg-white",
-                )}
+                className="flex h-full w-full flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 text-center transition-colors duration-150 hover:bg-superficie-2"
               >
                 <span
                   className={cn(
                     "relative grid size-11 place-items-center rounded-full",
-                    em ? "bg-linear-to-br from-verde-2 to-verde text-white shadow-sm" : "bg-fundo text-texto-2/60",
+                    em ? "bg-ouro-claro text-ouro" : "bg-superficie-2 text-texto-2/70 ring-1 ring-inset ring-borda",
                   )}
                 >
                   <MedalhaIcone icone={m.icone} className="size-5" />
                   {!em && (
-                    <span className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-white ring-1 ring-borda">
-                      <Lock className="size-2.5 text-texto-2" />
+                    <span className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-superficie ring-1 ring-borda">
+                      <Lock className="size-2.5 text-texto-2" aria-hidden />
                     </span>
                   )}
                 </span>
-                <span className={cn("text-[10.5px] font-semibold leading-tight", em ? "text-tinta" : "text-texto-2")}>{m.nome}</span>
-                {!em && <ProgressBar valor={prog.pct} fina className="mx-auto w-10" rotulo={`Progresso de ${m.nome}`} />}
+                <span className={cn("text-[12px] leading-tight", em ? "font-medium text-tinta" : "text-texto-2")}>{m.nome}</span>
+                {!em && <ProgressBar valor={prog.pct} fina className="mx-auto h-1 w-10" rotulo={`Progresso de ${m.nome}`} />}
               </button>
             </motion.li>
           );
@@ -67,37 +82,40 @@ export function MedalhasGrade() {
             return (
               <>
                 <motion.div
-                  initial={{ scale: 0.5, rotate: -20, opacity: 0 }}
-                  animate={{ scale: 1, rotate: 0, opacity: 1 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 14 }}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 500, damping: 40 }}
                   className={cn(
-                    "mx-auto grid size-24 place-items-center rounded-[28px]",
-                    em ? "bg-linear-to-br from-verde-2 to-tinta text-white shadow-flutuante" : "border-2 border-dashed border-verde-suave bg-fundo text-texto-2/60",
+                    "mx-auto grid size-20 place-items-center rounded-full",
+                    em ? "bg-ouro-claro text-ouro" : "border border-dashed border-texto-2/40 bg-superficie-2 text-texto-2/70",
                   )}
                 >
-                  <MedalhaIcone icone={aberta.icone} className="size-11" />
+                  <MedalhaIcone icone={aberta.icone} className="size-9" />
                 </motion.div>
-                <p className="mt-3 text-center text-sm font-semibold text-tinta">{em ? "Conquistada!" : "Ainda bloqueada"}</p>
+                <p className="mt-3 text-center text-[14px] font-medium text-tinta">{em ? "Conquistada" : "Ainda bloqueada"}</p>
 
-                <div className="mt-4 rounded-2xl bg-verde-mclaro p-4">
-                  <div className="flex items-center justify-between text-xs">
+                <div className="mt-4 rounded-xl border border-borda bg-superficie-2 p-4">
+                  <div className="flex items-center justify-between text-[13px]">
                     <span className="text-texto-2">{em ? "Conquistada em" : "Progresso atual"}</span>
-                    <b className="text-tinta">{em ? dataCurta(em) : prog.texto}</b>
+                    <span className="font-medium tabular-nums text-tinta">{em ? dataCurta(em) : prog.texto}</span>
                   </div>
-                  <ProgressBar valor={em ? 100 : prog.pct} className="mt-2" rotulo="Progresso de desbloqueio" />
-                  <p className="mt-2 text-[12px] text-texto-2">
-                    <b className="text-texto">Critério:</b> {aberta.criterio}.
-                  </p>
+                  <ProgressBar valor={em ? 100 : prog.pct} fina className="mt-2" rotulo="Progresso de desbloqueio" />
+                  <p className="mt-2 text-[13px] text-texto-2">Critério: {aberta.criterio}.</p>
                 </div>
 
                 <Nota icone={<Lock />} tom="branco" className="mt-3">
-                  Medalhas são registradas por mérito e ficam no seu perfil para sempre. Não podem ser compradas com pontos.
+                  Medalhas vêm do mérito e ficam no seu perfil. Não podem ser compradas com pontos.
                 </Nota>
 
                 <RodapeSheet>
-                  <Button tamanho="lg" bloco onClick={() => setAberta(null)}>
+                  <Button tamanho="lg" className="flex-1" variante="secundario" onClick={() => setAberta(null)}>
                     Fechar
                   </Button>
+                  {em && (
+                    <Button tamanho="lg" className="flex-1" onClick={() => baixarCertificado(aberta, estado.usuario.nome, em)}>
+                      <Download /> Baixar certificado (PDF)
+                    </Button>
+                  )}
                 </RodapeSheet>
               </>
             );
