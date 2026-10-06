@@ -1,26 +1,26 @@
-"use client";
-
-import { Leaf, Sprout } from "lucide-react";
-import { motion } from "motion/react";
+import { BookOpen, Star } from "lucide-react";
 import { itemPorId, type Slot } from "@/data/loja";
 import { cn } from "@/lib/cn";
+import { useSeletor } from "@/store/store";
 
 type Tamanho = "xs" | "sm" | "md" | "lg" | "xl";
 
-const TAMANHOS: Record<Tamanho, { caixa: string; texto: string; enfeite: string }> = {
-  xs: { caixa: "size-6", texto: "text-[9px]", enfeite: "size-3 text-[8px]" },
-  sm: { caixa: "size-8", texto: "text-[11px]", enfeite: "size-3.5 text-[9px]" },
-  md: { caixa: "size-10", texto: "text-xs", enfeite: "size-4 text-[10px]" },
-  lg: { caixa: "size-14", texto: "text-base", enfeite: "size-5 text-xs" },
-  xl: { caixa: "size-20", texto: "text-2xl", enfeite: "size-7 text-base" },
+const TAMANHOS: Record<Tamanho, { caixa: string; texto: string; selo: string }> = {
+  xs: { caixa: "size-6", texto: "text-[9px]", selo: "size-3 [&_svg]:size-2" },
+  sm: { caixa: "size-8", texto: "text-[11px]", selo: "size-3.5 [&_svg]:size-2" },
+  md: { caixa: "size-10", texto: "text-[13px]", selo: "size-4 [&_svg]:size-2.5" },
+  lg: { caixa: "size-14", texto: "text-base", selo: "size-5 [&_svg]:size-3" },
+  xl: { caixa: "size-20", texto: "text-2xl", selo: "size-6 [&_svg]:size-3.5" },
 };
 
-/** Tons determinísticos por pessoa, sempre dentro da paleta verde do DS. */
+/** Tons suaves por pessoa (como em redes sociais): a cor ajuda a reconhecer quem é. */
 const TONS = [
-  "bg-verde-claro text-verde",
-  "bg-verde-suave text-tinta",
-  "bg-linear-to-br from-verde-2 to-verde text-white",
-  "bg-linear-to-br from-verde to-tinta text-white",
+  "bg-emerald-100 text-emerald-800 dark:bg-emerald-400/15 dark:text-emerald-300",
+  "bg-sky-100 text-sky-800 dark:bg-sky-400/15 dark:text-sky-300",
+  "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-300",
+  "bg-rose-100 text-rose-800 dark:bg-rose-400/15 dark:text-rose-300",
+  "bg-violet-100 text-violet-800 dark:bg-violet-400/15 dark:text-violet-300",
+  "bg-slate-200 text-slate-700 dark:bg-slate-400/15 dark:text-slate-300",
 ];
 
 function hash(s: string) {
@@ -42,60 +42,50 @@ interface Props {
   /** Itens da Loja equipados (só para o avatar da própria aluna). */
   equipados?: string[];
   ativo?: boolean;
+  /** Foto (dataURL ou URL): substitui as iniciais, mantendo anel e selos. */
+  foto?: string;
   className?: string;
 }
 
-export function Avatar({ nome, iniciais, tamanho = "md", equipados = [], ativo, className }: Props) {
+export function Avatar({ nome, iniciais, tamanho = "md", equipados = [], ativo, foto, className }: Props) {
+  // A foto que a aluna escolheu em "Editar perfil" aparece em todo lugar onde o nome dela aparece (inclusive para o professor).
+  const fotoDoUsuario = useSeletor((e) => (e.usuario.nome === nome ? e.usuario.foto : undefined));
+  foto = foto ?? fotoDoUsuario;
   const t = TAMANHOS[tamanho];
   const slots = new Set<Slot>(equipados.map((id) => itemPorId(id)?.slot).filter((s): s is Slot => !!s));
-  const tom = slots.has("fundo") ? "bg-linear-to-br from-emerald-300 via-verde-2 to-verde text-white" : TONS[hash(nome) % TONS.length];
+  const tom = slots.has("fundo") ? "bg-verde text-white" : TONS[hash(nome) % TONS.length];
+  const anel = slots.has("efeito") ? "ring-2 ring-ouro" : slots.has("moldura") || ativo ? "ring-2 ring-verde" : "";
 
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
       <span
         className={cn(
-          "inline-flex items-center justify-center rounded-full font-bold tracking-tight",
+          "inline-flex items-center justify-center rounded-full font-semibold tracking-tight",
           t.caixa,
           t.texto,
           tom,
-          slots.has("moldura") && "ring-2 ring-verde-2 ring-offset-2 ring-offset-white",
-          ativo && !slots.has("moldura") && "ring-2 ring-verde ring-offset-2 ring-offset-white",
-          slots.has("efeito") && "animate-brilho",
+          anel && cn(anel, "ring-offset-2 ring-offset-superficie"),
         )}
         aria-hidden
       >
-        {iniciais ?? iniciaisDe(nome)}
+        {foto ? (
+          // eslint-disable-next-line @next/next/no-img-element -- dataURL local, sem otimização possível
+          <img src={foto} alt="" draggable={false} className="size-full rounded-full object-cover" />
+        ) : (
+          (iniciais ?? iniciaisDe(nome))
+        )}
       </span>
 
-      {slots.has("moldura") && (
-        <>
-          <Leaf className="absolute -left-1 -top-1 size-3.5 -rotate-45 fill-verde-claro text-verde-2" aria-hidden />
-          <Leaf className="absolute -bottom-1 -right-1 size-3.5 rotate-[135deg] fill-verde-claro text-verde-2" aria-hidden />
-        </>
-      )}
-
       {slots.has("adesivo") && (
-        <span
-          className={cn(
-            "absolute -bottom-1 -right-1.5 grid place-items-center rounded-full bg-white shadow ring-1 ring-borda",
-            t.enfeite,
-          )}
-          aria-hidden
-        >
-          🦉
+        <span className={cn("absolute -bottom-0.5 -right-0.5 grid place-items-center rounded-full bg-superficie text-acento ring-1 ring-borda", t.selo)} aria-hidden>
+          <BookOpen strokeWidth={2.5} />
         </span>
       )}
 
       {slots.has("animado") && (
-        <motion.span
-          className="absolute -top-2 left-1/2 -translate-x-1/2 text-verde-2"
-          initial={{ scale: 0.4, y: 6, opacity: 0 }}
-          animate={{ scale: [0.6, 1.05, 1], y: [6, -2, 0], opacity: 1, rotate: [0, -8, 6, 0] }}
-          transition={{ duration: 2.4, repeat: Infinity, repeatDelay: 1.6, ease: "easeOut" }}
-          aria-hidden
-        >
-          <Sprout className={cn(tamanho === "xl" ? "size-6" : "size-3.5", "drop-shadow-sm")} />
-        </motion.span>
+        <span className={cn("absolute -right-0.5 -top-0.5 grid place-items-center rounded-full bg-ouro text-white ring-2 ring-superficie", t.selo)} aria-hidden>
+          <Star className="fill-current" />
+        </span>
       )}
       <span className="sr-only">{nome}</span>
     </span>

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { m as motion } from "motion/react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -28,7 +28,7 @@ export function ChipGroup<T extends string>({ opcoes, valor, onChange, grupo, ro
       aria-label={rotulo}
       className={cn(
         "flex gap-2",
-        quebrar ? "flex-wrap" : "sem-scrollbar -mx-4 overflow-x-auto px-4 pb-0.5 snap-x",
+        quebrar ? "flex-wrap" : "sem-scrollbar -mx-4 overflow-x-auto px-4 pb-0.5 snap-x sm:-mx-6 sm:px-6 lg:mx-0 lg:flex-wrap lg:px-0",
         className,
       )}
     >
@@ -42,15 +42,15 @@ export function ChipGroup<T extends string>({ opcoes, valor, onChange, grupo, ro
             aria-selected={ativo}
             onClick={() => onChange(op.id)}
             className={cn(
-              "relative shrink-0 snap-start whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition-colors duration-200 active:scale-95",
-              ativo ? "text-white" : "bg-white text-texto-2 ring-1 ring-inset ring-borda hover:text-verde hover:ring-verde-suave",
+              "relative shrink-0 snap-start whitespace-nowrap rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors duration-150 active:scale-[0.97]",
+              ativo ? "text-superficie" : "bg-superficie text-texto ring-1 ring-inset ring-borda hover:bg-superficie-2",
             )}
           >
             {ativo && (
               <motion.span
                 layoutId={`chip-${grupo}`}
-                className="absolute inset-0 rounded-full bg-verde shadow-sm"
-                transition={{ type: "spring", stiffness: 500, damping: 38 }}
+                className="absolute inset-0 rounded-full bg-tinta"
+                transition={{ type: "spring", stiffness: 520, damping: 46 }}
               />
             )}
             <span className="relative inline-flex items-center gap-1.5 [&_svg]:size-3.5">{op.rotulo}</span>
