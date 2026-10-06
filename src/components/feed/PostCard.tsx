@@ -1,59 +1,72 @@
 "use client";
 
 import {
+  BadgeCheck,
   Bookmark,
-  BookmarkCheck,
   Check,
   ChevronDown,
+  CircleCheck,
   Download,
   Ellipsis,
+  FileText,
   Flag,
   Heart,
+  Link2,
+  Megaphone,
   MessageCircle,
+  MessageCircleQuestionMark,
   Pin,
-  Send,
+  Share,
+  Sparkles,
   ShieldAlert,
   ShieldCheck,
+  type LucideIcon,
 } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
-import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence, m as motion } from "motion/react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { DisciplinaIcon } from "@/components/ui/DisciplinaIcon";
+import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { USUARIO_ID } from "@/data/pessoas";
 import { useFecharFora } from "@/hooks/useFecharFora";
 import { cn } from "@/lib/cn";
 import { fmt, primeiroNome } from "@/lib/format";
-import { nivelDe } from "@/lib/gamificacao";
-import { tempoRelativo } from "@/lib/tempo";
-import { baixarMaterial, curtir, iniciarConversa, marcarUtil, responder, salvar } from "@/store/actions";
+import { resumoDoAnexo } from "@/lib/materiais";
+import { curtir, marcarUtil, responder, salvar } from "@/store/actions";
 import type { Pessoa, Post, Resposta } from "@/store/types";
+import { useSeletor } from "@/store/store";
+import { focarPost } from "@/store/ui";
+import { baixarDoPost, compartilharPost } from "./anexo";
+import { Quando } from "./Quando";
 
-const ROTULO_TIPO: Record<Post["tipo"], string> = {
-  duvida: "Pergunta",
-  material: "Material",
-  aviso: "Aviso",
-  publicacao: "Publicação",
+const TIPO: Record<Post["tipo"], { rotulo: string; icone: LucideIcon }> = {
+  duvida: { rotulo: "Dúvida", icone: MessageCircleQuestionMark },
+  material: { rotulo: "Material", icone: FileText },
+  aviso: { rotulo: "Aviso", icone: Megaphone },
+  publicacao: { rotulo: "Publicação", icone: MessageCircle },
 };
 
 interface Props {
   post: Post;
   pessoas: Record<string, Pessoa>;
-  agora: number;
   equipados: string[];
   destacado?: boolean;
+  /** Pula a renderização enquanto o card está fora da tela (`cv-auto`). */
+  leve?: boolean;
+  /** Linha de contexto acima do autor (ex.: relevância na busca). */
+  contexto?: ReactNode;
   onAbrirMaterial: (post: Post) => void;
   onDenunciar: (post: Post) => void;
 }
+
+const SUAVE = [0.2, 0, 0, 1] as const;
 
 function TextoComTags({ texto }: { texto: string }) {
   return (
     <>
       {texto.split(/(#[\p{L}\d_]+)/u).map((parte, i) =>
         parte.startsWith("#") ? (
-          <span key={i} className="font-semibold text-verde-2">
+          <span key={i} className="font-medium text-acento">
             {parte}
           </span>
         ) : (
@@ -64,29 +77,74 @@ function TextoComTags({ texto }: { texto: string }) {
   );
 }
 
-function SeloPapel({ pessoa }: { pessoa?: Pessoa }) {
-  if (!pessoa) return null;
-  if (pessoa.papel === "professor") return <Badge tom="verde">Professor</Badge>;
-  if (pessoa.papel === "escola") return <Badge tom="azul">Escola</Badge>;
-  const nivel = nivelDe(pessoa.xp ?? 0);
-  return <Badge tom="claro">{`Nível ${nivel.n} – ${nivel.titulo}`}</Badge>;
+/** Selo de verificado (professor e escola): discreto, na cor institucional. */
+function Verificado({ pessoa }: { pessoa?: Pessoa }) {
+  if (pessoa?.papel !== "professor" && pessoa?.papel !== "escola") return null;
+  return (
+    <BadgeCheck
+      role="img"
+      className="size-[15px] shrink-0 fill-cepi text-superficie"
+      aria-label={pessoa.papel === "escola" ? "Conta oficial da escola" : "Professor verificado"}
+    />
+  );
 }
 
-export function PostCard({ post, pessoas, agora, equipados, destacado, onAbrirMaterial, onDenunciar }: Props) {
+function papelDe(pessoa: Pessoa | undefined, souAutor: boolean) {
+  if (souAutor) return "Você";
+  if (!pessoa) return "Membro do CEPI";
+  if (pessoa.papel === "professor") return pessoa.nome.startsWith("Profª") ? "Professora" : "Professor";
+  if (pessoa.papel === "escola") return "Conta oficial";
+  return pessoa.turma ?? "Estudante";
+}
+
+/** Número que desliza ao mudar (curtidas, respostas). */
+function Contador({ valor }: { valor: number }) {
+  return (
+    <span className="relative inline-grid overflow-hidden tabular-nums">
+      <AnimatePresence initial={false} mode="popLayout">
+        <motion.span
+          key={valor}
+          initial={{ y: 10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -10, opacity: 0 }}
+          transition={{ duration: 0.18, ease: SUAVE }}
+        >
+          {fmt(valor)}
+        </motion.span>
+      </AnimatePresence>
+    </span>
+  );
+}
+
+const ACAO =
+  "inline-flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full px-2 text-[13px] transition-colors duration-150 active:scale-95 [&_svg]:size-[18px]";
+const ITEM_MENU =
+  "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[14px] text-texto transition-colors hover:bg-superficie-2 hover:text-tinta [&_svg]:size-4 [&_svg]:text-texto-2";
+
+export function PostCard({ post, pessoas, equipados, destacado, leve, contexto, onAbrirMaterial, onDenunciar }: Props) {
   const autor = pessoas[post.autorId];
+  const eu = pessoas[USUARIO_ID];
   const souAutor = post.autorId === USUARIO_ID;
   const ehDuvida = post.tipo === "duvida";
+  const tipo = TIPO[post.tipo];
+  const IconeTipo = tipo.icone;
   const [abertas, setAbertas] = useState(false);
   const [respondendo, setRespondendo] = useState(false);
   const [menu, setMenu] = useState(false);
   const [texto, setTexto] = useState("");
   const campo = useRef<HTMLTextAreaElement>(null);
-  const router = useRouter();
   const menuRef = useRef<HTMLDivElement>(null);
   const fecharMenu = useCallback(() => setMenu(false), []);
   useFecharFora(menuRef, menu, fecharMenu);
+  const oficial = post.respostas.find((r) => r.oficial);
+  const resolvida = ehDuvida && (!!oficial || post.respostas.some((r) => r.util));
   const respostasOrdenadas = [...post.respostas].sort((a, b) => Number(!!b.oficial) - Number(!!a.oficial));
   const mostrarRespostas = abertas || destacado;
+  const total = post.respostas.length;
+  const nomeRespostas = (n: number) => (n === 1 ? (ehDuvida ? "resposta" : "comentário") : ehDuvida ? "respostas" : "comentários");
+  const tags = post.tags.filter((t) => !post.texto.toLowerCase().includes(`#${t}`)).slice(0, 3);
+  const papel = papelDe(autor, souAutor);
+  const assunto = post.tipo === "publicacao" ? (post.disciplina ?? tipo.rotulo) : `${tipo.rotulo}${post.disciplina ? ` · ${post.disciplina}` : ""}`;
 
   useEffect(() => {
     if (respondendo) campo.current?.focus({ preventScroll: true });
@@ -101,347 +159,405 @@ export function PostCard({ post, pessoas, agora, equipados, destacado, onAbrirMa
     setAbertas(true);
   };
 
+  // Publicação em revisão não recebe respostas: o ícone só mostra/oculta as que existem.
+  const alternarResposta = () => {
+    if (post.emRevisao) {
+      setAbertas((a) => !a);
+      return;
+    }
+    setRespondendo(!respondendo);
+    if (!respondendo) setAbertas(true);
+  };
+
   return (
     <motion.article
       id={`post-${post.id}`}
       layout="position"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.15 } }}
-      transition={{ type: "spring", stiffness: 380, damping: 34 }}
+      exit={{ opacity: 0, transition: { duration: 0.15 } }}
+      transition={{ duration: 0.22, ease: SUAVE }}
+      aria-label={`${tipo.rotulo} de ${autor?.nome ?? "membro do CEPI"}`}
       className={cn(
-        "relative scroll-mt-24 overflow-hidden rounded-2xl border bg-white shadow-card transition-[border-color,box-shadow] duration-500",
-        ehDuvida && "border-l-[3px] border-l-verde",
-        destacado ? "border-verde-2 ring-4 ring-verde-2/15" : "border-borda",
+        "relative scroll-mt-32 px-4 py-4 transition-colors duration-700 sm:px-5 sm:last:rounded-b-2xl",
+        leve && "cv-auto",
+        destacado && "bg-verde-mclaro",
       )}
     >
-      <div className="p-4">
-        {/* Cabeçalho do card */}
-        <div className="flex items-start gap-3">
+      {contexto && <div className="mb-2 flex items-center gap-1.5 text-[12.5px] text-texto-2 sm:pl-[52px] [&_svg]:size-3.5">{contexto}</div>}
+
+      {/* Autor, papel, quando — e o assunto (tipo · disciplina) */}
+      <header className="flex items-start gap-3">
+        <LinkPessoa id={post.autorId} rotulo={autor?.nome} className="shrink-0">
           <Avatar nome={autor?.nome ?? "?"} iniciais={autor?.iniciais} equipados={souAutor ? equipados : []} />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              <span className="truncate text-sm font-bold text-tinta">{autor?.nome}</span>
-              {souAutor && <Badge tom="verde" maiuscula>você</Badge>}
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              <SeloPapel pessoa={autor} />
-              {post.disciplina && (
-                <Badge tom="contorno">
-                  <DisciplinaIcon disciplina={post.disciplina} />
-                  {post.disciplina}
-                </Badge>
+        </LinkPessoa>
+        <div className="min-w-0 flex-1">
+          <p className="flex min-w-0 items-center gap-1 text-[14px] leading-5">
+            <LinkPessoa id={post.autorId} className="min-w-0 truncate font-medium text-tinta hover:underline">
+              {autor?.nome ?? "Membro do CEPI"}
+            </LinkPessoa>
+            <Verificado pessoa={autor} />
+            <span className="hidden shrink-0 text-texto-2 sm:inline">· {papel}</span>
+            <span className="shrink-0 text-texto-2">·</span>
+            <Quando ts={post.criadoEm} className="shrink-0 text-texto-2" />
+          </p>
+          <p className="flex min-w-0 items-center gap-1 text-[13px] leading-5 text-texto-2">
+            <span className="shrink-0 sm:hidden">{papel} ·</span>
+            <IconeTipo className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{assunto}</span>
+            {resolvida && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 text-acento">
+                <span className="text-texto-2">·</span>
+                <Check className="size-3.5" aria-hidden /> Resolvida
+              </span>
+            )}
+          </p>
+        </div>
+
+        {!souAutor && (
+          <div ref={menuRef} className="relative -mr-2 -mt-1">
+            <button
+              type="button"
+              onClick={() => setMenu((m) => !m)}
+              aria-label="Mais opções"
+              aria-haspopup="menu"
+              aria-expanded={menu}
+              className={cn(
+                "grid size-8 place-items-center rounded-full transition-colors duration-150",
+                menu ? "bg-superficie-2 text-tinta" : "text-texto-2 hover:bg-superficie-2 hover:text-tinta",
               )}
-              <span className="text-[11px] text-texto-2">{tempoRelativo(post.criadoEm, agora)}</span>
-            </div>
-          </div>
-
-          {!souAutor && (
-            <div ref={menuRef} className="relative -mr-1.5 -mt-1">
-              <button
-                type="button"
-                onClick={() => setMenu((m) => !m)}
-                aria-label="Mais opções"
-                aria-expanded={menu}
-                className="grid size-8 place-items-center rounded-full text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-verde"
-              >
-                <Ellipsis className="size-4" />
-              </button>
-              <AnimatePresence>
-                {menu && (
-                  <motion.div
-                    initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                    transition={{ duration: 0.14 }}
-                    style={{ transformOrigin: "top right" }}
-                    className="absolute right-0 top-full z-20 mt-1 w-56 rounded-xl border border-borda bg-white p-1 shadow-flutuante"
+            >
+              <Ellipsis className="size-[18px]" />
+            </button>
+            <AnimatePresence>
+              {menu && (
+                <motion.div
+                  role="menu"
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={{ duration: 0.15, ease: SUAVE }}
+                  style={{ transformOrigin: "top right" }}
+                  className="absolute right-0 top-full z-20 mt-1 w-64 rounded-xl border border-borda bg-superficie p-1 shadow-flutuante"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setMenu(false);
+                      void compartilharPost(post, autor);
+                    }}
+                    className={ITEM_MENU}
                   >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenu(false);
-                        router.push(`/mensagens/${iniciarConversa(post.autorId)}`);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-texto transition-colors hover:bg-verde-mclaro hover:text-verde"
-                    >
-                      <Send className="size-4" />
-                      Enviar mensagem para {primeiroNome(autor?.nome ?? "")}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={!!post.denuncia}
-                      onClick={() => {
-                        setMenu(false);
-                        onDenunciar(post);
-                      }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium text-alerta transition-colors hover:bg-red-50 disabled:text-texto-2 disabled:hover:bg-transparent"
-                    >
-                      <Flag className="size-4" />
-                      {post.denuncia ? "Denúncia já enviada" : "Denunciar publicação"}
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
-
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          <Badge tom={ehDuvida ? "verde" : post.tipo === "aviso" ? "azul" : "claro"} maiuscula>
-            {ROTULO_TIPO[post.tipo]}
-          </Badge>
-          {post.tags
-            .filter((t) => !post.texto.toLowerCase().includes(`#${t}`))
-            .slice(0, 3)
-            .map((t) => (
-            <Badge key={t} tom="neutro">
-              #{t}
-            </Badge>
-          ))}
-        </div>
-
-        {post.emRevisao && (
-          <div className="mt-3 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-            <ShieldAlert className="mt-0.5 size-4 shrink-0 text-ambar" />
-            <span>
-              <b>Em revisão pela coordenação.</b> A triagem automática sinalizou possíveis termos ofensivos. Só você vê esta publicação até a
-              revisão humana — nenhuma punição é aplicada automaticamente.
-            </span>
+                    <Link2 /> {typeof navigator !== "undefined" && typeof navigator.share === "function" ? "Compartilhar" : "Copiar link"}
+                  </button>
+                  <div className="my-1 h-px bg-borda" aria-hidden />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={!!post.denuncia}
+                    onClick={() => {
+                      setMenu(false);
+                      onDenunciar(post);
+                    }}
+                    className={cn(ITEM_MENU, "text-alerta hover:bg-red-50 hover:text-alerta disabled:text-texto-2 disabled:hover:bg-transparent [&_svg]:text-current")}
+                  >
+                    <Flag />
+                    {post.denuncia ? "Denúncia já enviada" : "Denunciar publicação"}
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+        )}
+      </header>
+
+      <div className="mt-2 sm:pl-[52px]">
+        {post.emRevisao && (
+          <p
+            className="mb-2.5 flex items-start gap-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] leading-snug text-amber-900"
+            title="A triagem automática sinalizou possíveis termos ofensivos. Nenhuma punição é aplicada automaticamente."
+          >
+            <ShieldAlert className="mt-px size-4 shrink-0 text-ambar" />
+            <span>
+              <span className="font-medium">Em revisão pela coordenação.</span> Só você vê esta publicação por enquanto.
+            </span>
+          </p>
         )}
 
         {post.denuncia && (
-          <div className="mt-3 flex gap-2 rounded-xl border border-borda bg-fundo p-3 text-xs leading-relaxed text-texto-2">
-            <ShieldCheck className="mt-0.5 size-4 shrink-0 text-verde-2" />
+          <p className="mb-2.5 flex items-start gap-2 rounded-lg bg-superficie-2 px-3 py-2 text-[13px] leading-snug text-texto-2">
+            <ShieldCheck className="mt-px size-4 shrink-0" />
             <span>
-              Você denunciou esta publicação ({post.denuncia.motivo.toLowerCase()}). Triagem por IA:{" "}
-              <b className="text-texto">{post.denuncia.categoriaIA}</b>, prioridade {post.denuncia.prioridade} — em análise pela coordenação.
+              Você denunciou ({post.denuncia.motivo.toLowerCase()}). Triagem: <span className="font-medium text-texto">{post.denuncia.categoriaIA}</span>,
+              prioridade {post.denuncia.prioridade} — em análise.
             </span>
-          </div>
+          </p>
         )}
 
-        <p className="mt-3 whitespace-pre-line text-[14.5px] leading-relaxed text-texto">
+        <p className="whitespace-pre-line text-[15px] leading-[1.55] text-texto">
           <TextoComTags texto={post.texto} />
         </p>
+        {tags.length > 0 && (
+          <p className="mt-1 flex flex-wrap gap-x-2 text-[14px] font-medium text-acento">
+            {tags.map((t) => (
+              <span key={t}>#{t}</span>
+            ))}
+          </p>
+        )}
+
+        {ehDuvida && souAutor && (post.sugestoes?.length ?? 0) > 0 && <Sugestoes ids={post.sugestoes!} />}
 
         {post.anexo && (
-          <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-borda bg-verde-mclaro p-2.5 pr-2 transition-colors hover:border-verde-suave">
+          <div className="group/anexo mt-3 flex items-center gap-3 rounded-xl border border-borda p-2.5 pr-3 transition-colors duration-150 hover:bg-superficie-2">
             <button
               type="button"
               onClick={() => onAbrirMaterial(post)}
-              className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-lg text-left"
               aria-label={`Abrir ${post.anexo.nome}`}
             >
-              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-linear-to-br from-verde-2 to-verde text-white shadow-sm">
-                <DisciplinaIcon disciplina={post.disciplina} className="size-5" />
-              </span>
+              {post.anexo.previa ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={post.anexo.previa} alt="" className="size-14 shrink-0 rounded-lg object-cover ring-1 ring-inset ring-borda" />
+              ) : (
+                <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-superficie-2 text-texto-2 ring-1 ring-inset ring-borda transition-colors duration-150 group-hover/anexo:bg-superficie">
+                  <FileText className="size-5" strokeWidth={1.75} />
+                </span>
+              )}
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold text-tinta">{post.anexo.nome}</span>
-                <span className="block truncate text-[11.5px] text-texto-2">
-                  PDF · {post.anexo.paginas} {post.anexo.paginas === 1 ? "pág." : "págs."} · {post.anexo.tamanho}
+                <span className="block truncate text-[14px] font-medium text-tinta">{post.anexo.nome}</span>
+                <span className="block truncate text-[12.5px] text-texto-2">
+                  {resumoDoAnexo(post.anexo, true)}
                 </span>
               </span>
             </button>
-            <Button tamanho="sm" className="px-2.5" onClick={() => baixarMaterial(post)} aria-label={`Baixar ${post.anexo.nome}`}>
-              <Download /> PDF · Baixar
+            <Button variante="secundario" tamanho="sm" onClick={() => baixarDoPost(post, autor)} aria-label={`Baixar ${post.anexo.nome}`}>
+              <Download /> <span className="max-[379px]:hidden">Baixar</span>
             </Button>
           </div>
         )}
-      </div>
 
-      {/* Rodapé interativo */}
-      <div className="flex items-center gap-0.5 border-t border-borda px-2 py-1.5">
-        <button
-          type="button"
-          onClick={() => curtir(post.id)}
-          aria-pressed={post.curtido}
-          aria-label="Curtir"
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold transition-colors",
-            post.curtido ? "text-rose-600" : "text-texto-2 hover:bg-verde-mclaro hover:text-verde",
-          )}
-        >
-          <motion.span key={String(post.curtido)} initial={{ scale: post.curtido ? 0.5 : 1 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 600, damping: 12 }}>
-            <Heart className={cn("size-[18px]", post.curtido && "fill-rose-500 text-rose-500")} />
-          </motion.span>
-          {fmt(post.curtidas)}
-        </button>
-        <button
-          type="button"
-          onClick={() => setAbertas((a) => !a)}
-          aria-expanded={mostrarRespostas}
-          aria-label={ehDuvida ? "Ver respostas" : "Ver comentários"}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-verde"
-        >
-          <MessageCircle className="size-[18px]" />
-          {post.respostas.length}
-        </button>
-        <button
-          type="button"
-          onClick={() => salvar(post.id)}
-          aria-pressed={post.salvo}
-          className={cn(
-            "flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-[13px] font-semibold transition-colors",
-            post.salvo ? "text-verde" : "text-texto-2 hover:bg-verde-mclaro hover:text-verde",
-          )}
-        >
-          {post.salvo ? <BookmarkCheck className="size-[18px] fill-verde-claro" /> : <Bookmark className="size-[18px]" />}
-          {post.salvo ? "Salvo" : "Salvar"}
-        </button>
-        <div className="flex-1" />
-        {!post.emRevisao && (
-          <Button variante={respondendo ? "secundario" : "rapido"} tamanho="sm" onClick={() => setRespondendo((r) => !r)}>
-            <MessageCircle /> {ehDuvida ? "Responder" : "Comentar"}
-          </Button>
-        )}
-      </div>
-
-      {/* Caixa de resposta */}
-      <AnimatePresence initial={false}>
-        {respondendo && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 400, damping: 38 }}
-            className="overflow-hidden"
+        {/* Ações: ícones e contadores, alinhados à esquerda */}
+        <div className="-ml-2 mt-2 flex items-center gap-1 sm:gap-3">
+          <button
+            type="button"
+            onClick={() => curtir(post.id)}
+            aria-pressed={post.curtido}
+            aria-label={`Curtir · ${post.curtidas}`}
+            className={cn(ACAO, post.curtido ? "text-alerta hover:bg-red-50" : "text-texto-2 hover:bg-red-50 hover:text-alerta")}
           >
-            <div className="border-t border-borda bg-white px-4 pb-4 pt-3">
-              <textarea
-                ref={campo}
-                rows={3}
-                value={texto}
-                onChange={(e) => setTexto(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) enviar();
-                }}
-                placeholder={ehDuvida ? `Explique para ${primeiroNome(autor?.nome ?? "")} como você pensou…` : "Escreva um comentário…"}
-                className="w-full resize-none rounded-xl border border-borda bg-verde-mclaro px-3 py-2.5 text-sm text-texto outline-none transition-colors placeholder:text-texto-2/70 focus:border-verde-2 focus:bg-white"
-              />
-              <div className="mt-2 flex items-center justify-between gap-2">
-                <span className="text-[11.5px] text-texto-2">
-                  {ehDuvida && !souAutor ? "+15 pontos e +10 XP por responder" : "Ctrl + Enter para enviar"}
-                </span>
-                <div className="flex gap-1.5">
-                  <Button variante="fantasma" tamanho="sm" onClick={() => setRespondendo(false)}>
-                    Cancelar
-                  </Button>
-                  <Button tamanho="sm" onClick={enviar} disabled={!texto.trim()}>
-                    Enviar
-                  </Button>
+            {/* Pop por keyframes no `animate` (e não no `initial`): o AnimatePresence do feed bloqueia animações de entrada internas. */}
+            <motion.span
+              initial={false}
+              animate={{ scale: post.curtido ? [0.8, 1.22, 1] : 1 }}
+              transition={{ duration: 0.3, times: [0, 0.5, 1], ease: "easeOut" }}
+              className="grid"
+            >
+              <Heart className={cn(post.curtido && "fill-current")} />
+            </motion.span>
+            {post.curtidas > 0 && <Contador valor={post.curtidas} />}
+          </button>
+          <button
+            type="button"
+            onClick={alternarResposta}
+            aria-expanded={post.emRevisao ? mostrarRespostas : respondendo}
+            aria-label={`${ehDuvida ? "Responder" : "Comentar"} · ${total} ${nomeRespostas(total)}`}
+            className={cn(ACAO, respondendo ? "bg-superficie-2 text-tinta" : "text-texto-2 hover:bg-superficie-2 hover:text-tinta")}
+          >
+            <MessageCircle />
+            {total > 0 && <Contador valor={total} />}
+          </button>
+          <button
+            type="button"
+            onClick={() => salvar(post.id)}
+            aria-pressed={post.salvo}
+            aria-label={post.salvo ? "Remover dos salvos" : "Salvar"}
+            title={post.salvo ? "Salvo" : "Salvar"}
+            className={cn(ACAO, post.salvo ? "text-tinta hover:bg-superficie-2" : "text-texto-2 hover:bg-superficie-2 hover:text-tinta")}
+          >
+            <motion.span initial={false} animate={{ scale: post.salvo ? [0.85, 1.12, 1] : 1 }} transition={{ duration: 0.25 }} className="grid">
+              <Bookmark className={cn(post.salvo && "fill-current")} />
+            </motion.span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void compartilharPost(post, autor)}
+            aria-label="Compartilhar (copiar link)"
+            title="Copiar link"
+            className={cn(ACAO, "text-texto-2 hover:bg-superficie-2 hover:text-tinta")}
+          >
+            <Share />
+          </button>
+        </div>
+
+        {/* Caixa de resposta */}
+        <AnimatePresence initial={false}>
+          {respondendo && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: SUAVE }}
+              className="overflow-hidden"
+            >
+              <div className="flex items-start gap-2.5 pb-1 pt-2.5">
+                <Avatar nome={eu?.nome ?? "Você"} iniciais={eu?.iniciais} tamanho="sm" equipados={equipados} />
+                <div className="min-w-0 flex-1">
+                  <textarea
+                    ref={campo}
+                    rows={2}
+                    value={texto}
+                    onChange={(e) => setTexto(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) enviar();
+                      if (e.key === "Escape") setRespondendo(false);
+                    }}
+                    placeholder={ehDuvida ? `Explique para ${primeiroNome(autor?.nome ?? "")} como você pensou…` : "Escreva um comentário…"}
+                    aria-label={ehDuvida ? "Sua resposta" : "Seu comentário"}
+                    className="w-full resize-none rounded-xl border border-borda bg-superficie px-3 py-2 text-[14px] leading-relaxed text-tinta outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-texto-2/70 focus:border-verde focus:ring-3 focus:ring-verde/15"
+                  />
+                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    {ehDuvida && !souAutor ? (
+                      <span className="text-[12px] text-texto-2">+15 pontos e +10 XP ao responder</span>
+                    ) : (
+                      <span className="hidden text-[12px] text-texto-2 sm:inline">Ctrl + Enter para enviar</span>
+                    )}
+                    <div className="ml-auto flex shrink-0 gap-1.5">
+                      <Button variante="fantasma" tamanho="sm" onClick={() => setRespondendo(false)}>
+                        Cancelar
+                      </Button>
+                      <Button tamanho="sm" onClick={enviar} disabled={!texto.trim()}>
+                        {ehDuvida ? "Responder" : "Enviar"}
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Respostas */}
-      {post.respostas.length > 0 && (
-        <div className="border-t border-borda bg-verde-mclaro/70">
-          {!mostrarRespostas ? (
-            <button
-              type="button"
-              onClick={() => setAbertas(true)}
-              className="flex w-full items-center justify-between px-4 py-2.5 text-[13px] font-semibold text-verde transition-colors hover:bg-verde-mclaro"
-            >
-              <span>
-                Ver {post.respostas.length} {post.respostas.length === 1 ? (ehDuvida ? "resposta" : "comentário") : ehDuvida ? "respostas" : "comentários"}
-                {post.respostas.some((r) => r.oficial) && <span className="ml-1.5 font-medium text-texto-2">· inclui resposta oficial</span>}
-              </span>
-              <ChevronDown className="size-4" />
-            </button>
-          ) : (
-            <motion.ul initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-2 px-3 pb-3 pt-3">
-              <AnimatePresence initial={false}>
-                {respostasOrdenadas.map((r) => (
-                  <RespostaItem key={r.id} resposta={r} pessoas={pessoas} agora={agora} post={post} equipados={equipados} />
-                ))}
-              </AnimatePresence>
-              {souAutor && ehDuvida && (
-                <li className="px-1 pt-1 text-[11.5px] leading-snug text-texto-2">
-                  Só você, que publicou a dúvida, pode marcar respostas como úteis. O autor da resposta ganha +25 XP.
-                </li>
-              )}
-              <li>
+        {/* Respostas — a oficial do professor fica fixada e visível mesmo com a lista recolhida (US03). */}
+        {total > 0 && (
+          <div className="mt-2">
+            {mostrarRespostas ? (
+              <>
+                <ul className="space-y-3.5 border-l-2 border-borda py-1 pl-3.5" aria-label={ehDuvida ? "Respostas" : "Comentários"}>
+                  <AnimatePresence initial={false}>
+                    {respostasOrdenadas.map((r) => (
+                      <RespostaItem key={r.id} resposta={r} pessoas={pessoas} post={post} equipados={equipados} />
+                    ))}
+                  </AnimatePresence>
+                </ul>
                 <button
                   type="button"
                   onClick={() => setAbertas(false)}
-                  className="w-full rounded-lg py-1.5 text-xs font-semibold text-texto-2 transition-colors hover:text-verde"
+                  className="mt-1.5 rounded-md py-1 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta"
                 >
-                  Recolher
+                  Ocultar {nomeRespostas(2)}
                 </button>
-              </li>
-            </motion.ul>
-          )}
-        </div>
-      )}
+              </>
+            ) : (
+              <>
+                {oficial && (
+                  <ul className="border-l-2 border-borda py-1 pl-3.5" aria-label="Resposta oficial">
+                    <RespostaItem resposta={oficial} pessoas={pessoas} post={post} equipados={equipados} />
+                  </ul>
+                )}
+                {(!oficial || total > 1) && (
+                  <button
+                    type="button"
+                    onClick={() => setAbertas(true)}
+                    className="mt-1 inline-flex items-center gap-1 rounded-md py-1 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta"
+                  >
+                    {oficial ? `Ver todas as ${total} ${nomeRespostas(total)}` : `Ver ${total} ${nomeRespostas(total)}`}
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
     </motion.article>
   );
 }
 
-function RespostaItem({
-  resposta: r,
-  pessoas,
-  agora,
-  post,
-  equipados,
-}: {
-  resposta: Resposta;
-  pessoas: Record<string, Pessoa>;
-  agora: number;
-  post: Post;
-  equipados: string[];
-}) {
+/** Sugestão do Portal: dúvidas parecidas que já têm resposta. */
+function Sugestoes({ ids }: { ids: string[] }) {
+  const posts = useSeletor((e) => e.posts);
+  const achados = ids.map((id) => posts.find((p) => p.id === id)).filter((p): p is Post => !!p);
+  if (achados.length === 0) return null;
+  return (
+    <div className="mt-3 rounded-xl bg-superficie-2 px-3.5 py-3" aria-label="Parecidas que já têm resposta">
+      <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-tinta">
+        <Sparkles className="size-3.5 text-texto-2" aria-hidden /> Parecidas que já têm resposta
+      </p>
+      <ul className="mt-1.5 space-y-0.5">
+        {achados.map((p) => (
+          <li key={p.id}>
+            <button
+              type="button"
+              onClick={() => focarPost(p.id)}
+              className="-mx-1.5 flex w-[calc(100%+12px)] items-start gap-2 rounded-md px-1.5 py-1.5 text-left text-[13px] leading-snug text-texto transition-[background-color,transform] duration-150 hover:bg-superficie active:scale-[0.99]"
+            >
+              <span className="line-clamp-2 min-w-0 flex-1">{p.texto}</span>
+              <span className="shrink-0 pt-px text-[12px] tabular-nums text-texto-2">
+                {p.respostas.length} {p.respostas.length === 1 ? "resposta" : "respostas"}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RespostaItem({ resposta: r, pessoas, post, equipados }: { resposta: Resposta; pessoas: Record<string, Pessoa>; post: Post; equipados: string[] }) {
   const autor = pessoas[r.autorId];
   const minha = r.autorId === USUARIO_ID;
   const podeMarcar = post.autorId === USUARIO_ID && post.tipo === "duvida" && !minha && !r.util;
 
   return (
-    <motion.li
-      layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn(
-        "rounded-xl border bg-white p-3",
-        r.oficial ? "border-verde-2/50 ring-1 ring-verde-2/10" : minha ? "border-verde-suave" : "border-borda",
-      )}
-    >
+    <motion.li layout="position" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: SUAVE }}>
       {r.oficial && (
-        <p className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-verde">
-          <Pin className="size-3.5" /> Resposta oficial fixada
+        <p className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-acento">
+          <Pin className="size-3.5 -rotate-45" aria-hidden /> Resposta oficial
         </p>
       )}
       <div className="flex items-start gap-2.5">
-        <Avatar nome={autor?.nome ?? "?"} iniciais={autor?.iniciais} tamanho="sm" equipados={minha ? equipados : []} />
+        <LinkPessoa id={r.autorId} rotulo={autor?.nome} className="shrink-0">
+          <Avatar nome={autor?.nome ?? "?"} iniciais={autor?.iniciais} tamanho="sm" equipados={minha ? equipados : []} />
+        </LinkPessoa>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[13px] font-bold text-tinta">{autor?.nome}</span>
-            {minha && <Badge tom="verde" maiuscula>sua resposta</Badge>}
-            {autor?.papel === "professor" && !r.oficial && <Badge tom="claro">Professor</Badge>}
-            <span className="text-[11px] text-texto-2">{tempoRelativo(r.criadoEm, agora)}</span>
-          </div>
-          <p className="mt-1 text-[13.5px] leading-relaxed text-texto">{r.texto}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <p className="flex min-w-0 items-center gap-1 text-[13.5px] leading-5">
+            <LinkPessoa id={r.autorId} className="min-w-0 truncate font-medium text-tinta hover:underline">
+              {autor?.nome ?? "Membro do CEPI"}
+            </LinkPessoa>
+            <Verificado pessoa={autor} />
+            {minha && <span className="shrink-0 text-texto-2">· você</span>}
+            <span className="shrink-0 text-texto-2">·</span>
+            <Quando ts={r.criadoEm} className="shrink-0 text-[12.5px] text-texto-2" />
+          </p>
+          <p className="mt-0.5 text-[14px] leading-relaxed text-texto">{r.texto}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px] text-texto-2 empty:hidden">
             {podeMarcar && (
-              <Button variante="rapido" tamanho="sm" onClick={() => marcarUtil(post.id, r.id)}>
-                <Check /> Marcar como útil
-              </Button>
+              <button
+                type="button"
+                onClick={() => marcarUtil(post.id, r.id)}
+                title="Quem respondeu ganha +25 XP"
+                className="-mx-1.5 inline-flex h-7 items-center gap-1 rounded-md px-1.5 font-medium text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-acento"
+              >
+                <Check className="size-3.5" /> Marcar como útil
+              </button>
             )}
             {r.util && (
-              <Badge tom="claro">
-                <Check /> Útil
-              </Badge>
-            )}
-            {minha && !r.util && post.tipo === "duvida" && (
-              <span className="text-[11px] text-texto-2">Aguardando {primeiroNome(pessoas[post.autorId]?.nome ?? "")} avaliar</span>
-            )}
-            {r.uteis > 0 && (
-              <span className="text-[11px] text-texto-2">
-                {r.uteis} {r.uteis === 1 ? "achou útil" : "acharam útil"}
+              <span className="inline-flex items-center gap-1 font-medium text-acento">
+                <CircleCheck className="size-3.5" /> Útil
               </span>
             )}
+            {minha && !r.util && post.tipo === "duvida" && <span>Aguardando {primeiroNome(pessoas[post.autorId]?.nome ?? "")} avaliar</span>}
+            {r.uteis > 0 && <span className="tabular-nums">{r.uteis === 1 ? "1 achou útil" : `${r.uteis} acharam útil`}</span>}
           </div>
         </div>
       </div>
