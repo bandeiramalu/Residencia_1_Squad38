@@ -1,8 +1,8 @@
 /**
- * Triagem de denúncias e moderação (EP03 — US05/US06), simulada por regras.
+ * Triagem de denúncias e moderação (EP03 — US05/US06) por regras de palavras-chave.
  *
  * Regra do épico: a IA NÃO decide se a denúncia é verdadeira e NÃO pune.
- * Ela só classifica, prioriza e encaminha para revisão humana da coordenação.
+ * Ela só classifica (contando sinais no texto), prioriza e encaminha para revisão humana da coordenação.
  */
 import { normalizar } from "./format";
 

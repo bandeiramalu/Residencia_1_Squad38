@@ -30,6 +30,6 @@ export const USUARIO_INICIAL: Usuario = {
     Geografia: 61,
     Inglês: 70,
   },
-  ocultarRanking: false,
+  privacidade: "publico",
   equipados: ["av1", "pf3"],
 };

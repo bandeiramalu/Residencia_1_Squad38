@@ -1,10 +1,10 @@
 /**
- * Busca semântica simulada (US02/US03).
+ * Busca por semelhança (US02/US03), 100% local.
  *
- * No protótipo, a "semântica" vem de um mapa de conceitos: palavras diferentes
- * que falam do mesmo assunto ("reta", "coeficiente", "inclinação") ativam o
- * mesmo conceito, então dúvidas parecidas se encontram mesmo sem repetir termos.
- * Em produção, este módulo seria trocado por embeddings de um modelo de IA.
+ * Cada texto vira um vetor de palavras (com radicalização leve) mais "conceitos": um mapa de
+ * assuntos por disciplina em que palavras diferentes ("reta", "coeficiente", "inclinação")
+ * ativam o mesmo conceito. A semelhança é o cosseno entre os vetores, então dúvidas sobre o
+ * mesmo assunto se encontram mesmo sem repetir termos. O mapa cobre as 8 disciplinas.
  */
 import type { Disciplina } from "@/data/escola";
 import type { Post } from "@/store/types";
@@ -66,6 +66,114 @@ const CONCEITOS: Record<string, Conceito> = {
     termos: ["present", "perfect", "past", "simple", "verb", "tense", "vocabulary", "ingles", "already", "yet", "ever"],
     disciplina: "Inglês",
     tag: "presentperfect",
+  },
+  /* Matemática (9º ano / EM) */
+  geometria: {
+    termos: ["triangulo", "pitagoras", "hipotenusa", "cateto", "area", "perimetro", "circulo", "circunferencia", "angulo", "semelhanca", "tales", "volume", "prisma", "cilindro", "teorema"],
+    disciplina: "Matemática",
+    tag: "geometria",
+  },
+  trigonometria: {
+    termos: ["seno", "cosseno", "tangente", "trigonometria", "trigonometrica", "radiano", "hipotenusa", "angulo"],
+    disciplina: "Matemática",
+    tag: "trigonometria",
+  },
+  funcaoquadratica: {
+    termos: ["quadratica", "parabola", "vertice", "discriminante", "delta", "bhaskara", "concavidade", "segundo", "grau"],
+    disciplina: "Matemática",
+    tag: "funcaoquadratica",
+  },
+  probabilidade: {
+    termos: ["probabilidade", "chance", "combinacao", "permutacao", "arranjo", "fatorial", "media", "mediana", "moda", "estatistica", "porcentagem", "juros"],
+    disciplina: "Matemática",
+    tag: "probabilidade",
+  },
+  /* Biologia */
+  genetica: {
+    termos: ["genetica", "gene", "alelo", "dominante", "recessivo", "mendel", "dna", "rna", "heredograma", "fenotipo", "genotipo", "hereditariedade", "mutacao", "proteina"],
+    disciplina: "Biologia",
+    tag: "genetica",
+  },
+  ecologia: {
+    termos: ["ecologia", "ecossistema", "cadeia", "alimentar", "produtor", "consumidor", "decompositor", "populacao", "habitat", "nicho", "fotossintese", "respiracao", "evolucao", "selecao", "natural"],
+    disciplina: "Biologia",
+    tag: "ecologia",
+  },
+  /* História */
+  brasilhistoria: {
+    termos: ["colonia", "colonial", "imperio", "republica", "escravidao", "abolicao", "independencia", "getulio", "vargas", "ditadura", "constituicao", "bandeirantes", "capitania"],
+    disciplina: "História",
+    tag: "brasilhistoria",
+  },
+  revolucoes: {
+    termos: ["revolucao", "francesa", "industrial", "iluminismo", "absolutismo", "feudalismo", "renascimento", "guerra", "fria", "nazismo", "fascismo", "segunda", "holocausto"],
+    disciplina: "História",
+    tag: "revolucoes",
+  },
+  /* Português */
+  gramatica: {
+    termos: ["sujeito", "predicado", "verbo", "substantivo", "adjetivo", "oracao", "concordancia", "crase", "acentuacao", "pontuacao", "virgula", "regencia", "pronome", "sintaxe", "coordenada", "subordinada"],
+    disciplina: "Português",
+    tag: "gramatica",
+  },
+  redacao: {
+    termos: ["redacao", "dissertacao", "argumentativa", "tese", "argumento", "coesao", "coerencia", "introducao", "conclusao", "enem", "proposta", "intervencao", "texto", "paragrafo"],
+    disciplina: "Português",
+    tag: "redacao",
+  },
+  literatura: {
+    termos: ["literatura", "romantismo", "realismo", "modernismo", "machado", "assis", "poema", "poesia", "romance", "narrador", "personagem", "barroco", "naturalismo", "vidas", "secas"],
+    disciplina: "Português",
+    tag: "literatura",
+  },
+  /* Química */
+  tabelaperiodica: {
+    termos: ["tabela", "periodica", "elemento", "eletronegatividade", "ligacao", "ionica", "covalente", "metalica", "eletron", "proton", "neutron", "valencia", "distribuicao", "eletronica", "ion"],
+    disciplina: "Química",
+    tag: "tabelaperiodica",
+  },
+  solucoes: {
+    termos: ["solucao", "concentracao", "molaridade", "soluto", "solvente", "diluicao", "ph", "titulacao", "estequiometria", "gas", "gases", "organica", "hidrocarboneto"],
+    disciplina: "Química",
+    tag: "solucoes",
+  },
+  /* Física */
+  dinamica: {
+    termos: ["inercia", "atrito", "peso", "massa", "tracao", "normal", "lei", "leis", "trabalho", "energia", "potencia", "cinetica", "potencial", "impulso", "momento", "queda", "gravidade"],
+    disciplina: "Física",
+    tag: "dinamica",
+  },
+  eletricidade: {
+    termos: ["corrente", "tensao", "voltagem", "resistencia", "resistor", "ohm", "circuito", "carga", "eletrica", "potencia", "campo", "magnetico", "ima", "lampada", "serie", "paralelo"],
+    disciplina: "Física",
+    tag: "eletricidade",
+  },
+  ondulatoria: {
+    termos: ["onda", "frequencia", "comprimento", "som", "luz", "refracao", "reflexao", "lente", "espelho", "optica", "calor", "temperatura", "termica", "dilatacao", "termodinamica"],
+    disciplina: "Física",
+    tag: "ondulatoria",
+  },
+  /* Geografia */
+  geopolitica: {
+    termos: ["geopolitica", "fronteira", "pais", "continente", "onu", "uniao", "europeia", "migracao", "imigrante", "refugiado", "capitalismo", "socialismo", "blocos", "economico", "comercio", "industrializacao"],
+    disciplina: "Geografia",
+    tag: "geopolitica",
+  },
+  ambiente: {
+    termos: ["aquecimento", "global", "desmatamento", "poluicao", "sustentavel", "sustentabilidade", "amazonia", "cerrado", "pantanal", "agua", "hidrografia", "bacia", "rio", "clima", "chuva", "energia"],
+    disciplina: "Geografia",
+    tag: "meioambiente",
+  },
+  /* Inglês */
+  gramaticaingles: {
+    termos: ["will", "going", "would", "could", "should", "conditional", "if", "passive", "voice", "modal", "preposition", "article", "plural", "comparative", "superlative", "future", "continuous", "grammar"],
+    disciplina: "Inglês",
+    tag: "englishgrammar",
+  },
+  vocabularioingles: {
+    termos: ["word", "meaning", "translate", "traducao", "phrasal", "idiom", "expression", "listening", "reading", "writing", "speaking", "pronunciation", "english"],
+    disciplina: "Inglês",
+    tag: "vocabulary",
   },
 };
 
