@@ -1,72 +1,25 @@
 /**
  * Ações do Portal do Aluno: cada função é um fluxo de usuário completo
- * (muda o estado, mostra notificações e agenda eventos simulados).
+ * (muda o estado, mostra toasts e cria notificações para quem é afetado).
  * Os componentes chamam estas funções — nunca o reducer direto.
  */
-import { RESPOSTAS_DM } from "@/data/conversas";
-import { ESCOLA, type Disciplina } from "@/data/escola";
+import { type Disciplina } from "@/data/escola";
 import { pontosDaSequencia } from "@/data/missoes";
 import { itemPorId } from "@/data/loja";
 import { USUARIO_ID } from "@/data/pessoas";
 import { gerarId, gerarVoucher, primeiroNome } from "@/lib/format";
-import { medalhasConquistadas, nivelDe } from "@/lib/gamificacao";
+import { lerSessao } from "@/lib/auth";
+import { buscarSemelhantes } from "@/lib/busca";
 import { triarDenuncia, verificarPublicacao, type MotivoDenuncia } from "@/lib/moderacao";
-import { baixarArquivo, gerarPdf } from "@/lib/pdf";
+import { baixarAnexoDe } from "@/lib/materiais";
 import { dataCurta } from "@/lib/tempo";
-import type { Acao } from "./reducer";
+import { commit, ehAluno, notificar, novaEpoca, pessoa, premiar } from "./nucleo";
 import { criarEstadoInicial } from "./seed";
 import { despachar, obterEstado } from "./store";
-import type { EspacoId, Post, TipoPost } from "./types";
-import { celebrar, definirDigitando, lerUI, toast } from "./ui";
+import type { Anexo, EspacoId, Post, Privacidade, Resposta, TipoPost } from "./types";
 
-/* ───────────── Infraestrutura ───────────── */
-
-/** Invalida eventos agendados quando a demonstração é reiniciada. */
-let epoca = 0;
-
-function agendar(ms: number, fn: () => void) {
-  const minhaEpoca = epoca;
-  setTimeout(() => {
-    if (minhaEpoca === epoca) fn();
-  }, ms);
-}
-
-function commit(acao: Acao) {
-  const antes = obterEstado();
-  const depois = despachar(acao);
-  if (depois !== antes) verificarConquistas(antes.usuario.xp, depois.usuario.xp);
-  return depois;
-}
-
-function verificarConquistas(xpAntes: number, xpDepois: number) {
-  const nivelAntes = nivelDe(xpAntes);
-  const nivelDepois = nivelDe(xpDepois);
-  if (nivelDepois.n > nivelAntes.n) {
-    toast({ tipo: "nivel", titulo: `Você chegou ao nível ${nivelDepois.n} · ${nivelDepois.titulo}`, mensagem: "Nível só sobe com mérito acadêmico." }, 4200);
-    celebrar();
-  }
-  for (const def of medalhasConquistadas(obterEstado())) {
-    despachar({ type: "desbloquearMedalha", id: def.id, em: Date.now() });
-    toast({ tipo: "medalha", titulo: `Medalha desbloqueada: ${def.nome}`, mensagem: def.criterio }, 4200);
-    celebrar();
-  }
-}
-
-function descreverGanho(pontos: number, xp: number) {
-  const partes: string[] = [];
-  if (pontos > 0) partes.push(`+${pontos} pontos`);
-  if (xp > 0) partes.push(`+${xp} XP`);
-  return partes.join(" e ");
-}
-
-export function premiar(pontos: number, xp: number, motivo: string, disciplina?: Disciplina) {
-  commit({ type: "premiar", pontos, xp, disciplina });
-  toast({ tipo: xp > 0 && !pontos ? "xp" : "ganho", titulo: descreverGanho(pontos, xp), mensagem: motivo });
-}
-
-function pessoa(id: string) {
-  return obterEstado().pessoas[id];
-}
+export { premiar } from "./nucleo";
+import { celebrar, toast } from "./ui";
 
 function professorDe(disciplina: Disciplina) {
   return Object.values(obterEstado().pessoas).find((p) => p.papel === "professor" && p.disciplina === disciplina);
@@ -96,51 +49,29 @@ export function abrirMaterial(postId: string) {
 
 export function baixarMaterial(post: Post) {
   if (!post.anexo) return;
-  const autor = pessoa(post.autorId);
-  const blob = gerarPdf([
-    { texto: `${ESCOLA.nome} — Portal do Aluno`, tamanho: 12, negrito: true, cor: [1, 1, 1], espaco: 26 },
-    { texto: post.anexo.nome, tamanho: 18, negrito: true, cor: [0.106, 0.227, 0.173], espaco: 4 },
-    { texto: `${post.disciplina ?? "Material"} · ${autor?.nome ?? ""} · ${dataCurta(post.criadoEm)}`, tamanho: 10, cor: [0.435, 0.506, 0.471], espaco: 18 },
-    { texto: post.texto, tamanho: 11, espaco: 18 },
-    {
-      texto:
-        "Arquivo de demonstração gerado pelo protótipo do Portal do Aluno (Squad 38). Na versão integrada ao portal da escola, este botão baixa o arquivo original enviado pelo professor.",
-      tamanho: 9,
-      cor: [0.435, 0.506, 0.471],
-    },
-  ]);
-  baixarArquivo(blob, post.anexo.nome);
+  void baixarAnexoDe(post.anexo, {
+    titulo: post.anexo.nome.replace(/\.pdf$/i, ""),
+    descricao: post.texto,
+    disciplina: post.disciplina,
+    autor: pessoa(post.autorId)?.nome,
+    data: dataCurta(post.criadoEm),
+  });
   abrirMaterial(post.id);
   toast({ tipo: "info", titulo: "Download iniciado", mensagem: post.anexo.nome }, 2400);
 }
-
-const RESPOSTAS_COLEGAS: Record<Disciplina, { autorId: string; texto: string }> = {
-  Matemática: { autorId: "lucas", texto: "Tenta desenhar o gráfico com dois pontos e ver para onde a reta vai — foi o que me destravou na lista 7." },
-  Biologia: { autorId: "julia", texto: "Revisei isso com o mapa mental da aula 12 da Profª. Denise. Está tudo lá, bem resumido." },
-  História: { autorId: "marina", texto: "Separa em duas colunas: o que vinha de antes (estrutural) e o que aconteceu no dia (estopim). Ajuda a não misturar." },
-  Português: { autorId: "sofia", texto: "Procura o conectivo: se tiver 'como' ou 'tal qual', é comparação. Sem conectivo, costuma ser metáfora." },
-  Química: { autorId: "sofia", texto: "Faz um flashcard com isso! Revisei assim na prática rápida e nunca mais esqueci." },
-  Física: { autorId: "pedro", texto: "Monta uma tabelinha com distância e tempo de cada trecho antes de fazer a conta." },
-  Geografia: { autorId: "marina", texto: "Tem um mapa ótimo na apostila 4 que mostra isso direitinho. Te mostro no intervalo." },
-  Inglês: { autorId: "lucas", texto: "O Teacher Daniel explicou isso na Unit 5 — tem exemplo na vocabulary list que ele postou." },
-};
-
-const RESPOSTAS_PROFESSOR: Record<Disciplina, string> = {
-  Matemática: "Ótima pergunta. Vou retomar esse ponto na aula de quinta com um exemplo no plano cartesiano — tragam a lista 7.",
-  Biologia: "Esse é um erro clássico: observe as figuras 3 e 4 do capítulo 6. Na próxima aula faremos a montagem com massa de modelar.",
-  História: "Boa dúvida. Diferenciar causa estrutural de estopim é o que vamos treinar na atividade da semana que vem.",
-  Português: 'Repare na presença (ou não) do conectivo comparativo ("como"). Comento na correção da redação.',
-  Química: "Confira a tabela da página 112. Na aula prática de terça vamos testar isso no laboratório.",
-  Física: "Bom questionamento. Vamos resolver esse caso na lousa com o diagrama de forças na aula de segunda.",
-  Geografia: "Interessante! Traga esse recorte para o debate de sexta — é a discussão da apostila 4.",
-  Inglês: "Great question! Esse tempo verbal aparece no texto 2 da Unit 5. Faremos a leitura guiada na próxima aula.",
-};
 
 interface NovaPublicacao {
   tipo: Exclude<TipoPost, "aviso">;
   disciplina: Disciplina;
   texto: string;
   tags: string[];
+  /** Arquivo real escolhido na tela. Sem anexo e tipo material: gera o PDF a partir do conteúdo. */
+  anexo?: Anexo;
+}
+
+/** Quem está agindo nesta aba (a sessão), com a aluna como padrão. */
+function atorId() {
+  return lerSessao()?.usuarioId ?? USUARIO_ID;
 }
 
 function slug(texto: string) {
@@ -152,16 +83,26 @@ function slug(texto: string) {
     .replace(/(^-|-$)/g, "");
 }
 
-export function publicar({ tipo, disciplina, texto, tags }: NovaPublicacao) {
+export function publicar({ tipo, disciplina, texto, tags, anexo }: NovaPublicacao) {
   const estado = obterEstado();
+  const autorId = atorId();
   const moderacao = verificarPublicacao(texto);
   const espaco: EspacoId = estado.espaco === "escola" ? "9A" : estado.espaco;
-  const qtdMateriais = estado.posts.filter((p) => p.autorId === USUARIO_ID && p.tipo === "material").length;
+  const qtdMateriais = estado.posts.filter((p) => p.autorId === autorId && p.tipo === "material").length;
+
+  // Sugestão do Portal: dúvidas já respondidas e materiais parecidos com o texto.
+  const sugestoes =
+    tipo === "duvida"
+      ? buscarSemelhantes(texto, estado.posts, { limite: 12 })
+          .filter((r) => r.post.autorId !== autorId && (r.post.tipo === "material" || (r.post.tipo === "duvida" && r.post.respostas.length > 0)))
+          .slice(0, 3)
+          .map((r) => r.post.id)
+      : [];
 
   const post: Post = {
     id: gerarId("p"),
     tipo,
-    autorId: USUARIO_ID,
+    autorId,
     espaco,
     disciplina,
     texto,
@@ -171,11 +112,9 @@ export function publicar({ tipo, disciplina, texto, tags }: NovaPublicacao) {
     curtido: false,
     salvo: false,
     respostas: [],
-    anexo:
-      tipo === "material"
-        ? { nome: `${slug(disciplina)}-material-${qtdMateriais + 1}.pdf`, paginas: 2, tamanho: "96 KB" }
-        : undefined,
+    anexo: anexo ?? (tipo === "material" ? { nome: `${slug(disciplina)}-material-${qtdMateriais + 1}.pdf`, paginas: 1, tamanho: "5 KB" } : undefined),
     emRevisao: moderacao.sinalizado || undefined,
+    sugestoes: sugestoes.length ? sugestoes : undefined,
   };
   commit({ type: "publicar", post });
 
@@ -192,69 +131,101 @@ export function publicar({ tipo, disciplina, texto, tags }: NovaPublicacao) {
   }
 
   if (tipo === "material") {
-    commit({ type: "premiar", pontos: 10, xp: 0 });
-    toast({ tipo: "ganho", titulo: "Material compartilhado", mensagem: "+10 pontos por colaborar com a turma" });
+    if (ehAluno()) {
+      commit({ type: "premiar", pontos: 10, xp: 0 });
+      toast({ tipo: "ganho", titulo: "Material compartilhado", mensagem: "+10 pontos por colaborar com a turma" });
+    } else {
+      toast({ tipo: "info", titulo: "Material compartilhado", mensagem: "Sua turma já pode abrir no feed." });
+    }
   } else if (tipo === "duvida") {
-    toast({ tipo: "info", titulo: `Dúvida publicada em ${disciplina}`, mensagem: "Você será avisada quando alguém responder." });
-    simularRespostasDaDuvida(post.id, disciplina);
+    toast({
+      tipo: "info",
+      titulo: `Dúvida publicada em ${disciplina}`,
+      mensagem: sugestoes.length ? "Veja a Sugestão do Portal e aguarde uma resposta." : "Aguardando resposta. Você será avisada quando alguém responder.",
+    });
+    const professor = professorDe(disciplina);
+    if (professor && professor.id !== autorId) {
+      notificar(professor.id, {
+        tipo: "sistema",
+        titulo: "Nova dúvida",
+        texto: `${primeiroNome(pessoa(autorId)?.nome ?? "Aluno")} em ${disciplina}: ${texto.length > 90 ? texto.slice(0, 87) + "…" : texto}`,
+        href: "/professor/duvidas",
+        deId: autorId,
+      });
+    }
   } else {
     toast({ tipo: "info", titulo: "Publicação enviada", mensagem: "Sua turma já pode ver no feed." });
   }
   return post.id;
 }
 
-function simularRespostasDaDuvida(postId: string, disciplina: Disciplina) {
-  const colega = RESPOSTAS_COLEGAS[disciplina];
-  agendar(5000, () => {
-    if (!acharPost(postId)) return;
-    commit({
-      type: "responder",
-      postId,
-      resposta: { id: gerarId("r"), autorId: colega.autorId, texto: colega.texto, criadoEm: Date.now(), uteis: 0, util: false },
-    });
-    premiar(10, 0, `${primeiroNome(pessoa(colega.autorId)?.nome ?? "Um colega")} respondeu sua dúvida`);
-  });
+interface OpcoesResposta {
+  autorId: string;
+  /** Resposta oficial do professor da disciplina. */
+  oficial?: boolean;
+}
 
-  const professor = professorDe(disciplina);
-  if (!professor) return;
-  agendar(11000, () => {
-    if (!acharPost(postId)) return;
-    commit({
-      type: "responder",
-      postId,
-      resposta: { id: gerarId("r"), autorId: professor.id, texto: RESPOSTAS_PROFESSOR[disciplina], criadoEm: Date.now(), uteis: 0, util: false, oficial: true },
+/**
+ * Publica uma resposta/comentário em `postId` em nome de `autorId` e notifica o autor do post.
+ * O professor usa isto na tela "Dúvidas" (com `oficial: true`). Devolve o id da resposta (ou null).
+ */
+export function responderPost(postId: string, texto: string, { autorId, oficial }: OpcoesResposta) {
+  const post = acharPost(postId);
+  const conteudo = texto.trim();
+  if (!post || !conteudo) return null;
+  const resposta: Resposta = { id: gerarId("r"), autorId, texto: conteudo, criadoEm: Date.now(), uteis: 0, util: false, ...(oficial ? { oficial: true } : {}) };
+  commit({ type: "responder", postId, resposta });
+
+  const ehDuvida = post.tipo === "duvida";
+  const nomeAutor = primeiroNome(pessoa(autorId)?.nome ?? "Alguém");
+  if (post.autorId !== autorId) {
+    const recompensa = oficial && ehDuvida && post.autorId === USUARIO_ID;
+    if (recompensa) premiar(20, 15, "resposta oficial do professor", post.disciplina, true);
+    notificar(post.autorId, {
+      tipo: "sistema",
+      titulo: ehDuvida ? (oficial ? "Resposta oficial na sua dúvida" : "Sua dúvida foi respondida") : "Novo comentário na sua publicação",
+      texto: `${nomeAutor}: ${conteudo.length > 90 ? conteudo.slice(0, 87) + "…" : conteudo}${recompensa ? " · +20 pontos e +15 XP" : ""}`,
+      href: "/feed",
+      deId: autorId,
     });
-    premiar(20, 15, `${professor.nome} deu a resposta oficial`, disciplina);
-  });
+  }
+  return resposta.id;
 }
 
 export function responder(postId: string, texto: string) {
   const post = acharPost(postId);
   if (!post) return;
-  const resposta = { id: gerarId("r"), autorId: USUARIO_ID, texto, criadoEm: Date.now(), uteis: 0, util: false };
-  commit({ type: "responder", postId, resposta });
+  const autorId = atorId();
+  const professor = lerSessao()?.papel === "professor";
+  const id = responderPost(postId, texto, { autorId, oficial: professor && post.tipo === "duvida" && post.autorId !== autorId });
+  if (!id) return;
 
-  const ehDuvidaDeColega = post.tipo === "duvida" && post.autorId !== USUARIO_ID;
+  const ehDuvidaDeColega = post.tipo === "duvida" && post.autorId !== autorId;
   if (!ehDuvidaDeColega) {
     toast({ tipo: "info", titulo: "Comentário publicado" }, 2200);
     return;
   }
-
-  const autor = primeiroNome(pessoa(post.autorId)?.nome ?? "colega");
-  premiar(15, 10, `você respondeu a dúvida de ${autor}`, post.disciplina);
-  avancarMissao("d1", 1);
-  agendar(7000, () => {
-    if (!acharPost(postId)?.respostas.some((r) => r.id === resposta.id)) return;
-    commit({ type: "respostaAjudou", postId, respostaId: resposta.id, quantidade: 3 });
-    premiar(25, 25, `${autor} marcou sua resposta como útil`, post.disciplina);
-  });
+  if (autorId === USUARIO_ID) {
+    premiar(15, 10, `você respondeu a dúvida de ${primeiroNome(pessoa(post.autorId)?.nome ?? "colega")}`, post.disciplina);
+    avancarMissao("d1", 1);
+  } else {
+    toast({ tipo: "info", titulo: "Resposta enviada", mensagem: `${primeiroNome(pessoa(post.autorId)?.nome ?? "O aluno")} foi avisado.` }, 2600);
+  }
 }
 
 export function marcarUtil(postId: string, respostaId: string) {
   const resposta = acharPost(postId)?.respostas.find((r) => r.id === respostaId);
   if (!resposta || resposta.util) return;
-  commit({ type: "marcarUtil", postId, respostaId });
-  toast({ tipo: "xp", titulo: `+25 XP para ${primeiroNome(pessoa(resposta.autorId)?.nome ?? "")}`, mensagem: "você marcou a resposta como útil" });
+  const daAluna = resposta.autorId === USUARIO_ID;
+  commit(daAluna ? { type: "respostaAjudou", postId, respostaId, quantidade: 1 } : { type: "marcarUtil", postId, respostaId });
+  const nome = primeiroNome(pessoa(resposta.autorId)?.nome ?? "");
+  if (daAluna) {
+    premiar(25, 25, "sua resposta foi marcada como útil", acharPost(postId)?.disciplina, true);
+    notificar(USUARIO_ID, { tipo: "pontos", titulo: "Sua resposta foi marcada como útil", texto: "+25 pontos e +25 XP", href: "/feed", deId: atorId() });
+  } else if (resposta.autorId !== atorId()) {
+    notificar(resposta.autorId, { tipo: "sistema", titulo: "Sua resposta foi marcada como útil", href: "/feed", deId: atorId() });
+  }
+  toast({ tipo: "info", titulo: "Resposta marcada como útil", mensagem: nome ? `${nome} foi avisado.` : undefined }, 2400);
 }
 
 export function denunciar(postId: string, motivo: MotivoDenuncia, descricao: string, evidencia: boolean) {
@@ -368,12 +339,7 @@ export function concluirDesafio(disciplina: Disciplina, acertos: number) {
 export function enviarRelato(categoria: string, texto: string) {
   const id = gerarId("rel");
   commit({ type: "enviarRelato", relato: { id, categoria, texto, status: "em análise", criadoEm: Date.now() } });
-  toast({ tipo: "info", titulo: "Relato enviado para a coordenação", mensagem: "Status: em análise" });
-  agendar(12000, () => {
-    if (!obterEstado().relatos.some((r) => r.id === id)) return;
-    commit({ type: "validarRelato", id });
-    premiar(30, 0, "seu relato foi validado pela coordenação");
-  });
+  toast({ tipo: "info", titulo: "Relato enviado para a coordenação", mensagem: "Fica em análise até a coordenação validar." });
 }
 
 /* ───────────── Loja ───────────── */
@@ -401,7 +367,6 @@ export function comprar(itemId: string) {
     },
     4200,
   );
-  celebrar();
   return true;
 }
 
@@ -410,88 +375,19 @@ export function equipar(itemId: string, valor: boolean) {
   toast({ tipo: "info", titulo: valor ? "Equipado no seu perfil" : "Removido do seu perfil", mensagem: itemPorId(itemId)?.nome }, 2200);
 }
 
-/* ───────────── Mensagens diretas (US01) ───────────── */
-
-/** Conversas com resposta simulada já agendada — uma resposta por rajada de mensagens. */
-const respostasPendentes = new Set<string>();
-
-/** Abre (ou cria) a conversa individual com uma pessoa e devolve o id. */
-export function iniciarConversa(pessoaId: string) {
-  const existente = obterEstado().conversas.find((c) => !c.titulo && c.participantes.length === 2 && c.participantes.includes(pessoaId));
-  if (existente) return existente.id;
-  const conversa = { id: `c-${pessoaId}`, participantes: [USUARIO_ID, pessoaId], mensagens: [], naoLidas: 0 };
-  commit({ type: "criarConversa", conversa });
-  return conversa.id;
-}
-
-export function abrirConversa(conversaId: string) {
-  commit({ type: "abrirConversa", conversaId });
-}
-
-function respostaSimulada(conversaId: string, respondenteId: string) {
-  const conversa = obterEstado().conversas.find((c) => c.id === conversaId);
-  const papel = pessoa(respondenteId)?.papel;
-  const opcoes =
-    RESPOSTAS_DM[respondenteId] ?? (papel === "professor" ? RESPOSTAS_DM.professor : papel === "escola" ? RESPOSTAS_DM.coord : ["👍"]);
-  const jaRespondidas = conversa?.mensagens.filter((m) => m.autorId === respondenteId).length ?? 0;
-  return opcoes[jaRespondidas % opcoes.length];
-}
-
-export function enviarMensagem(conversaId: string, texto: string) {
-  const conversa = obterEstado().conversas.find((c) => c.id === conversaId);
-  if (!conversa || !texto.trim()) return;
-  const moderacao = verificarPublicacao(texto);
-  commit({
-    type: "enviarMensagem",
-    conversaId,
-    mensagem: { id: gerarId("m"), autorId: USUARIO_ID, texto: texto.trim(), criadoEm: Date.now(), lida: false, retida: moderacao.sinalizado || undefined },
-  });
-
-  if (moderacao.sinalizado) {
-    toast(
-      {
-        tipo: "alerta",
-        titulo: "Mensagem retida para revisão",
-        mensagem: `A triagem automática sinalizou possível ${moderacao.motivo.toLowerCase()}. Ela só será entregue após revisão da coordenação.`,
-      },
-      5200,
-    );
-    return;
-  }
-
-  agendar(900, () => commit({ type: "confirmarLeitura", conversaId, autorId: USUARIO_ID }));
-  if (respostasPendentes.has(conversaId)) return;
-
-  const outros = conversa.participantes.filter((id) => id !== USUARIO_ID);
-  const respondente = outros[conversa.mensagens.length % outros.length];
-  const resposta = respostaSimulada(conversaId, respondente);
-  const pensar = 1300;
-  const digitar = 1100 + Math.min(2200, resposta.length * 28);
-  respostasPendentes.add(conversaId);
-
-  agendar(pensar, () => definirDigitando(conversaId, respondente));
-  agendar(pensar + digitar, () => {
-    respostasPendentes.delete(conversaId);
-    definirDigitando(conversaId, null);
-    if (!obterEstado().conversas.some((c) => c.id === conversaId)) return;
-    const aberta = lerUI().conversaAberta === conversaId;
-    commit({
-      type: "receberMensagem",
-      conversaId,
-      naoLida: !aberta,
-      mensagem: { id: gerarId("m"), autorId: respondente, texto: resposta, criadoEm: Date.now(), lida: aberta },
-    });
-    if (!aberta) {
-      toast({ tipo: "mensagem", titulo: `Nova mensagem de ${primeiroNome(pessoa(respondente)?.nome ?? "")}`, mensagem: resposta, href: `/mensagens/${conversaId}` }, 4200);
-    }
-  });
-}
-
 /* ───────────── Perfil e preferências ───────────── */
 
-export function ocultarRanking(valor: boolean) {
-  commit({ type: "ocultarRanking", valor });
-  toast({ tipo: "info", titulo: valor ? "Sua posição pública foi ocultada" : "Sua posição pública voltou a aparecer" }, 2600);
+const MSG_PRIVACIDADE: Record<Privacidade, { titulo: string; mensagem: string }> = {
+  publico: { titulo: "Você voltou a aparecer nos rankings", mensagem: "Seu nome e avatar ficam visíveis para os colegas." },
+  anonimo: { titulo: "Modo anônimo ativado", mensagem: "Os colegas veem “Aluno anônimo” no seu lugar." },
+  sombra: { titulo: "Modo invisível ativado", mensagem: "Você não aparece nos rankings. Só você vê sua posição." },
+};
+
+/** Visibilidade nos rankings: público, anônimo ou Modo Sombra. */
+export function definirPrivacidade(nivel: Privacidade) {
+  if (obterEstado().usuario.privacidade === nivel) return;
+  commit({ type: "definirPrivacidade", nivel });
+  toast({ tipo: "info", ...MSG_PRIVACIDADE[nivel] }, 3200);
 }
 
 export function alternarLembrete(eventoId: string, titulo: string) {
@@ -501,9 +397,16 @@ export function alternarLembrete(eventoId: string, titulo: string) {
 }
 
 export function resetarDemonstracao() {
-  epoca++;
-  respostasPendentes.clear();
-  for (const conversaId of Object.keys(lerUI().digitando)) definirDigitando(conversaId, null);
+  novaEpoca();
   despachar({ type: "resetar", estado: criarEstadoInicial(Date.now()) });
-  toast({ tipo: "info", titulo: "Demonstração reiniciada", mensagem: "Todos os dados voltaram ao estado inicial." });
+  toast({ tipo: "info", titulo: "Dados reiniciados", mensagem: "Tudo voltou ao estado inicial." });
 }
+
+/* ───────────── Novos módulos (v3) ───────────── */
+
+export * from "./acoes/estudos";
+export * from "./acoes/salas";
+export * from "./acoes/campeonatos";
+export * from "./acoes/atividades";
+export * from "./acoes/professor";
+export * from "./acoes/notificacoes";
