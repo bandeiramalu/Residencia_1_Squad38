@@ -1,102 +1,114 @@
 "use client";
 
-import { ArrowRight, Check } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { ArrowRight, Check, Hourglass } from "lucide-react";
+import { AnimatePresence, m as motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DisciplinaIcon } from "@/components/ui/DisciplinaIcon";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/cn";
 import { avancarMissao, concluirMissao } from "@/store/actions";
-import { useEstado } from "@/store/store";
+import { useSeletor } from "@/store/store";
 import type { Missao } from "@/store/types";
 import { focarPost } from "@/store/ui";
 
-/** Item de missão (diária ou do professor) com recompensa, progresso e ações. */
+/** Missão que só se conclui sozinha, ao fechar um ciclo de foco na Sala de Estudos. */
+const MISSAO_FOCO = "d4";
+
+/** Linha do checklist de missões diárias: caixa de seleção, título, recompensa e ações. */
 export function MissaoItem({ missao: m }: { missao: Missao }) {
   const router = useRouter();
-  const { pessoas } = useEstado();
+  const pessoas = useSeletor((e) => e.pessoas);
   const multiplas = m.alvo > 1;
+  const foco = m.id === MISSAO_FOCO;
   const professor = m.professorId ? pessoas[m.professorId] : undefined;
+  const irParaFeed = !!m.postId || m.id === "d1";
 
-  const abrirAtividade = () => {
+  const marcar = () => (multiplas ? avancarMissao(m.id, 1) : concluirMissao(m.id));
+  const abrirNoFeed = () => {
     if (m.postId) focarPost(m.postId);
     router.push("/feed");
   };
 
   return (
-    <motion.li
-      layout
-      className={cn(
-        "flex gap-3 rounded-2xl border p-3.5 transition-colors duration-300",
-        m.concluida ? "border-verde-claro bg-verde-mclaro" : "border-borda bg-white shadow-card",
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => (multiplas ? avancarMissao(m.id, 1) : concluirMissao(m.id))}
-        disabled={m.concluida}
-        aria-label={m.concluida ? "Missão concluída" : multiplas ? "Registrar +1 de progresso" : "Marcar como feita"}
-        className={cn(
-          "mt-0.5 grid size-7 shrink-0 place-items-center rounded-full border-2 transition-all duration-300",
-          m.concluida ? "border-verde bg-verde text-white" : "border-verde-suave bg-white hover:border-verde-2 active:scale-90",
-        )}
-      >
-        <AnimatePresence>
-          {m.concluida && (
-            <motion.span initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: "spring", stiffness: 600, damping: 15 }}>
-              <Check className="size-4" strokeWidth={3} />
-            </motion.span>
+    <motion.li layout="position" transition={{ type: "spring", stiffness: 600, damping: 50 }} className="flex gap-3 px-4 py-3.5">
+      {foco && !m.concluida ? (
+        <span
+          className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border border-dashed border-texto-2/50 text-texto-2"
+          title="Conclui sozinha quando um ciclo de foco termina"
+          aria-hidden
+        >
+          <Hourglass className="size-3" />
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={marcar}
+          disabled={m.concluida}
+          aria-label={m.concluida ? "Missão concluída" : multiplas ? "Registrar +1 de progresso" : "Marcar como feita"}
+          className={cn(
+            "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border transition-colors duration-150",
+            m.concluida ? "border-verde bg-verde text-white" : "border-texto-2/50 bg-superficie hover:border-verde hover:bg-verde-mclaro",
           )}
-        </AnimatePresence>
-      </button>
+        >
+          <AnimatePresence>
+            {m.concluida && (
+              <motion.span initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: "spring", stiffness: 600, damping: 40 }}>
+                <Check className="size-3" strokeWidth={3} />
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </button>
+      )}
 
       <div className="min-w-0 flex-1">
-        <p className={cn("text-[14px] font-semibold leading-snug", m.concluida ? "text-texto-2 line-through decoration-verde-suave" : "text-tinta")}>
-          {m.titulo}
-        </p>
-        <p className="mt-0.5 text-[12px] leading-snug text-texto-2">{m.descricao}</p>
+        <p className={cn("text-[14px] font-medium leading-snug transition-colors", m.concluida ? "text-texto-2 line-through decoration-texto-2/40" : "text-tinta")}>{m.titulo}</p>
+        {!m.concluida && <p className="mt-0.5 text-[13px] leading-snug text-texto-2">{m.descricao}</p>}
 
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <p className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[12px] text-texto-2">
+          <span className="tabular-nums">+{m.pontos} pontos</span>
+          <span aria-hidden>·</span>
+          <span className="tabular-nums">+{m.xp} XP</span>
           {m.disciplina && (
-            <Badge tom="contorno">
-              <DisciplinaIcon disciplina={m.disciplina} /> {m.disciplina}
-            </Badge>
+            <>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1">
+                <DisciplinaIcon disciplina={m.disciplina} className="size-3" /> {m.disciplina}
+              </span>
+            </>
           )}
-          <Badge tom="claro">+{m.pontos} Pontos</Badge>
-          <Badge tom="claro">+{m.xp} XP</Badge>
-          {professor && <span className="text-[11px] text-texto-2">{professor.nome}</span>}
-          {m.concluida && (
-            <Badge tom="verde" maiuscula>
-              Concluído
-            </Badge>
+          {professor && (
+            <>
+              <span aria-hidden>·</span>
+              <span>{professor.nome}</span>
+            </>
           )}
-        </div>
+        </p>
 
-        {multiplas && (
-          <div className="mt-2.5 flex items-center gap-2">
-            <ProgressBar valor={m.progresso} max={m.alvo} fina className="flex-1" rotulo={`Progresso de ${m.titulo}`} />
-            <span className="text-[11.5px] font-bold tabular-nums text-tinta">
+        {multiplas && !m.concluida && (
+          <div className="mt-2 flex items-center gap-2">
+            <ProgressBar valor={m.progresso} max={m.alvo} fina className="max-w-48 flex-1" rotulo={`Progresso de ${m.titulo}`} />
+            <span className="text-[12px] tabular-nums text-texto-2">
               {m.progresso}/{m.alvo}
             </span>
           </div>
         )}
 
-        {!m.concluida && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {multiplas ? (
-              <Button variante="rapido" tamanho="sm" onClick={() => avancarMissao(m.id, 1)}>
-                +1 progresso
-              </Button>
-            ) : (
-              <Button tamanho="sm" onClick={() => concluirMissao(m.id)}>
-                <Check /> Marcar como feita
+        {!m.concluida && (foco || multiplas || irParaFeed) && (
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {foco && (
+              <Button variante="secundario" tamanho="sm" onClick={() => router.push("/estudos")}>
+                <Hourglass /> Ir para a Sala de Estudos
               </Button>
             )}
-            {(m.postId || m.id === "d1") && (
-              <Button variante="secundario" tamanho="sm" onClick={abrirAtividade}>
-                {m.id === "d1" ? "Ver dúvidas no feed" : "Abrir atividade"} <ArrowRight />
+            {multiplas && (
+              <Button variante="secundario" tamanho="sm" onClick={marcar}>
+                +1 progresso
+              </Button>
+            )}
+            {irParaFeed && (
+              <Button variante="fantasma" tamanho="sm" onClick={abrirNoFeed}>
+                {m.id === "d1" ? "Ver dúvidas no feed" : "Abrir material"} <ArrowRight />
               </Button>
             )}
           </div>

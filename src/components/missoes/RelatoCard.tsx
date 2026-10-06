@@ -1,12 +1,11 @@
 "use client";
 
 import { Info, Megaphone } from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, m as motion } from "motion/react";
 import { useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { ChipGroup } from "@/components/ui/ChipGroup";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Sheet } from "@/components/ui/Sheet";
@@ -21,50 +20,33 @@ export function RelatoCard() {
   const { relatos } = useEstado();
   const agora = useAgora(30_000);
   const [aberto, setAberto] = useState(false);
-  const emAnalise = relatos.some((r) => r.status === "em análise");
 
   return (
-    <Card>
-      <div className="flex items-start gap-3">
-        <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-verde-claro text-verde">
-          <Megaphone className="size-5" />
+    <div className="overflow-hidden rounded-2xl border border-borda bg-superficie">
+      <div className="flex items-start gap-3 p-4">
+        <span className="grid size-9 shrink-0 place-items-center rounded-full bg-superficie-2 text-texto-2">
+          <Megaphone className="size-4" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[15px] font-bold text-tinta">Relatar problema da escola</p>
-            <AnimatePresence>
-              {emAnalise && (
-                <motion.span initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.8 }}>
-                  <Badge tom="ambar" maiuscula>
-                    Em análise
-                  </Badge>
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </div>
-          <p className="mt-1 text-[12.5px] leading-snug text-texto-2">
-            Estrutura, biblioteca, merenda, tecnologia. A coordenação valida e você recebe o crédito.
-          </p>
+          <p className="text-[15px] font-semibold text-tinta">Relatar problema da escola</p>
+          <p className="mt-0.5 text-[13px] leading-snug text-texto-2">Estrutura, biblioteca, merenda, tecnologia. A coordenação valida.</p>
+          <Button variante="secundario" tamanho="sm" className="mt-3" onClick={() => setAberto(true)}>
+            Abrir relato
+          </Button>
         </div>
       </div>
 
-      <Button variante="secundario" bloco className="mt-4" onClick={() => setAberto(true)}>
-        Abrir relato
-      </Button>
-
       {relatos.length > 0 && (
-        <ul className="mt-4 space-y-2">
+        <ul className="divide-y divide-borda border-t border-borda">
           <AnimatePresence initial={false}>
             {relatos.slice(0, 3).map((r) => (
-              <motion.li key={r.id} layout initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="rounded-xl bg-verde-mclaro p-3">
+              <motion.li key={r.id} layout="position" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-[12.5px] font-bold text-tinta">{r.categoria}</span>
-                  <Badge tom={r.status === "validado" ? "verde" : "ambar"} maiuscula>
-                    {r.status}
-                  </Badge>
+                  <span className="text-[13px] font-medium text-tinta">{r.categoria}</span>
+                  <Badge tom={r.status === "validado" ? "claro" : "ambar"}>{r.status === "validado" ? "Validado" : r.status === "recusado" ? "Não validado" : "Em análise"}</Badge>
                 </div>
-                <p className="mt-1 text-[12.5px] leading-snug text-texto">{r.texto}</p>
-                <p className="mt-1 text-[11px] text-texto-2">{tempoRelativo(r.criadoEm, agora)}</p>
+                <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-texto">{r.texto}</p>
+                <p className="mt-1 text-[12px] text-texto-2">{tempoRelativo(r.criadoEm, agora)}</p>
               </motion.li>
             ))}
           </AnimatePresence>
@@ -74,7 +56,7 @@ export function RelatoCard() {
       <Sheet aberto={aberto} onFechar={() => setAberto(false)} titulo="Relatar problema da escola" subtitulo="Vai para a coordenação pedagógica e volta com resposta">
         <FormularioRelato onFechar={() => setAberto(false)} />
       </Sheet>
-    </Card>
+    </div>
   );
 }
 
@@ -85,7 +67,7 @@ function FormularioRelato({ onFechar }: { onFechar: () => void }) {
 
   return (
     <>
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.08em] text-verde">Categoria</p>
+      <p className="mb-2 text-[13px] font-medium text-tinta">Categoria</p>
       <ChipGroup
         grupo="categoria-relato"
         rotulo="Categoria do relato"
@@ -100,10 +82,10 @@ function FormularioRelato({ onFechar }: { onFechar: () => void }) {
         onChange={(e) => setTexto(e.target.value)}
         placeholder="Descreva o problema, onde acontece e desde quando…"
         aria-label="Descrição do problema"
-        className="mt-4 w-full resize-none rounded-2xl border border-borda bg-verde-mclaro px-4 py-3 text-sm leading-relaxed text-texto outline-none transition-colors placeholder:text-texto-2/70 focus:border-verde-2 focus:bg-white"
+        className="mt-4 w-full resize-none rounded-xl border border-borda bg-superficie px-3.5 py-3 text-sm leading-relaxed text-texto outline-none transition-colors placeholder:text-texto-2/70 focus:border-verde"
       />
       <Nota icone={<Info />} className="mt-3">
-        Relato validado vale <b className="text-tinta">+30 pontos</b>. Não vale XP, porque não é mérito acadêmico.
+        Relato validado vale +30 pontos. Não vale XP, porque não é mérito acadêmico.
       </Nota>
       <RodapeSheet>
         <Button variante="secundario" tamanho="lg" className="flex-1" onClick={onFechar}>
