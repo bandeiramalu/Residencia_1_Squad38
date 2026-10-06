@@ -1,13 +1,41 @@
-import { criarConversas } from "@/data/conversas";
+import { criarAtividades, criarNotificacoes } from "@/data/atividades";
+import { criarCampeonatos } from "@/data/campeonatos";
+import { META_DIARIA_PADRAO, criarHistoricoEstudos } from "@/data/estudos";
 import { COLETIVA, FLASHCARDS, MISSOES } from "@/data/missoes";
 import { PESSOAS } from "@/data/pessoas";
 import { criarPosts } from "@/data/posts";
+import { criarSalas } from "@/data/salas";
+import { PESSOAS_GERADAS } from "@/data/turmas";
 import { USUARIO_INICIAL } from "@/data/usuario";
 import { diaDaSemana } from "@/lib/tempo";
 import type { AppState, StatusDia } from "./types";
 
-export const VERSAO_ESTADO = 2;
+export const VERSAO_ESTADO = 4;
 const D = 24 * 60 * 60 * 1000;
+
+/** Partes do estado criadas na v3 (sala de estudos, salas, campeonatos, atividades, professor). */
+function estadoV3(agora: number): Pick<
+  AppState,
+  "estudos" | "salas" | "salaAtual" | "campeonatos" | "atividades" | "atribuicoes" | "bonus" | "notificacoes" | "moderacao"
+> {
+  return {
+    estudos: { sessoes: criarHistoricoEstudos(agora), timer: null, metaDiariaMin: META_DIARIA_PADRAO },
+    salas: criarSalas(agora),
+    salaAtual: null,
+    campeonatos: criarCampeonatos(agora),
+    atividades: criarAtividades(agora),
+    atribuicoes: [
+      { id: "at0", professorId: "prof_ricardo", alunoId: "ana", pontos: 40, xp: 0, motivo: "Ajudou a turma na revisão de funções", criadoEm: agora - 6 * D },
+    ],
+    bonus: {},
+    notificacoes: criarNotificacoes(agora),
+    moderacao: {},
+  };
+}
+
+function pessoasIniciais() {
+  return Object.fromEntries([...PESSOAS, ...PESSOAS_GERADAS].map((p) => [p.id, p]));
+}
 
 export function criarEstadoInicial(agora: number): AppState {
   const hoje = diaDaSemana(agora);
@@ -17,7 +45,7 @@ export function criarEstadoInicial(agora: number): AppState {
     versao: VERSAO_ESTADO,
     criadoEm: agora,
     usuario: structuredClone(USUARIO_INICIAL),
-    pessoas: Object.fromEntries(PESSOAS.map((p) => [p.id, p])),
+    pessoas: pessoasIniciais(),
     posts: criarPosts(agora),
     missoes: structuredClone(MISSOES),
     coletiva: structuredClone(COLETIVA),
@@ -53,13 +81,40 @@ export function criarEstadoInicial(agora: number): AppState {
     lembretes: ["e2"],
     materiaisAbertos: [],
     espaco: "escola",
-    conversas: criarConversas(agora),
+    ...estadoV3(agora),
   };
 }
 
+type EstadoAntigo = Omit<AppState, "usuario"> & { usuario: AppState["usuario"] & { ocultarRanking?: boolean }; conversas?: unknown };
+
 /** Atualiza um estado salvo por uma versão anterior sem perder o progresso. */
-export function migrarEstado(dados: AppState): AppState | null {
-  if (dados?.versao === VERSAO_ESTADO) return dados;
-  if (dados?.versao === 1) return { ...dados, versao: VERSAO_ESTADO, conversas: criarConversas(Date.now()) };
-  return null;
+export function migrarEstado(dados: EstadoAntigo): AppState | null {
+  if (dados?.versao === VERSAO_ESTADO) return dados as AppState;
+  // v3 → v4: mensagens privadas saíram do app (descarta `conversas` e notificações desse tipo).
+  if (dados?.versao === 3) {
+    const resto = { ...dados };
+    delete resto.conversas;
+    return {
+      ...(resto as AppState),
+      versao: VERSAO_ESTADO,
+      notificacoes: resto.notificacoes.filter((n) => (n.tipo as string) !== "mensagem"),
+    };
+  }
+  if (dados?.versao !== 1 && dados?.versao !== 2) return null;
+
+  const agora = Date.now();
+  const { ocultarRanking, ...usuario } = dados.usuario;
+  const base = criarEstadoInicial(agora);
+  const semConversas = { ...dados };
+  delete semConversas.conversas;
+  return {
+    ...(semConversas as AppState),
+    ...estadoV3(agora),
+    versao: VERSAO_ESTADO,
+    usuario: { ...usuario, privacidade: ocultarRanking ? "anonimo" : "publico" },
+    pessoas: { ...base.pessoas, ...dados.pessoas },
+    posts: [...dados.posts, ...base.posts.filter((p) => p.emRevisao && !dados.posts.some((q) => q.id === p.id))],
+    // As missões do professor viraram Atividades; entra a missão diária de foco.
+    missoes: [...dados.missoes.filter((m) => m.tipo === "diaria"), ...base.missoes.filter((m) => !dados.missoes.some((d) => d.id === m.id))],
+  };
 }

@@ -1,9 +1,10 @@
 "use client";
 
 import { X } from "lucide-react";
-import { AnimatePresence, motion, useDragControls, type PanInfo } from "motion/react";
+import { AnimatePresence, m as motion, useDragControls, useMotionValue, useTransform, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { DESKTOP, useMidia } from "@/hooks/useMidia";
 import { cn } from "@/lib/cn";
 
 interface Props {
@@ -14,22 +15,42 @@ interface Props {
   children: ReactNode;
   rodape?: ReactNode;
   className?: string;
+  /** Largura no desktop: "md" (560 px, padrão) ou "lg" (760 px, formulários grandes). */
+  largura?: "md" | "lg";
 }
 
 /**
- * Modal inferior (DS §13): aparece sobre a tela, fundo branco, cantos superiores
- * arredondados. Fecha no X, no fundo escurecido, com Esc ou arrastando para baixo.
+ * Modal do DS §13. No celular é um modal inferior (bottom sheet) que fecha arrastando
+ * para baixo; no desktop vira um diálogo centralizado. Fecha no X, no fundo e com Esc.
  */
 export function Sheet(props: Props) {
   if (typeof document === "undefined") return null;
   return createPortal(<AnimatePresence>{props.aberto && <SheetPainel {...props} />}</AnimatePresence>, document.body);
 }
 
-function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className }: Props) {
+/**
+ * Contador de modais abertos: com dois modais trocando no mesmo clique (um fecha
+ * enquanto o outro abre), a rolagem só volta quando o último fechar.
+ */
+let modaisAbertos = 0;
+
+function travarRolagem() {
+  if (modaisAbertos++ === 0) document.body.style.overflow = "hidden";
+}
+
+function liberarRolagem() {
+  modaisAbertos = Math.max(0, modaisAbertos - 1);
+  if (modaisAbertos === 0) document.body.style.overflow = "";
+}
+
+function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className, largura = "md" }: Props) {
   const idTitulo = useId();
   const painel = useRef<HTMLDivElement>(null);
   const arrastar = useDragControls();
   const fechar = useRef(onFechar);
+  const desktop = useMidia(DESKTOP);
+  const arrasto = useMotionValue(0);
+  const opacidadeFundo = useTransform(arrasto, [0, 320], [1, 0.15]);
 
   useEffect(() => {
     fechar.current = onFechar;
@@ -38,8 +59,7 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className 
   // Roda uma vez por abertura: trava o scroll da página, foca o modal e escuta o Esc.
   useEffect(() => {
     const anterior = document.activeElement as HTMLElement | null;
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    travarRolagem();
     painel.current?.focus({ preventScroll: true });
 
     const aoTeclar = (e: KeyboardEvent) => {
@@ -48,23 +68,32 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className 
     document.addEventListener("keydown", aoTeclar);
     return () => {
       document.removeEventListener("keydown", aoTeclar);
-      document.body.style.overflow = overflow;
+      liberarRolagem();
       anterior?.focus?.({ preventScroll: true });
     };
   }, []);
 
   const aoSoltar = (_: unknown, info: PanInfo) => {
-    if (info.offset.y > 110 || info.velocity.y > 550) onFechar();
+    // Projeta onde o painel pararia com a velocidade do dedo: arrasto rápido fecha, curto volta.
+    const projetado = info.offset.y + info.velocity.y * 0.2;
+    const altura = painel.current?.offsetHeight ?? 400;
+    if (projetado > Math.min(160, altura * 0.35)) onFechar();
+    else arrasto.set(0);
   };
 
+  const animacao = desktop
+    ? { initial: { opacity: 0, scale: 0.96, y: 14 }, animate: { opacity: 1, scale: 1, y: 0 }, exit: { opacity: 0, scale: 0.97, y: 8 } }
+    : { initial: { y: "100%" }, animate: { y: 0 }, exit: { y: "100%" } };
+
   return (
-    <div className="fixed inset-0 z-50">
+    <div className={cn("fixed inset-0 z-50", desktop && "grid place-items-center p-6")}>
       <motion.div
-        className="absolute inset-0 bg-tinta/45 backdrop-blur-[2px]"
+        className="absolute inset-0 bg-slate-950/40"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.22 }}
+        transition={{ duration: 0.2, ease: [0.2, 0, 0, 1] }}
+        style={desktop ? undefined : { opacity: opacidadeFundo }}
         onClick={onFechar}
         aria-hidden
       />
@@ -75,28 +104,28 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className 
         aria-labelledby={idTitulo}
         tabIndex={-1}
         className={cn(
-          "absolute inset-x-0 bottom-0 mx-auto flex max-h-[90dvh] w-full max-w-[480px] flex-col rounded-t-[28px] bg-white shadow-flutuante outline-none",
+          "flex w-full flex-col border-borda bg-superficie shadow-flutuante outline-none will-change-transform",
+          desktop
+            ? cn("relative max-h-[86dvh] rounded-2xl border", largura === "lg" ? "max-w-[760px]" : "max-w-[560px]")
+            : "absolute inset-x-0 bottom-0 mx-auto max-h-[92dvh] max-w-[640px] rounded-t-2xl border-t",
           className,
         )}
-        initial={{ y: "100%" }}
-        animate={{ y: 0 }}
-        exit={{ y: "100%" }}
-        transition={{ type: "spring", stiffness: 420, damping: 40, mass: 0.9 }}
-        drag="y"
+        {...animacao}
+        transition={desktop ? { type: "spring", stiffness: 520, damping: 46, mass: 1 } : { type: "spring", stiffness: 420, damping: 41, mass: 1 }}
+        drag={desktop ? false : "y"}
         dragListener={false}
         dragControls={arrastar}
         dragConstraints={{ top: 0, bottom: 0 }}
-        dragElastic={{ top: 0.04, bottom: 0.7 }}
+        dragElastic={{ top: 0.02, bottom: 0.6 }}
+        dragMomentum={false}
+        onDrag={(_, info) => arrasto.set(Math.max(0, info.offset.y))}
         onDragEnd={aoSoltar}
       >
-        <div
-          className="shrink-0 cursor-grab touch-none active:cursor-grabbing"
-          onPointerDown={(e) => arrastar.start(e)}
-        >
-          <div className="mx-auto mb-1 mt-2.5 h-1.5 w-10 rounded-full bg-verde-suave" />
-          <div className="flex items-start gap-3 border-b border-borda px-5 pb-3.5 pt-2">
+        <div className={cn("shrink-0", !desktop && "cursor-grab touch-none active:cursor-grabbing")} onPointerDown={(e) => !desktop && arrastar.start(e)}>
+          {!desktop && <div className="mx-auto mb-1 mt-2.5 h-1 w-9 rounded-full bg-borda" />}
+          <div className={cn("flex items-start gap-3 border-b border-borda px-5 pb-3.5", desktop ? "pt-5" : "pt-2")}>
             <div className="min-w-0 flex-1">
-              <h2 id={idTitulo} className="text-base font-bold text-tinta">
+              <h2 id={idTitulo} className="text-base font-semibold text-tinta">
                 {titulo}
               </h2>
               {subtitulo && <p className="mt-0.5 text-[13px] leading-snug text-texto-2">{subtitulo}</p>}
@@ -106,7 +135,7 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className 
               onClick={onFechar}
               onPointerDown={(e) => e.stopPropagation()}
               aria-label="Fechar"
-              className="-mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-verde active:scale-90"
+              className="-mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-acento active:scale-90 touch-manipulation"
             >
               <X className="size-5" />
             </button>
@@ -116,7 +145,7 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
 
         {rodape && (
-          <div className="safe-bottom shrink-0 border-t border-borda bg-white px-5 pt-3.5">
+          <div className="safe-bottom shrink-0 border-t border-borda bg-superficie px-5 pt-3.5">
             <div className="flex gap-2.5 pb-3.5">{rodape}</div>
           </div>
         )}

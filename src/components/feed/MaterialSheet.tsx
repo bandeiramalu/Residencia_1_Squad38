@@ -1,50 +1,93 @@
 "use client";
 
-import { Bookmark, BookmarkCheck, Download } from "lucide-react";
+import { Bookmark, Download, ExternalLink, FileText } from "lucide-react";
+import { useMemo } from "react";
+import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
-import { DisciplinaIcon } from "@/components/ui/DisciplinaIcon";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Sheet } from "@/components/ui/Sheet";
+import { cn } from "@/lib/cn";
+import { useUrlArquivo } from "@/lib/arquivos";
+import { previaDoAnexo, resumoDoAnexo, tipoDoAnexo } from "@/lib/materiais";
 import { dataCurta } from "@/lib/tempo";
-import { baixarMaterial, salvar } from "@/store/actions";
+import { salvar } from "@/store/actions";
 import type { Pessoa, Post } from "@/store/types";
+import { abrirDoPost, baixarDoPost } from "./anexo";
 
 /** Pré-visualização de um material (PDF) antes de baixar. */
-export function MaterialSheet({ post, autor, onFechar }: { post: Post | null; autor?: Pessoa; onFechar: () => void }) {
+export function MaterialSheet({ aberto, post, autor, onFechar }: { aberto: boolean; post: Post | null; autor?: Pessoa; onFechar: () => void }) {
+  const nomeAnexo = post?.anexo?.nome;
+  const disciplina = post?.disciplina;
+  const arquivoId = post?.anexo?.arquivoId;
+  const url = useUrlArquivo(arquivoId);
+  const tipo = post?.anexo ? tipoDoAnexo(post.anexo) : "";
+  const previa = useMemo(() => (nomeAnexo && !arquivoId ? previaDoAnexo(nomeAnexo, { disciplina }) : null), [nomeAnexo, arquivoId, disciplina]);
   return (
-    <Sheet aberto={!!post?.anexo} onFechar={onFechar} titulo="Material da turma" subtitulo={autor?.nome}>
+    <Sheet aberto={aberto && !!post?.anexo} onFechar={onFechar} titulo="Material">
       {post?.anexo && (
         <>
-          <div className="relative overflow-hidden rounded-2xl bg-linear-to-br from-verde-2 via-verde to-tinta p-5 text-white">
-            <DisciplinaIcon disciplina={post.disciplina} className="absolute -right-4 -top-4 size-28 opacity-10" />
-            <DisciplinaIcon disciplina={post.disciplina} className="size-7" />
-            <p className="mt-3 break-all text-base font-bold">{post.anexo.nome}</p>
-            <p className="mt-1 text-xs text-white/80">
-              {post.disciplina} · PDF · {post.anexo.paginas} páginas · {post.anexo.tamanho} · {dataCurta(post.criadoEm)}
+          <div className="flex items-start gap-3">
+            <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-superficie-2 text-texto-2 ring-1 ring-inset ring-borda">
+              <FileText className="size-6" strokeWidth={1.75} />
+            </span>
+            <div className="min-w-0">
+              <p className="break-all text-[16px] font-semibold leading-snug text-tinta">{post.anexo.nome}</p>
+              <p className="mt-0.5 text-[13px] tabular-nums text-texto-2">
+                {post.disciplina ? `${post.disciplina} · ` : ""}
+                {resumoDoAnexo(post.anexo)}
+              </p>
+            </div>
+          </div>
+
+          {arquivoId && url && tipo === "PDF" && (
+            <iframe src={url} title={`Prévia de ${post.anexo.nome}`} className="mt-4 h-[52vh] min-h-72 w-full rounded-xl border border-borda bg-superficie-2" />
+          )}
+          {arquivoId && url && tipo === "Imagem" && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={url} alt={`Prévia de ${post.anexo.nome}`} className="mt-4 max-h-[52vh] w-full rounded-xl border border-borda bg-superficie-2 object-contain" />
+          )}
+          {arquivoId && !url && <p className="mt-4 rounded-xl bg-superficie-2 px-3.5 py-3 text-[13px] text-texto-2">Carregando o arquivo…</p>}
+
+          {previa && (
+            <div className="mt-4 rounded-xl border border-borda bg-superficie p-3.5" aria-label="Prévia do conteúdo">
+              <p className="text-[14px] font-semibold text-tinta">{previa.titulo}</p>
+              {previa.resumo && <p className="mt-1 line-clamp-3 text-[13px] leading-relaxed text-texto-2">{previa.resumo}</p>}
+              {previa.topicos.length > 0 && (
+                <ol className="mt-2.5 space-y-1 border-t border-borda pt-2.5">
+                  {previa.topicos.slice(0, 6).map((t, i) => (
+                    <li key={t} className="flex gap-2 text-[13px] text-texto">
+                      <span className="w-4 shrink-0 tabular-nums text-texto-2">{i + 1}</span>
+                      <span className="min-w-0 truncate">{t}</span>
+                    </li>
+                  ))}
+                  {previa.topicos.length > 6 && <li className="pl-6 text-[12px] text-texto-2">e mais {previa.topicos.length - 6} no PDF</li>}
+                </ol>
+              )}
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center gap-2.5 border-t border-borda pt-4">
+            <Avatar nome={autor?.nome ?? "?"} iniciais={autor?.iniciais} tamanho="sm" />
+            <p className="min-w-0 truncate text-[13px] text-texto-2">
+              <span className="font-medium text-tinta">{autor?.nome ?? "Membro do CEPI"}</span> · {dataCurta(post.criadoEm)}
             </p>
           </div>
-
-          {/* Miniaturas das páginas */}
-          <div className="sem-scrollbar -mx-5 mt-4 flex gap-2.5 overflow-x-auto px-5">
-            {Array.from({ length: Math.min(post.anexo.paginas, 6) }, (_, i) => (
-              <div key={i} className="flex h-28 w-20 shrink-0 flex-col gap-1.5 rounded-lg border border-borda bg-white p-2 shadow-card">
-                <div className="h-2 w-3/4 rounded-full bg-verde-suave" />
-                {Array.from({ length: 6 }, (_, j) => (
-                  <div key={j} className="h-1 rounded-full bg-fundo" style={{ width: `${60 + ((i * 7 + j * 13) % 40)}%` }} />
-                ))}
-                <span className="mt-auto text-right text-[9px] text-texto-2">{i + 1}</span>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-4 text-[14px] leading-relaxed text-texto">{post.texto}</p>
+          <p className="mt-2.5 text-[14.5px] leading-relaxed text-texto">{post.texto}</p>
 
           <RodapeSheet>
-            <Button variante="secundario" tamanho="lg" className="flex-1" onClick={() => salvar(post.id)}>
-              {post.salvo ? <BookmarkCheck /> : <Bookmark />} {post.salvo ? "Salvo" : "Salvar"}
+            <Button variante="secundario" tamanho="lg" className="px-4" onClick={() => salvar(post.id)} aria-pressed={post.salvo} aria-label={post.salvo ? "Remover dos salvos" : "Salvar"}>
+              <Bookmark className={cn(post.salvo && "fill-current")} />
             </Button>
-            <Button tamanho="lg" className="flex-1" onClick={() => baixarMaterial(post)}>
-              <Download /> Baixar PDF
+            <Button
+              variante="secundario"
+              tamanho="lg"
+              className="flex-1"
+              onClick={() => abrirDoPost(post, autor)}
+            >
+              <ExternalLink /> {tipo === "PDF" ? "Abrir PDF" : "Abrir arquivo"}
+            </Button>
+            <Button tamanho="lg" className="flex-1" onClick={() => baixarDoPost(post, autor)}>
+              <Download /> Baixar
             </Button>
           </RodapeSheet>
         </>

@@ -25,6 +25,13 @@ export const EVENTOS: EventoBase[] = [
   { id: "e9", titulo: "Aula prática de Química — neutralização", tipo: "evento", disciplina: "Química", emDias: 12, hora: "13:30", local: "Laboratório" },
 ];
 
+/** Instante de início do evento: o dia (`emDias` a partir de `hoje`, 00:00) mais a hora marcada. */
+export function inicioDoEvento(e: Pick<EventoBase, "emDias" | "hora">, hoje: number) {
+  const d = new Date(hoje);
+  const [h, m] = e.hora.split(":").map(Number);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + e.emDias, h || 0, m || 0).getTime();
+}
+
 export const ROTULO_EVENTO: Record<TipoEvento, string> = {
   prova: "Prova",
   trabalho: "Trabalho",

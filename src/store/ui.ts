@@ -1,10 +1,22 @@
 /**
  * Estado de interface que NÃO é salvo: notificações (toasts), comemorações,
- * a publicação que o feed deve destacar e quem está "digitando" nas conversas.
+ * a publicação que o feed deve destacar.
  */
 import { useSyncExternalStore } from "react";
+import type { TipoNotificacao } from "./types";
 
-export type TipoToast = "ganho" | "gasto" | "info" | "sequencia" | "alerta" | "medalha" | "nivel" | "xp" | "mensagem";
+export type TipoToast = "ganho" | "gasto" | "info" | "sequencia" | "alerta" | "medalha" | "nivel" | "xp";
+
+export const TOAST_DA_NOTIFICACAO: Record<TipoNotificacao, TipoToast> = {
+  pontos: "ganho",
+  atividade: "info",
+  correcao: "xp",
+  entrega: "info",
+  campeonato: "medalha",
+  sala: "info",
+  moderacao: "alerta",
+  sistema: "info",
+};
 
 export interface Toast {
   id: number;
@@ -19,12 +31,9 @@ interface EstadoUI {
   toasts: Toast[];
   celebracao: number;
   focoPost: string | null;
-  /** conversaId → id de quem está digitando. */
-  digitando: Record<string, string>;
-  conversaAberta: string | null;
 }
 
-const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null, digitando: {}, conversaAberta: null };
+const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null };
 let ui: EstadoUI = inicial;
 const ouvintes = new Set<() => void>();
 let proximoId = 1;
@@ -55,17 +64,6 @@ export function celebrar() {
 
 export function focarPost(id: string | null) {
   atualizar({ focoPost: id });
-}
-
-export function definirDigitando(conversaId: string, autorId: string | null) {
-  const digitando = { ...ui.digitando };
-  if (autorId) digitando[conversaId] = autorId;
-  else delete digitando[conversaId];
-  atualizar({ digitando });
-}
-
-export function definirConversaAberta(conversaId: string | null) {
-  atualizar({ conversaAberta: conversaId });
 }
 
 export function useUI() {

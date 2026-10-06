@@ -1,28 +1,14 @@
 "use client";
 
-import { motion } from "motion/react";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { ordemDaRota } from "@/components/shell/abas";
+import { m as motion } from "motion/react";
 
-// Última tela visitada: define se a nova tela entra pela direita ou pela esquerda.
-let ultimaAba = -1;
-
-/** Transição de entrada entre as telas, no sentido da barra inferior. */
+/**
+ * Entrada entre telas: só opacidade (sem transform no wrapper, para não deslocar
+ * elementos fixos nem causar salto de rolagem). Curta e nunca bloqueia o clique.
+ */
 export default function Template({ children }: { children: React.ReactNode }) {
-  const aba = ordemDaRota(usePathname());
-  const [direcao] = useState(() => (ultimaAba < 0 || aba < 0 ? 0 : Math.sign(aba - ultimaAba)));
-
-  useEffect(() => {
-    ultimaAba = aba;
-  }, [aba]);
-
   return (
-    <motion.div
-      initial={{ opacity: 0, x: direcao * 32, y: direcao ? 0 : 8 }}
-      animate={{ opacity: 1, x: 0, y: 0 }}
-      transition={{ type: "spring", stiffness: 420, damping: 38, mass: 0.8 }}
-    >
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}>
       {children}
     </motion.div>
   );

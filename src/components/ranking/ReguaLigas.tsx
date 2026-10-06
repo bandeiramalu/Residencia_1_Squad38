@@ -1,70 +1,84 @@
 "use client";
 
-import { Gem, Medal, Shield, ShieldCheck } from "lucide-react";
-import { motion } from "motion/react";
+import { Gem, Medal, Shield, ShieldCheck, type LucideIcon } from "lucide-react";
+import { m as motion } from "motion/react";
 import { LIGA_DO_USUARIO, LIGAS, ZONA, type LigaId } from "@/data/ranking";
 import { cn } from "@/lib/cn";
 
-const ICONE: Record<LigaId, typeof Gem> = { bronze: Shield, prata: ShieldCheck, ouro: Medal, diamante: Gem };
-const COR: Record<LigaId, string> = {
-  bronze: "from-orange-300 to-amber-700",
-  prata: "from-slate-200 to-slate-500",
-  ouro: "from-amber-200 to-amber-500",
-  diamante: "from-cyan-200 to-sky-600",
-};
+const ICONE: Record<LigaId, LucideIcon> = { bronze: Shield, prata: ShieldCheck, ouro: Medal, diamante: Gem };
 
-/** Régua de progressão das ligas: Bronze → Prata → Ouro → Diamante. */
-export function ReguaLigas({ selecionada, onSelecionar }: { selecionada: LigaId; onSelecionar: (l: LigaId) => void }) {
+export const nomeDaLiga = (id: LigaId) => LIGAS.find((l) => l.id === id)?.nome ?? id;
+
+/** Emblema da liga: ícone de linha num círculo neutro. */
+export function EmblemaLiga({ liga, className }: { liga: LigaId; className?: string }) {
+  const Icone = ICONE[liga];
+  return (
+    <span className={cn("grid size-9 shrink-0 place-items-center rounded-full bg-superficie-2 text-texto-2 ring-1 ring-inset ring-borda [&_svg]:size-[18px]", className)}>
+      <Icone aria-hidden />
+    </span>
+  );
+}
+
+interface Props {
+  selecionada: LigaId;
+  onSelecionar: (l: LigaId) => void;
+  /** `false` quando a tabela está em outro escopo (turma/disciplina): nenhuma liga fica marcada. */
+  ativa?: boolean;
+  className?: string;
+}
+
+/** Régua de progressão das ligas: Bronze → Prata → Ouro → Diamante. Toque para ver outra liga. */
+export function ReguaLigas({ selecionada, onSelecionar, ativa = true, className }: Props) {
   const indiceUsuario = LIGAS.findIndex((l) => l.id === LIGA_DO_USUARIO);
 
   return (
-    <div className="rounded-2xl border border-borda bg-white p-3 shadow-card">
-      <div className="relative grid grid-cols-4">
-        <div className="absolute left-[12.5%] right-[12.5%] top-5 h-1 rounded-full bg-verde-claro" />
+    <div className={cn("rounded-2xl border border-borda bg-superficie p-4", className)}>
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-tinta">Ligas</h3>
+        <span className="text-[12px] text-texto-2">Toque para ver outra liga</span>
+      </div>
+
+      <div className="relative mt-3 grid grid-cols-4">
+        <div aria-hidden className="absolute left-[12.5%] right-[12.5%] top-[22px] h-px bg-borda" />
         <motion.div
-          className="absolute left-[12.5%] top-5 h-1 rounded-full bg-verde-2"
+          aria-hidden
+          className="absolute left-[12.5%] top-[22px] h-px bg-verde"
           initial={false}
           animate={{ width: `${(indiceUsuario / (LIGAS.length - 1)) * 75}%` }}
+          transition={{ duration: 0.3, ease: [0.2, 0, 0, 1] }}
         />
         {LIGAS.map((l) => {
-          const Icone = ICONE[l.id];
-          const ativa = l.id === selecionada;
+          const marcada = ativa && l.id === selecionada;
           const minha = l.id === LIGA_DO_USUARIO;
           return (
             <button
               key={l.id}
               type="button"
               onClick={() => onSelecionar(l.id)}
-              aria-pressed={ativa}
-              className="relative flex flex-col items-center gap-1 rounded-xl py-1 transition-transform active:scale-95"
+              aria-pressed={marcada}
+              aria-label={`Ver a liga ${l.nome}${minha ? " (sua liga)" : ""}`}
+              className="group relative flex flex-col items-center gap-1 rounded-xl py-1 transition-colors hover:bg-superficie-2"
             >
-              <span
-                className={cn(
-                  "grid size-11 place-items-center rounded-full bg-linear-to-br text-white shadow-sm ring-4 transition-all duration-300",
-                  COR[l.id],
-                  ativa ? "scale-110 ring-verde-claro" : "ring-white",
-                )}
-              >
-                <Icone className="size-5 drop-shadow" />
-              </span>
-              <span className={cn("text-[12px]", ativa ? "font-extrabold text-tinta" : "font-medium text-texto-2")}>{l.nome}</span>
-              <span className={cn("text-[10px]", minha ? "font-bold text-verde" : "text-texto-2/70")}>{minha ? "sua liga" : "ver"}</span>
+              <EmblemaLiga
+                liga={l.id}
+                className={cn("transition-colors duration-150", marcada ? "bg-tinta text-superficie ring-tinta" : "bg-superficie group-hover:text-tinta")}
+              />
+              <span className={cn("text-[12px]", marcada ? "font-medium text-tinta" : "text-texto-2")}>{l.nome}</span>
+              <span className={cn("text-[11px] leading-none", minha ? "font-medium text-acento" : "text-transparent")}>{minha ? "sua liga" : "·"}</span>
             </button>
           );
         })}
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 border-t border-borda pt-3 text-[11px] text-texto-2">
-        <span className="flex items-center gap-1.5">
-          <i className="size-3 rounded border border-verde-2/40 bg-verde-mclaro" /> Top {ZONA}: sobem de liga
-        </span>
-        <span className="flex items-center gap-1.5">
-          <i className="size-3 rounded border border-dashed border-texto-2/50 bg-white" /> Últimos {ZONA}: descem
-        </span>
-        <span>Fechamento: domingo, 23:59</span>
-      </div>
-      {selecionada !== LIGA_DO_USUARIO && (
-        <p className="mt-2 text-[11.5px] font-semibold text-verde-2">
-          Você está vendo a liga {LIGAS.find((l) => l.id === selecionada)?.nome}. A sua é a {LIGAS[indiceUsuario].nome}.
+
+      <p className="mt-3 border-t border-borda pt-3 text-[12px] text-texto-2">
+        Top {ZONA} sobem · últimos {ZONA} descem · fecha domingo, 23:59
+      </p>
+      {ativa && selecionada !== LIGA_DO_USUARIO && (
+        <p className="mt-1.5 text-[12px] text-texto-2">
+          Vendo a Liga {nomeDaLiga(selecionada)}.{" "}
+          <button type="button" onClick={() => onSelecionar(LIGA_DO_USUARIO)} className="font-medium text-acento hover:underline">
+            Voltar para a {LIGAS[indiceUsuario].nome}
+          </button>
         </p>
       )}
     </div>
