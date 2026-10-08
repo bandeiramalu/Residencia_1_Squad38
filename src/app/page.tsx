@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-// O proxy já manda cada papel para a sua tela inicial; isto é só a rede de segurança.
+// A guarda do AppShell leva cada papel à sua tela inicial (login → home do papel).
 export default function Inicio() {
   redirect("/login");
 }

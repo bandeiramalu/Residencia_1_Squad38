@@ -19,7 +19,7 @@ interface Passo {
 /** Roteiro sugerido para apresentar o portal (banca / sala de aula). Só aparece no modo apresentação. */
 const ROTEIRO: Record<PapelSessao, Passo[]> = {
   aluno: [
-    { href: "/estudos", titulo: "Sala de estudos com métricas", como: "Estudos → Iniciar foco → “Avançar 5 min” até fechar o ciclo. Veja pontos, meta do dia e o Interclasses virar." },
+    { href: "/estudos", titulo: "Sala de estudos com métricas", como: "Estudos → Iniciar foco → “Avançar 5 min” até fechar o ciclo (modo apresentação). Veja os pontos e a meta do dia subirem." },
     { href: "/estudos/salas/sala-revisao-mat", titulo: "Sala coletiva ao vivo", como: "Entre na revisão de Matemática: timer sincronizado com a turma, chat e presença." },
     { href: "/campeonatos/copa-matematica", titulo: "Campeonato mata-mata", como: "Copa CEPI de Matemática → Jogar a semifinal (duelo de quiz com tempo)." },
     { href: "/ranking", titulo: "Modo invisível no ranking", como: "Ranking → Visibilidade → Invisível. A aluna sai dos rankings e só ela vê a própria posição." },
