@@ -5,5 +5,5 @@ export const metadata: Metadata = { title: "Sala de estudo" };
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <SalaView id={id} />;
+  return <SalaView key={id} id={id} />;
 }
