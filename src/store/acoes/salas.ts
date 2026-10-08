@@ -7,9 +7,9 @@ import { lerSessao } from "@/lib/auth";
 import { gerarId, primeiroNome } from "@/lib/format";
 import { verificarPublicacao } from "@/lib/moderacao";
 import { notificarSistema } from "@/lib/estudos";
-import { commit, notificar, papelAtual } from "../nucleo";
+import { commit, MODERADOR_ID, notificar, papelAtual } from "../nucleo";
 import { obterEstado } from "../store";
-import type { MensagemSala, SalaEstudo, TemaSala } from "../types";
+import type { MensagemSala, Post, SalaEstudo, TemaSala } from "../types";
 import { toast } from "../ui";
 import { encerrarFoco, iniciarFoco } from "./estudos";
 
@@ -116,16 +116,50 @@ export function fecharSala(salaId: string) {
   toast({ tipo: "info", titulo: "Sala encerrada", mensagem: s.nome }, 2400);
 }
 
+/**
+ * Mensagem barrada pela triagem: fica retida na fila de moderação do professor (com o nome da sala).
+ * Liberar publica na sala; remover descarta com motivo. O autor é avisado nos dois casos.
+ */
+function reterMensagemSala(salaId: string, autorId: string, texto: string, motivo: string) {
+  const nomeSala = sala(salaId)?.nome ?? "sala de estudo";
+  const post: Post = {
+    id: gerarId("p"),
+    tipo: "publicacao",
+    autorId,
+    espaco: "9A",
+    texto: `Chat da sala “${nomeSala}”: ${texto}`,
+    tags: [],
+    criadoEm: Date.now(),
+    curtidas: 0,
+    curtido: false,
+    salvo: false,
+    respostas: [],
+    emRevisao: true,
+    origemSala: { salaId, salaNome: nomeSala, mensagem: texto },
+  };
+  commit({ type: "publicar", post });
+  if (autorId !== MODERADOR_ID) {
+    notificar(MODERADOR_ID, {
+      tipo: "moderacao",
+      titulo: "Mensagem de chat retida para revisão",
+      texto: `${primeiroNome(obterEstado().pessoas[autorId]?.nome ?? "Aluno")} na sala “${nomeSala}” · possível ${motivo.toLowerCase()}`,
+      href: "/professor/moderacao",
+      deId: autorId,
+    });
+  }
+  toast({ tipo: "alerta", titulo: "Mensagem retida para revisão", mensagem: `Possível ${motivo.toLowerCase()}. O professor decide se ela é publicada na sala e você recebe o resultado.` }, 4600);
+}
+
 /** Envia mensagem no chat da sala (com triagem automática de ofensas — US06). */
 export function enviarMensagemSala(salaId: string, texto: string) {
   const limpo = texto.trim();
   if (!limpo) return;
   const moderacao = verificarPublicacao(limpo);
+  const autorId = lerSessao()?.usuarioId ?? obterEstado().usuario.id;
   if (moderacao.sinalizado) {
-    toast({ tipo: "alerta", titulo: "Mensagem retida para revisão", mensagem: `Possível ${moderacao.motivo.toLowerCase()}. A coordenação vai revisar antes de publicar.` }, 4200);
+    reterMensagemSala(salaId, autorId, limpo, moderacao.motivo);
     return;
   }
-  const autorId = lerSessao()?.usuarioId ?? obterEstado().usuario.id;
   commit({ type: "mensagemSala", salaId, mensagem: msg(autorId, limpo) });
 
 }

@@ -65,7 +65,7 @@ export function criarAtividade(dados: NovaAtividade) {
     entregas: alunos.map((al) => ({ alunoId: al.id, status: "pendente" as const })),
   };
   commit({ type: "criarAtividade", atividade: nova });
-  toast({ tipo: "info", titulo: "Atividade publicada", mensagem: `${dados.turma} · ${alunos.length} alunos avisados.` }, 3200);
+  toast({ tipo: "info", titulo: "Atividade publicada", mensagem: `${dados.turma} · ${alunos.length === 1 ? "1 aluno avisado" : `${alunos.length} alunos avisados`}.` }, 3200);
 
   const aluna = obterEstado().usuario;
   if (dados.turma === aluna.turma) {
@@ -91,17 +91,17 @@ export function corrigirEntrega(atividadeId: string, alunoId: string, nota: numb
   commit({ type: "atualizarEntrega", atividadeId, alunoId, dados: { status: "corrigida", nota: n, feedback: feedback.trim() || undefined, pontos, xp } });
 
   const { usuario, pessoas } = obterEstado();
+  // O reducer `atribuir` só registra o histórico para a aluna ao vivo; quem soma pontos/XP dela é `premiar`.
+  commit({ type: "atribuir", atribuicao: { id: gerarId("atr"), professorId: a.professorId, alunoId, pontos, xp, motivo: `Correção: ${a.titulo}`, criadoEm: Date.now(), origem: "correcao" } });
   if (alunoId === usuario.id) {
     premiar(pontos, xp, `nota ${n.toLocaleString("pt-BR")} em “${a.titulo}”`, a.disciplina, !ehAluno());
     notificar(usuario.id, {
       tipo: "correcao",
-      titulo: `${a.titulo.split("—")[0].trim()} corrigida · nota ${n.toLocaleString("pt-BR")}`,
+      titulo: `${a.titulo} corrigida · nota ${n.toLocaleString("pt-BR")}`,
       texto: `+${pontos} pontos e +${xp} XP${feedback.trim() ? ` · “${feedback.trim()}”` : ""}`,
       href: "/missoes#atividades",
       deId: a.professorId,
     });
-  } else {
-    commit({ type: "atribuir", atribuicao: { id: gerarId("atr"), professorId: a.professorId, alunoId, pontos, xp, motivo: `Correção: ${a.titulo}`, criadoEm: Date.now() } });
   }
   if (!ehAluno()) toast({ tipo: "xp", titulo: `Nota ${n.toLocaleString("pt-BR")} enviada`, mensagem: `${pessoas[alunoId]?.nome ?? "Aluno"} recebe +${pontos} pontos e +${xp} XP.` }, 2800);
 }

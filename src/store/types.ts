@@ -68,6 +68,8 @@ export interface Post {
   /** US06 — sinalizado pela triagem automática e aguardando revisão humana. */
   emRevisao?: boolean;
   denuncia?: Denuncia;
+  /** Mensagem do chat de uma sala retida pela triagem: não aparece no feed; ao liberar, vira mensagem da sala. */
+  origemSala?: { salaId: string; salaNome: string; mensagem: string };
   /** Sugestão do Portal: ids de posts parecidos (dúvidas resolvidas/materiais) achados ao publicar. */
   sugestoes?: string[];
 }
@@ -420,6 +422,8 @@ export interface Atribuicao {
   xp: number;
   motivo: string;
   criadoEm: number;
+  /** Veio da correção de uma atividade (a entrega já guarda pontos/XP: não contar duas vezes nos ganhos). */
+  origem?: "correcao";
 }
 
 export type DecisaoModeracao = "aprovado" | "removido";

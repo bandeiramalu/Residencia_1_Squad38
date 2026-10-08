@@ -13,7 +13,7 @@ import { buscarSemelhantes } from "@/lib/busca";
 import { triarDenuncia, verificarPublicacao, type MotivoDenuncia } from "@/lib/moderacao";
 import { baixarAnexoDe } from "@/lib/materiais";
 import { dataCurta } from "@/lib/tempo";
-import { commit, ehAluno, notificar, novaEpoca, pessoa, premiar } from "./nucleo";
+import { commit, ehAluno, MODERADOR_ID, notificar, novaEpoca, pessoa, premiar } from "./nucleo";
 import { criarEstadoInicial } from "./seed";
 import { despachar, obterEstado } from "./store";
 import type { Anexo, EspacoId, Post, Privacidade, Resposta, TipoPost } from "./types";
@@ -127,6 +127,15 @@ export function publicar({ tipo, disciplina, texto, tags, anexo }: NovaPublicaca
       },
       5200,
     );
+    if (autorId !== MODERADOR_ID) {
+      notificar(MODERADOR_ID, {
+        tipo: "moderacao",
+        titulo: "Publicação retida para revisão",
+        texto: `${primeiroNome(pessoa(autorId)?.nome ?? "Aluno")} · possível ${moderacao.motivo.toLowerCase()}`,
+        href: "/professor/moderacao",
+        deId: autorId,
+      });
+    }
     return post.id;
   }
 
@@ -179,13 +188,14 @@ export function responderPost(postId: string, texto: string, { autorId, oficial 
   const ehDuvida = post.tipo === "duvida";
   const nomeAutor = primeiroNome(pessoa(autorId)?.nome ?? "Alguém");
   if (post.autorId !== autorId) {
-    const recompensa = oficial && ehDuvida && post.autorId === USUARIO_ID;
+    // Só a primeira resposta oficial premia a aluna (sem duplicar).
+    const recompensa = oficial && ehDuvida && post.autorId === USUARIO_ID && !post.respostas.some((r) => r.oficial);
     if (recompensa) premiar(20, 15, "resposta oficial do professor", post.disciplina, true);
     notificar(post.autorId, {
       tipo: "sistema",
       titulo: ehDuvida ? (oficial ? "Resposta oficial na sua dúvida" : "Sua dúvida foi respondida") : "Novo comentário na sua publicação",
       texto: `${nomeAutor}: ${conteudo.length > 90 ? conteudo.slice(0, 87) + "…" : conteudo}${recompensa ? " · +20 pontos e +15 XP" : ""}`,
-      href: "/feed",
+      href: `/feed?post=${postId}`,
       deId: autorId,
     });
   }
@@ -209,7 +219,7 @@ export function responder(postId: string, texto: string) {
     premiar(15, 10, `você respondeu a dúvida de ${primeiroNome(pessoa(post.autorId)?.nome ?? "colega")}`, post.disciplina);
     avancarMissao("d1", 1);
   } else {
-    toast({ tipo: "info", titulo: "Resposta enviada", mensagem: `${primeiroNome(pessoa(post.autorId)?.nome ?? "O aluno")} foi avisado.` }, 2600);
+    toast({ tipo: "info", titulo: "Resposta enviada", mensagem: `Notificação enviada para ${primeiroNome(pessoa(post.autorId)?.nome ?? "o autor")}.` }, 2600);
   }
 }
 
@@ -225,7 +235,7 @@ export function marcarUtil(postId: string, respostaId: string) {
   } else if (resposta.autorId !== atorId()) {
     notificar(resposta.autorId, { tipo: "sistema", titulo: "Sua resposta foi marcada como útil", href: "/feed", deId: atorId() });
   }
-  toast({ tipo: "info", titulo: "Resposta marcada como útil", mensagem: nome ? `${nome} foi avisado.` : undefined }, 2400);
+  toast({ tipo: "info", titulo: "Resposta marcada como útil", mensagem: nome ? `Notificação enviada para ${nome}.` : undefined }, 2400);
 }
 
 export function denunciar(postId: string, motivo: MotivoDenuncia, descricao: string, evidencia: boolean) {
@@ -340,6 +350,16 @@ export function enviarRelato(categoria: string, texto: string) {
   const id = gerarId("rel");
   commit({ type: "enviarRelato", relato: { id, categoria, texto, status: "em análise", criadoEm: Date.now() } });
   toast({ tipo: "info", titulo: "Relato enviado para a coordenação", mensagem: "Fica em análise até a coordenação validar." });
+  const autorId = atorId();
+  if (autorId !== MODERADOR_ID) {
+    notificar(MODERADOR_ID, {
+      tipo: "moderacao",
+      titulo: "Novo relato para a coordenação",
+      texto: `${primeiroNome(pessoa(autorId)?.nome ?? "Aluno")} · ${categoria}`,
+      href: "/professor/moderacao",
+      deId: autorId,
+    });
+  }
 }
 
 /* ───────────── Loja ───────────── */
@@ -359,6 +379,15 @@ export function comprar(itemId: string) {
   const voucher = item.slot === "voucher" ? gerarVoucher() : undefined;
   commit({ type: "comprar", compra: { id: gerarId("c"), itemId, custo: item.custo, criadoEm: Date.now(), voucher } });
   if (!voucher) commit({ type: "equipar", itemId, equipar: true });
+  else if (atorId() !== MODERADOR_ID) {
+    notificar(MODERADOR_ID, {
+      tipo: "sistema",
+      titulo: "Troca para entregar",
+      texto: `${primeiroNome(pessoa(atorId())?.nome ?? "Aluno")} trocou pontos por “${item.nome}”.`,
+      href: "/professor",
+      deId: atorId(),
+    });
+  }
   toast(
     {
       tipo: "gasto",

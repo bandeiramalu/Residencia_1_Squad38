@@ -132,7 +132,7 @@ export function iniciarCampeonato(id: string) {
       href: `/campeonatos/${c.id}`,
     });
   }
-  toast({ tipo: "info", titulo: "Campeonato iniciado", mensagem: `${c.participantes.length} participantes · inscrições encerradas.` }, 3000);
+  toast({ tipo: "info", titulo: "Campeonato iniciado", mensagem: `${c.participantes.length} ${c.participantes.length === 1 ? "participante" : "participantes"} · inscrições encerradas.` }, 3000);
 }
 
 /** Encerra e premia. No mata-mata, confrontos sem resultado vão para quem tem melhor desempenho real (XP e domínio), sem sorteio. */
