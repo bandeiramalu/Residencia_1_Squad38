@@ -80,7 +80,7 @@ function gerar(): AlunoTurma[] {
         iniciais: b.iniciais,
         turma,
         xp: b.xp,
-        xpSemana: XP_SEMANA_NOMEADOS[b.id] ?? Math.round(entre(60, 420, rnd) * engajamento),
+        xpSemana: Math.min(b.xp, XP_SEMANA_NOMEADOS[b.id] ?? Math.round(entre(60, 420, rnd) * engajamento)),
         pontos: entre(300, 3200, rnd),
         minutosSemana: minutos7d.reduce((a, m) => a + m, 0),
         minutos7d,

@@ -277,7 +277,7 @@ const MAIS: Partial<Record<Disciplina, Questao[]>> = {
     { enunciado: 'Na frase "Choveu muito ontem", o sujeito é…', opcoes: ["Simples", "Composto", "Oculto", "Inexistente (oração sem sujeito)"], correta: 3, explicacao: "Verbos que indicam fenômenos da natureza não têm sujeito." },
     { enunciado: "Qual é o plural de “cidadão”?", opcoes: ["Cidadões", "Cidadães", "Cidadãos", "Cidadans"], correta: 2, explicacao: "O plural de cidadão é cidadãos (como mão → mãos)." },
     { enunciado: 'Complete: "Estudei muito, ___ não consegui terminar."', opcoes: ["mais", "mas", "más", "mal"], correta: 1, explicacao: "“Mas” indica oposição (equivale a “porém”). “Mais” indica quantidade." },
-    { enunciado: "Por que “fácil” recebe acento?", opcoes: ["É oxítona terminada em L", "É paroxítona terminada em L", "É proparoxítona", "Tem hiato"], correta: 1, explicacao: "Paroxítonas terminadas em L são acentuadas: fá-cil, díf-cil, mí-ssil." },
+    { enunciado: "Por que “fácil” recebe acento?", opcoes: ["É oxítona terminada em L", "É paroxítona terminada em L", "É proparoxítona", "Tem hiato"], correta: 1, explicacao: "Paroxítonas terminadas em L são acentuadas: fá-cil, di-fí-cil, mís-sil." },
     { enunciado: "Qual é o antônimo de “efêmero”?", opcoes: ["Passageiro", "Breve", "Duradouro", "Veloz"], correta: 2, explicacao: "Efêmero é o que dura pouco; o oposto é duradouro." },
   ],
   Inglês: [

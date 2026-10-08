@@ -99,7 +99,7 @@ export function criarPosts(agora: number): Post[] {
       espaco: "9A",
       disciplina: "Biologia",
       texto:
-        "Slides da aula 12 de citologia e o mapa mental que montamos em sala. Usem o mapa para a missão de revisão antes do relatório da aula prática no laboratório. #citologia",
+        "Mapa mental da aula 12 de citologia que montamos em sala. Usem o mapa para a missão de revisão antes do relatório da aula prática no laboratório. #citologia",
       tags: ["citologia"],
       anexo: { nome: "aula-12-citologia-mapa-mental.pdf", paginas: 3, tamanho: "17 KB" },
       criadoEm: t(2 * H),
@@ -222,7 +222,7 @@ export function criarPosts(agora: number): Post[] {
       espaco: "bilingue",
       disciplina: "Inglês",
       texto:
-        "Vocabulary list da Unit 5 (Present Perfect) do Programa Bilíngue Cultura Inglesa. Revisem os exemplos com 'already', 'yet' e 'ever' antes do simulado.",
+        "Explicação e exercícios da Unit 5 (Present Perfect) do Programa Bilíngue Cultura Inglesa, com answer key. Revisem os exemplos com 'already', 'yet' e 'ever' antes do simulado.",
       tags: ["presentperfect"],
       anexo: { nome: "unit-5-present-perfect.pdf", paginas: 3, tamanho: "16 KB" },
       criadoEm: t(1 * D),
