@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 import { COR_CALOR } from "@/lib/cores";
 import type { CelulaMapa } from "@/lib/estudos";
@@ -12,8 +12,21 @@ import type { CelulaMapa } from "@/lib/estudos";
  */
 
 function Dica({ children, visivel, className }: { children: ReactNode; visivel: boolean; className?: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  // Mantém a dica inteira dentro da tela (celular): desloca na horizontal o que passar da borda.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !visivel) return;
+    el.style.transform = "";
+    const { left, right } = el.getBoundingClientRect();
+    const largura = document.documentElement.clientWidth;
+    const margem = 8;
+    const ajuste = left < margem ? margem - left : right > largura - margem ? largura - margem - right : 0;
+    if (ajuste) el.style.transform = `translateX(${Math.round(ajuste)}px)`;
+  }, [visivel, children]);
   return (
     <span
+      ref={ref}
       role="tooltip"
       className={cn(
         "pointer-events-none absolute z-20 whitespace-nowrap rounded-md bg-tinta px-2 py-1 text-[11px] font-medium text-superficie shadow-flutuante transition-[opacity,transform] duration-150",

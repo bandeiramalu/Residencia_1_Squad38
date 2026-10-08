@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
  */
 export function RodapeSheet({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky -bottom-4 z-10 -mx-5 -mb-4 mt-5 flex gap-2.5 border-t border-borda bg-superficie/95 px-5 py-3.5 backdrop-blur">
+    <div className="sticky -bottom-4 z-10 -mx-5 -mb-4 mt-5 flex flex-wrap gap-2.5 border-t border-borda bg-superficie/95 px-5 py-3.5 backdrop-blur">
       {children}
     </div>
   );

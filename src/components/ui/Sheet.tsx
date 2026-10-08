@@ -43,6 +43,30 @@ function liberarRolagem() {
   if (modaisAbertos === 0) document.body.style.overflow = "";
 }
 
+/** Quantos modais mantêm cada elemento da página inerte (sheets empilhadas). */
+const inertizados = new Map<Element, number>();
+
+/** Deixa inerte tudo no body, exceto o modal `raiz`; devolve a função que desfaz. */
+function inertizarFundo(raiz: Element) {
+  const alvos = Array.from(document.body.children).filter((el) => el !== raiz && !el.contains(raiz) && el.tagName !== "SCRIPT");
+  for (const el of alvos) {
+    const n = inertizados.get(el) ?? 0;
+    if (n === 0) el.setAttribute("inert", "");
+    inertizados.set(el, n + 1);
+  }
+  return () => {
+    for (const el of alvos) {
+      const n = (inertizados.get(el) ?? 1) - 1;
+      if (n <= 0) {
+        inertizados.delete(el);
+        el.removeAttribute("inert");
+      } else inertizados.set(el, n);
+    }
+  };
+}
+
+const FOCAVEL = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
 function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className, largura = "md" }: Props) {
   const idTitulo = useId();
   const painel = useRef<HTMLDivElement>(null);
@@ -60,14 +84,36 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className,
   useEffect(() => {
     const anterior = document.activeElement as HTMLElement | null;
     travarRolagem();
+    const raiz = painel.current?.parentElement;
+    const desinertizar = raiz ? inertizarFundo(raiz) : undefined;
     painel.current?.focus({ preventScroll: true });
 
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key === "Escape") fechar.current();
+      if (e.key !== "Tab" || !painel.current) return;
+      // Laço de Tab dentro do painel (só o modal do topo, o que contém o foco).
+      const el = painel.current;
+      const ativo = document.activeElement;
+      if (ativo && !el.contains(ativo)) return;
+      const itens = Array.from(el.querySelectorAll<HTMLElement>(FOCAVEL)).filter((i) => i.offsetParent !== null);
+      if (itens.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const primeiro = itens[0];
+      const ultimo = itens[itens.length - 1];
+      if (e.shiftKey && (ativo === primeiro || ativo === el)) {
+        e.preventDefault();
+        ultimo.focus();
+      } else if (!e.shiftKey && ativo === ultimo) {
+        e.preventDefault();
+        primeiro.focus();
+      }
     };
     document.addEventListener("keydown", aoTeclar);
     return () => {
       document.removeEventListener("keydown", aoTeclar);
+      desinertizar?.();
       liberarRolagem();
       anterior?.focus?.({ preventScroll: true });
     };

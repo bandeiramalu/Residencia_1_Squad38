@@ -53,7 +53,7 @@ export function Avatar({ nome, iniciais, tamanho = "md", equipados = [], ativo, 
   foto = foto ?? fotoDoUsuario;
   const t = TAMANHOS[tamanho];
   const slots = new Set<Slot>(equipados.map((id) => itemPorId(id)?.slot).filter((s): s is Slot => !!s));
-  const tom = slots.has("fundo") ? "bg-verde text-white" : TONS[hash(nome) % TONS.length];
+  const tom = slots.has("fundo") ? "bg-emerald-700 text-white" : TONS[hash(nome) % TONS.length];
   const anel = slots.has("efeito") ? "ring-2 ring-ouro" : slots.has("moldura") || ativo ? "ring-2 ring-verde" : "";
 
   return (
