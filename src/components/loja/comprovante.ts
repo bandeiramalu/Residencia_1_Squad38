@@ -19,7 +19,7 @@ export function baixarComprovante(compra: Compra, item: ItemLoja | undefined, al
         tipo: "tabela",
         colunas: ["Campo", "Informação"],
         linhas: [
-          ["Aluno(a)", aluno],
+          ["Nome", aluno],
           ["Item", nomeItem],
           ["Data da troca", dataCurta(compra.criadoEm)],
           ["Pontos usados", fmt(compra.custo)],
