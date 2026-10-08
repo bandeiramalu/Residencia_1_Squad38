@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { ChipGroup } from "@/components/ui/ChipGroup";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Segmentado } from "@/components/ui/Segmentado";
+import { useRascunho } from "@/components/ui/rascunhos";
 import { Sheet } from "@/components/ui/Sheet";
 import { DISCIPLINAS, type Disciplina } from "@/data/escola";
 import { buscarSemelhantes, extrairTags, sugerirCategorias } from "@/lib/busca";
@@ -67,7 +68,7 @@ function Formulario({ onFechar, tipoInicial = "publicacao", posts, onPublicado, 
   // O formulário nasce a cada abertura do modal: o tipo inicial vale só para esta abertura.
   const [tipo, setTipo] = useState<TipoNovaPublicacao>(tipoInicial);
   const [disciplina, setDisciplina] = useState<Disciplina | null>(null);
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto, limparRascunho] = useRascunho("nova-publicacao");
   const [arquivo, setArquivo] = useState<ArquivoSalvo | null>(null);
   const textoAdiado = useDeferredValue(texto);
   const config = TIPOS.find((t) => t.id === tipo)!;
@@ -95,6 +96,7 @@ function Formulario({ onFechar, tipoInicial = "publicacao", posts, onPublicado, 
     }
     const dados = { tipo, disciplina, texto: texto.trim(), tags, anexo };
     const id = publicar(dados);
+    limparRascunho();
     onFechar();
     onPublicado(id);
   };

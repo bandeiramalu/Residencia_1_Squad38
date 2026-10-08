@@ -93,7 +93,7 @@ export function FeedView() {
 
   // Publicações em revisão só aparecem para quem escreveu.
   const visiveis = posts.filter(
-    (p) => (!p.emRevisao || p.autorId === USUARIO_ID) && (espaco === "escola" || p.espaco === espaco || p.espaco === "escola"),
+    (p) => !p.origemSala && (!p.emRevisao || p.autorId === USUARIO_ID) && (espaco === "escola" || p.espaco === espaco || p.espaco === "escola"),
   );
 
   const lista = visiveis
