@@ -48,16 +48,16 @@ function desfecho(c: Campeonato, id: string) {
     const total = totalRodadas(c);
     const ultima = [...c.partidas].reverse().find((p) => p.status === "encerrada" && (p.a === id || p.b === id));
     if (!ultima) return "Participou do campeonato.";
-    return ultima.vencedor === id ? "Avançou até o fim da chave." : `Eliminado(a) na fase: ${nomeDaRodada(ultima.rodada, total)}.`;
+    return ultima.vencedor === id ? "Avançou até o fim da chave." : `Eliminação na fase: ${nomeDaRodada(ultima.rodada, total)}.`;
   }
   const linha = classificacao(c).find((l) => l.id === id);
-  return linha ? `${linha.posicao}º lugar de ${c.participantes.length}, com ${linha.pontos} ${ROTULO_METRICA[c.metrica].unidade}.` : "Participou do campeonato.";
+  return linha ? `${linha.posicao}º lugar de ${c.participantes.length}, com ${linha.pontos.toLocaleString("pt-BR")} ${ROTULO_METRICA[c.metrica].unidade}.` : "Participou do campeonato.";
 }
 
 const dataLonga = (ms: number) => new Date(ms).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" });
 
 function baseCertificado(c: Campeonato, papel: PapelCertificado, nomes: string[], emitidoPor: string): Bloco[] {
-  const unidade = c.formato === "interclasses" ? "turma" : "aluno(a)";
+  const unidade = c.formato === "interclasses" ? "turma" : "participante";
   const conquista =
     papel === "campeao"
       ? `conquistou o 1º lugar em “${c.nome}”`
@@ -65,7 +65,7 @@ function baseCertificado(c: Campeonato, papel: PapelCertificado, nomes: string[]
         ? `conquistou o 2º lugar em “${c.nome}”`
         : `participou de “${c.nome}”`;
   return [
-    { tipo: "paragrafo", texto: `Certificamos que ${nomes.length === 1 ? `o(a) ${unidade} ${nomes[0]}` : `os participantes listados abaixo`} ${conquista}, campeonato ${c.oficial ? "oficial" : "entre colegas"} de ${ROTULO_FORMATO[c.formato].toLowerCase()}${c.disciplina ? ` (${c.disciplina})` : ""}, disputado entre ${dataLonga(c.inicio)} e ${dataLonga(Math.min(c.fim, Date.now()))}.` },
+    { tipo: "paragrafo", texto: `Certificamos que ${nomes.length === 1 ? `${unidade === "turma" ? "a turma" : "a pessoa"} ${nomes[0]}` : `os participantes listados abaixo`} ${conquista}, campeonato ${c.oficial ? "oficial" : "entre colegas"} de ${ROTULO_FORMATO[c.formato].toLowerCase()}${c.disciplina ? ` (${c.disciplina})` : ""}, disputado entre ${dataLonga(c.inicio)} e ${dataLonga(Math.min(c.fim, Date.now()))}.` },
     ...(nomes.length > 1 ? [{ tipo: "marcadores", itens: nomes } as Bloco] : []),
     { tipo: "quadro", titulo: "Regra de pontuação", texto: `${ROTULO_METRICA[c.metrica].nome}: ${ROTULO_METRICA[c.metrica].descricao}` },
     { tipo: "paragrafo", texto: `Emitido em ${dataLonga(Date.now())} por ${emitidoPor}.` },
