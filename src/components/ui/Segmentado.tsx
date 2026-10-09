@@ -3,6 +3,7 @@
 import { m as motion } from "motion/react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { abaNoTab, aoTeclarNasAbas } from "./abas";
 
 interface Opcao<T extends string> {
   id: T;
@@ -26,10 +27,12 @@ interface Props<T extends string> {
 
 /** Controle segmentado (abas de largura igual) com pílula deslizante. */
 export function Segmentado<T extends string>({ opcoes, valor, onChange, grupo, rotulo, tamanho = "md", escuro, className }: Props<T>) {
+  const noTab = abaNoTab(opcoes.map((o) => o.id), valor);
   return (
     <div
       role="tablist"
       aria-label={rotulo}
+      onKeyDown={aoTeclarNasAbas}
       className={cn(
         "grid gap-1 rounded-xl p-1",
         escuro ? "bg-white/8 ring-1 ring-inset ring-white/10" : "bg-superficie-2 ring-1 ring-inset ring-borda",
@@ -46,10 +49,14 @@ export function Segmentado<T extends string>({ opcoes, valor, onChange, grupo, r
             role="tab"
             aria-selected={ativo}
             aria-label={op.aria}
+            tabIndex={op.id === noTab ? 0 : -1}
             onClick={() => onChange(op.id)}
             className={cn(
               "relative flex min-w-0 items-center justify-center gap-1.5 rounded-lg font-medium transition-colors duration-150 active:scale-[0.97] [&_svg]:size-4 [&_svg]:shrink-0",
-              tamanho === "sm" ? "h-8 px-2 text-xs" : "h-10 px-3 text-[13px]",
+              // Área de toque de 44 px no celular, sem mudar o visual (a extensão vai para a folga do trilho).
+              tamanho === "sm"
+                ? "h-8 px-2 text-xs alvo-toque"
+                : "h-10 px-3 text-[13px] alvo-toque",
               ativo ? (escuro ? "text-sombra" : "text-tinta") : escuro ? "text-white/60 hover:text-white" : "text-texto-2 hover:text-tinta",
             )}
           >

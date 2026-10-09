@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { AnimatePresence, m as motion, useDragControls, useMotionValue, useTransform, type PanInfo } from "motion/react";
+import { AnimatePresence, m as motion, useDragControls, useIsPresent, useMotionValue, useTransform, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { DESKTOP, useMidia } from "@/hooks/useMidia";
@@ -21,7 +21,9 @@ interface Props {
 
 /**
  * Modal do DS §13. No celular é um modal inferior (bottom sheet) que fecha arrastando
- * para baixo; no desktop vira um diálogo centralizado. Fecha no X, no fundo e com Esc.
+ * para baixo; no desktop vira um diálogo centralizado. Fecha no X, no fundo e com Esc
+ * (com modais empilhados, o Esc fecha só o do topo — o que contém o foco).
+ * Durante a animação de saída o painel fica inerte: o 2º clique de um duplo clique não repete a ação.
  */
 export function Sheet(props: Props) {
   if (typeof document === "undefined") return null;
@@ -65,6 +67,20 @@ function inertizarFundo(raiz: Element) {
   };
 }
 
+/** Painéis abertos, do mais antigo ao mais novo (os que estão saindo não contam). */
+const pilha: HTMLElement[] = [];
+
+/** O modal que responde ao teclado: o que contém o foco; sem foco em modal, o último aberto. */
+function modalDoTopo(): HTMLElement | undefined {
+  const ativo = document.activeElement;
+  return (ativo && pilha.find((p) => p.contains(ativo))) || pilha[pilha.length - 1];
+}
+
+function sairDaPilha(el: HTMLElement | null) {
+  const i = el ? pilha.indexOf(el) : -1;
+  if (i >= 0) pilha.splice(i, 1);
+}
+
 const FOCAVEL = 'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
 function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className, largura = "md" }: Props) {
@@ -75,34 +91,47 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className,
   const desktop = useMidia(DESKTOP);
   const arrasto = useMotionValue(0);
   const opacidadeFundo = useTransform(arrasto, [0, 320], [1, 0.15]);
+  // `false` enquanto o painel faz a animação de saída (AnimatePresence ainda o mantém na tela).
+  const presente = useIsPresent();
 
   useEffect(() => {
     fechar.current = onFechar;
   }, [onFechar]);
 
+  // Saindo: deixa de ser o "modal do topo" (um Esc a mais não deve fechar o de baixo duas vezes).
+  useEffect(() => {
+    if (!presente) sairDaPilha(painel.current);
+  }, [presente]);
+
   // Roda uma vez por abertura: trava o scroll da página, foca o modal e escuta o Esc.
   useEffect(() => {
     const anterior = document.activeElement as HTMLElement | null;
+    const el = painel.current;
     travarRolagem();
+    if (el) pilha.push(el);
     const raiz = painel.current?.parentElement;
     const desinertizar = raiz ? inertizarFundo(raiz) : undefined;
     painel.current?.focus({ preventScroll: true });
 
     const aoTeclar = (e: KeyboardEvent) => {
-      if (e.key === "Escape") fechar.current();
+      if (e.key === "Escape") {
+        // Só o modal do topo (o que contém o foco) fecha; os de baixo esperam o próximo Esc.
+        if (modalDoTopo() === painel.current) fechar.current();
+        return;
+      }
       if (e.key !== "Tab" || !painel.current) return;
       // Laço de Tab dentro do painel (só o modal do topo, o que contém o foco).
-      const el = painel.current;
+      const caixa = painel.current;
       const ativo = document.activeElement;
-      if (ativo && !el.contains(ativo)) return;
-      const itens = Array.from(el.querySelectorAll<HTMLElement>(FOCAVEL)).filter((i) => i.offsetParent !== null);
+      if (ativo && !caixa.contains(ativo)) return;
+      const itens = Array.from(caixa.querySelectorAll<HTMLElement>(FOCAVEL)).filter((i) => i.offsetParent !== null);
       if (itens.length === 0) {
         e.preventDefault();
         return;
       }
       const primeiro = itens[0];
       const ultimo = itens[itens.length - 1];
-      if (e.shiftKey && (ativo === primeiro || ativo === el)) {
+      if (e.shiftKey && (ativo === primeiro || ativo === caixa)) {
         e.preventDefault();
         ultimo.focus();
       } else if (!e.shiftKey && ativo === ultimo) {
@@ -113,6 +142,7 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className,
     document.addEventListener("keydown", aoTeclar);
     return () => {
       document.removeEventListener("keydown", aoTeclar);
+      sairDaPilha(el ?? null);
       desinertizar?.();
       liberarRolagem();
       anterior?.focus?.({ preventScroll: true });
@@ -132,7 +162,8 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className,
     : { initial: { y: "100%" }, animate: { y: 0 }, exit: { y: "100%" } };
 
   return (
-    <div className={cn("fixed inset-0 z-50", desktop && "grid place-items-center p-6")}>
+    // Saindo (animação de saída): inerte e sem cliques — um duplo clique não repete a ação do botão.
+    <div className={cn("fixed inset-0 z-50", desktop && "grid place-items-center p-6", !presente && "pointer-events-none")} inert={!presente}>
       <motion.div
         className="absolute inset-0 bg-slate-950/40"
         initial={{ opacity: 0 }}
@@ -181,7 +212,7 @@ function SheetPainel({ onFechar, titulo, subtitulo, children, rodape, className,
               onClick={onFechar}
               onPointerDown={(e) => e.stopPropagation()}
               aria-label="Fechar"
-              className="-mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-acento active:scale-90 touch-manipulation"
+              className="alvo-toque -mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-verde-mclaro hover:text-acento active:scale-90 touch-manipulation"
             >
               <X className="size-5" />
             </button>
