@@ -134,7 +134,7 @@ function Conteudo() {
                   type="button"
                   onClick={() => setSelecionado(ativo ? null : dia)}
                   aria-pressed={ativo}
-                  aria-label={`${new Date(dia).getDate()}${ehHoje ? ", hoje" : ""}${doDia.length ? `, ${doDia.length} compromisso(s)` : ""}`}
+                  aria-label={`${new Date(dia).getDate()}${ehHoje ? ", hoje" : ""}${doDia.length ? `, ${doDia.length} ${doDia.length === 1 ? "compromisso" : "compromissos"}` : ""}`}
                   className={cn(
                     "relative flex aspect-square flex-col items-center justify-center rounded-lg text-[13px] tabular-nums transition-colors duration-150",
                     ativo
