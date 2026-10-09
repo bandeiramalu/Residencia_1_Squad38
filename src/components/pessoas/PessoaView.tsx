@@ -37,7 +37,7 @@ export function PessoaView({ id }: { id: string }) {
   const p = pessoas[id] ?? daLiga(id);
 
   const doAutor = useMemo(
-    () => posts.filter((x) => x.autorId === id && (!x.emRevisao || id === usuario.id)).sort((a, b) => b.criadoEm - a.criadoEm),
+    () => posts.filter((x) => x.autorId === id && !x.origemSala && (!x.emRevisao || id === usuario.id)).sort((a, b) => b.criadoEm - a.criadoEm),
     [posts, id, usuario.id],
   );
 
