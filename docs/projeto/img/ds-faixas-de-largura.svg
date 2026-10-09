@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="360" viewBox="0 0 720 360" role="img" aria-labelledby="t d">
+<title id="t">Três faixas de largura</title>
+<desc id="d">Esquemas do celular, do tablet e do computador. Cinza-escuro é a navegação, cinza claro é o conteúdo principal e verde é a coluna de apoio, que só aparece a partir de 1280 pixels.</desc>
+<rect x="0.5" y="0.5" width="719" height="359" rx="16" fill="#FFFFFF" stroke="#E2E8F0"/>
+<rect x="24.5" y="40.5" width="120" height="236" rx="14" fill="#FFFFFF" stroke="#334155" stroke-width="1.5"/>
+<rect x="32" y="48" width="105" height="16" rx="4" fill="#E2E8F0"/>
+<rect x="32" y="74" width="105" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="32" y="126" width="105" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="32" y="178" width="105" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="32" y="240" width="105" height="28" rx="6" fill="#94A3B8"/>
+<text x="84" y="298" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#0F172A" text-anchor="middle">Celular</text>
+<text x="84" y="314" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">até 639 px</text>
+<rect x="168.5" y="40.5" width="208" height="236" rx="14" fill="#FFFFFF" stroke="#334155" stroke-width="1.5"/>
+<rect x="176" y="48" width="193" height="16" rx="4" fill="#E2E8F0"/>
+<rect x="206" y="74" width="133" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="206" y="126" width="133" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="206" y="178" width="133" height="44" rx="6" fill="#E2E8F0"/>
+<rect x="176" y="240" width="193" height="28" rx="6" fill="#94A3B8"/>
+<text x="272" y="298" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#0F172A" text-anchor="middle">Tablet</text>
+<text x="272" y="314" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">640 a 1023 px</text>
+<rect x="400.5" y="40.5" width="296" height="236" rx="14" fill="#FFFFFF" stroke="#334155" stroke-width="1.5"/>
+<rect x="408" y="48" width="44" height="220" rx="6" fill="#94A3B8"/>
+<rect x="460" y="48" width="229" height="16" rx="4" fill="#E2E8F0"/>
+<rect x="460" y="74" width="150" height="54" rx="6" fill="#E2E8F0"/>
+<rect x="618" y="74" width="71" height="54" rx="6" fill="#BBF7D0"/>
+<rect x="460" y="138" width="150" height="54" rx="6" fill="#E2E8F0"/>
+<rect x="618" y="138" width="71" height="54" rx="6" fill="#BBF7D0"/>
+<rect x="460" y="202" width="150" height="54" rx="6" fill="#E2E8F0"/>
+<rect x="618" y="202" width="71" height="54" rx="6" fill="#BBF7D0"/>
+<text x="548" y="298" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="600" fill="#0F172A" text-anchor="middle">Computador</text>
+<text x="548" y="314" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11.5" font-weight="400" fill="#475569" text-anchor="middle">a partir de 1024 px</text>
+<text x="24" y="345" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11.5" font-weight="400" fill="#475569" text-anchor="start">Barra lateral a partir de 1024 px. Coluna de apoio (verde) só a partir de 1280 px, nas telas que têm uma.</text>
+</svg>
