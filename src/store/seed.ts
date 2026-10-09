@@ -7,7 +7,7 @@ import { criarPosts } from "@/data/posts";
 import { criarSalas } from "@/data/salas";
 import { PESSOAS_GERADAS } from "@/data/turmas";
 import { USUARIO_INICIAL } from "@/data/usuario";
-import { diaDaSemana } from "@/lib/tempo";
+import { diaDaSemana, inicioDoDia } from "@/lib/tempo";
 import type { AppState, StatusDia } from "./types";
 
 export const VERSAO_ESTADO = 4;
@@ -82,6 +82,7 @@ export function criarEstadoInicial(agora: number): AppState {
     materiaisAbertos: [],
     espaco: "escola",
     ...estadoV3(agora),
+    diaRef: inicioDoDia(agora),
   };
 }
 

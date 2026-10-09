@@ -6,13 +6,18 @@
  */
 import { BONUS_CICLO, MINUTOS_MINIMOS, MODOS_TIMER, PONTOS_POR_MINUTO } from "@/data/estudos";
 import type { Disciplina } from "@/data/escola";
-import { faseDaSala, formatarMinutos, LIMITE_SAIDA_MS, lerTimer, MIN, notificarSistema, pedirPermissaoNotificacao } from "@/lib/estudos";
+import { descontoDoFocoMs, faseDaSala, formatarMinutos, LIMITE_SAIDA_MS, lerTimer, minutosCumpridos, MIN, notificarSistema, pedirPermissaoNotificacao } from "@/lib/estudos";
 import { gerarId, primeiroNome } from "@/lib/format";
 import { avancarMissao, registrarEstudo } from "../actions";
 import { commit, ehAluno, premiar } from "../nucleo";
 import { obterEstado } from "../store";
 import type { FaseTimer, ModoTimer } from "../types";
 import { toast } from "../ui";
+
+/** Quem entra nos primeiros segundos do foco da sala ainda pega o ciclo inteiro (tolerância para o clique). */
+const TOLERANCIA_ENTRADA_MS = 30_000;
+/** Tempo máximo entre o `pagehide` e a página recarregada para tratar como F5 (e não como "saí da tela"). */
+const JANELA_RECARGA_MS = 20_000;
 
 export interface OpcoesFoco {
   disciplina: Disciplina;
@@ -33,8 +38,11 @@ export function iniciarFoco({ disciplina, modo, meta, salaId, focoMin, pausaMin 
   let faseInicio = agora;
   let foco = focoMin ?? preset.focoMin;
   let pausa = pausaMin ?? preset.pausaMin;
+  let descontoMs = 0;
 
-  // Numa sala coletiva, o timer entra sincronizado com o ciclo da sala.
+  // Numa sala coletiva, o timer entra sincronizado com o ciclo da sala. Quem entra no meio do foco
+  // continua na mesma fase (relógio igual ao da sala), mas só conta o tempo a partir de agora:
+  // o que a sala já tinha andado vira `descontoMs` (sem bônus de ciclo, sem minutos emprestados).
   const sala = salaId ? obterEstado().salas.find((s) => s.id === salaId) : undefined;
   if (sala) {
     const f = faseDaSala(sala, agora);
@@ -42,15 +50,32 @@ export function iniciarFoco({ disciplina, modo, meta, salaId, focoMin, pausaMin 
     pausa = sala.pausaMin;
     fase = f.fase;
     faseInicio = agora - f.decorridoMs;
+    if (f.fase === "foco" && f.decorridoMs > TOLERANCIA_ENTRADA_MS) descontoMs = Math.round(f.decorridoMs);
   }
 
   commit({
     type: "iniciarTimer",
-    timer: { disciplina, modo, focoMin: foco, pausaMin: pausa, fase, faseInicio, acumuladoMs: 0, pausado: false, ciclos: 0, minutosRegistrados: 0, meta: meta?.trim() || undefined, salaId },
+    timer: {
+      disciplina,
+      modo,
+      focoMin: foco,
+      pausaMin: pausa,
+      fase,
+      faseInicio,
+      acumuladoMs: 0,
+      pausado: false,
+      ciclos: 0,
+      minutosRegistrados: 0,
+      meta: meta?.trim() || undefined,
+      salaId,
+      ...(descontoMs > 0 ? { descontoMs } : {}),
+    },
   });
 
   if (fase === "pausa") {
     toast({ tipo: "info", titulo: "A sala está na pausa", mensagem: "Seu foco começa junto com o próximo ciclo da sala." }, 3000);
+  } else if (descontoMs > 0) {
+    toast({ tipo: "info", titulo: "Você entrou no meio do ciclo", mensagem: "Conta o tempo a partir de agora; o bônus de ciclo vale a partir do próximo ciclo inteiro." }, 3600);
   } else if (!sala) {
     toast({ tipo: "info", titulo: `Foco iniciado · ${disciplina}`, mensagem: foco ? `${foco} min de foco e ${pausa} de pausa.` : "Cronômetro livre." }, 3000);
   }
@@ -78,6 +103,24 @@ export function registrarSaida(em = Date.now()) {
   if (!t || t.pausado || t.fase !== "foco") return;
   commit({ type: "sairDaTela", em });
   if (FORA()) notificarSistema("Foco pausado", "Foco pausado — volte em até 5 min para não perder.");
+}
+
+let verificouRecarga = false;
+
+/**
+ * F5 com o foco rodando: o `pagehide` congelou o timer, mas recarregar não é sair da tela.
+ * Na primeira chamada após carregar a página (navegação do tipo "reload", saída há poucos segundos),
+ * retoma sem a contagem de saída. Fechar a aba ou voltar depois continua valendo a regra dos 5 min.
+ */
+export function retomarSeRecarregou() {
+  if (verificouRecarga || typeof performance === "undefined") return;
+  verificouRecarga = true;
+  const nav = performance.getEntriesByType?.("navigation")?.[0] as PerformanceNavigationTiming | undefined;
+  if (nav?.type !== "reload") return;
+  const t = obterEstado().estudos.timer;
+  const agora = Date.now();
+  if (!t?.saiuEm || agora - t.saiuEm > JANELA_RECARGA_MS) return;
+  commit({ type: "retomarTimer", em: agora });
 }
 
 /** Faltando 1 min para perder o foco (chamado por um agendamento; pode atrasar em aba oculta). */
@@ -120,7 +163,10 @@ export function pularSaidaDemo() {
   tickFoco();
 }
 
-/** Registra um bloco de foco concluído: métricas, pontos, sequência, missão e campeonatos. */
+/**
+ * Registra um bloco de foco concluído: métricas, pontos, sequência, missão e campeonatos.
+ * `cicloCompleto` só é verdadeiro para um ciclo inteiro (quem entrou no meio da sala não ganha o bônus nem a missão d4).
+ */
 function registrarBloco(minutos: number, cicloCompleto: boolean, fim: number) {
   const estado = obterEstado();
   const t = estado.estudos.timer;
@@ -157,9 +203,18 @@ export function tickFoco(agora = Date.now()) {
   const fimFase = agora - (l.decorridoMs - l.duracaoMs);
 
   if (t.fase === "foco") {
-    registrarBloco(t.focoMin, true, fimFase);
+    const desconto = descontoDoFocoMs(t);
+    const minutos = Math.max(0, Math.floor((t.focoMin * MIN - desconto) / MIN));
+    registrarBloco(minutos, desconto === 0, fimFase);
     commit({ type: "trocarFase", fase: "pausa", em: fimFase });
-    if (ehAluno()) toast({ tipo: "sequencia", titulo: "Ciclo concluído", mensagem: `Pausa de ${t.pausaMin} min.` }, 3600);
+    if (ehAluno()) {
+      toast(
+        desconto === 0
+          ? { tipo: "sequencia", titulo: "Ciclo concluído", mensagem: `Pausa de ${t.pausaMin} min.` }
+          : { tipo: "info", titulo: "Foco concluído", mensagem: `${formatarMinutos(minutos)} registrados (você entrou no meio do ciclo) · pausa de ${t.pausaMin} min.` },
+        3600,
+      );
+    }
   } else {
     commit({ type: "trocarFase", fase: "foco", em: fimFase });
     if (ehAluno()) toast({ tipo: "info", titulo: "Pausa encerrada", mensagem: "O próximo ciclo de foco começou." }, 3000);
@@ -172,7 +227,7 @@ export function encerrarFoco(silencioso = false) {
   if (!t) return 0;
   const agora = Date.now();
   if (t.fase === "foco") {
-    const minutos = Math.floor(lerTimer(t, agora).decorridoMs / MIN);
+    const minutos = minutosCumpridos(t, agora);
     if (minutos >= MINUTOS_MINIMOS) registrarBloco(minutos, false, agora);
   }
   const total = obterEstado().estudos.timer?.minutosRegistrados ?? 0;

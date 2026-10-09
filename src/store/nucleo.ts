@@ -8,7 +8,7 @@ import { lerSessao } from "@/lib/auth";
 import { gerarId } from "@/lib/format";
 import { medalhasConquistadas, nivelDe } from "@/lib/gamificacao";
 import type { Acao } from "./reducer";
-import { despachar, obterEstado } from "./store";
+import { despachar, obterEstado, relerSeOutraJanelaGravou } from "./store";
 import type { Notificacao } from "./types";
 import { TOAST_DA_NOTIFICACAO, celebrar, toast } from "./ui";
 
@@ -35,7 +35,13 @@ export function ehAluno() {
   return papelAtual() === "aluno";
 }
 
+/**
+ * Aplica a ação. Se outra janela gravou antes, relê o estado salvo e aplica a ação sobre ele (ver store.ts).
+ * Devolve o estado depois da ação; ação que o reducer recusa devolve o mesmo estado (e não sincroniza).
+ */
 export function commit(acao: Acao) {
+  obterEstado();
+  relerSeOutraJanelaGravou();
   const antes = obterEstado();
   const depois = despachar(acao);
   if (depois !== antes) {
