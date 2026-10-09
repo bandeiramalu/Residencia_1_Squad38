@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto, Campo } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
+import { useRascunho } from "@/components/ui/rascunhos";
 import { Sheet } from "@/components/ui/Sheet";
 import { useAgora } from "@/hooks/useAgora";
 import { cn } from "@/lib/cn";
@@ -25,7 +26,7 @@ export function EntregaSheet({ atividade, onFechar }: { atividade: Atividade | n
 
 function Formulario({ atividade, onFechar }: { atividade: Atividade; onFechar: () => void }) {
   const agora = useAgora(60_000);
-  const [resposta, setResposta] = useState("");
+  const [resposta, setResposta, limparRascunho] = useRascunho(`entrega:${atividade.id}`);
   const [arquivo, setArquivo] = useState<ArquivoSalvo | null>(null);
   const atrasada = atividade.prazo < agora;
   const pode = resposta.trim().length > 0 || !!arquivo;
@@ -36,6 +37,7 @@ function Formulario({ atividade, onFechar }: { atividade: Atividade; onFechar: (
       resposta,
       arquivo ? { nome: arquivo.nome, paginas: arquivo.paginas ?? 0, tamanho: arquivo.tamanho, arquivoId: arquivo.id, mime: arquivo.mime, previa: arquivo.previa } : undefined,
     );
+    limparRascunho();
     onFechar();
   };
 
