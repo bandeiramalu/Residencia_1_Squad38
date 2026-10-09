@@ -2,7 +2,7 @@
 
 import { Info, Megaphone } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
@@ -60,10 +60,20 @@ export function RelatoCard() {
   );
 }
 
+const LIMITE_RELATO = 600;
+
 function FormularioRelato({ onFechar }: { onFechar: () => void }) {
   const [categoria, setCategoria] = useState<string | null>(null);
   const [texto, setTexto] = useState("");
+  const enviando = useRef(false);
   const pronto = !!categoria && texto.trim().length >= 10;
+
+  const enviar = () => {
+    if (!categoria || !pronto || enviando.current) return;
+    enviando.current = true;
+    enviarRelato(categoria, texto.trim());
+    onFechar();
+  };
 
   return (
     <>
@@ -80,10 +90,15 @@ function FormularioRelato({ onFechar }: { onFechar: () => void }) {
         rows={4}
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
+        maxLength={LIMITE_RELATO}
         placeholder="Descreva o problema, onde acontece e desde quando…"
         aria-label="Descrição do problema"
-        className="mt-4 w-full resize-none rounded-xl border border-borda bg-superficie px-3.5 py-3 text-sm leading-relaxed text-texto outline-none transition-colors placeholder:text-texto-2/70 focus:border-verde"
+        aria-describedby="relato-contador"
+        className="mt-4 w-full resize-none rounded-xl border border-borda bg-superficie px-3.5 py-3 text-sm leading-relaxed text-texto outline-none transition-colors placeholder:text-texto-2 focus:border-verde"
       />
+      <p id="relato-contador" className={`mt-1 text-right text-[12px] tabular-nums ${texto.length >= LIMITE_RELATO ? "font-medium text-ouro" : "text-texto-2"}`}>
+        {texto.length}/{LIMITE_RELATO}
+      </p>
       <Nota icone={<Info />} className="mt-3">
         Relato validado vale +30 pontos. Não vale XP, porque não é mérito acadêmico.
       </Nota>
@@ -95,11 +110,7 @@ function FormularioRelato({ onFechar }: { onFechar: () => void }) {
           tamanho="lg"
           className="flex-1"
           disabled={!pronto}
-          onClick={() => {
-            if (!categoria) return;
-            enviarRelato(categoria, texto.trim());
-            onFechar();
-          }}
+          onClick={enviar}
         >
           Enviar relato
         </Button>

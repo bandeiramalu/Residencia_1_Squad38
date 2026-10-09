@@ -2,7 +2,7 @@
 
 import { Check, CircleCheck, X } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Nota, Vazio } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
@@ -55,7 +55,7 @@ export function DesafiosCard() {
                     <p className="truncate text-[14px] font-medium text-tinta">{d}</p>
                     <p className="truncate text-[12px] text-texto-2">{DESAFIOS[d].tema}</p>
                     <p className="text-[12px] text-texto-2">
-                      Domínio <span className={cn("tabular-nums", usuario.dominio[d] < 50 && "font-medium text-ambar")}>{usuario.dominio[d]}%</span> · até +30 XP
+                      Domínio <span className={cn("tabular-nums", usuario.dominio[d] < 50 && "font-medium text-ouro")}>{usuario.dominio[d]}%</span> · até +30 XP
                     </p>
                   </div>
                   <Button variante="secundario" tamanho="sm" onClick={() => setAtivo(d)}>
@@ -80,8 +80,19 @@ function Quiz({ disciplina, onFechar }: { disciplina: Disciplina; onFechar: () =
   const [indice, setIndice] = useState(0);
   const [escolha, setEscolha] = useState<number | null>(null);
   const [acertos, setAcertos] = useState(0);
+  const concedido = useRef(false);
   const terminou = indice >= questoes.length;
   const q = questoes[Math.min(indice, questoes.length - 1)];
+
+  // A recompensa é concedida no instante em que o resultado aparece (uma única vez): fechar a janela depois não a perde.
+  const avancar = () => {
+    if (indice + 1 >= questoes.length && !concedido.current) {
+      concedido.current = true;
+      concluirDesafio(disciplina, acertos);
+    }
+    setIndice((i) => i + 1);
+    setEscolha(null);
+  };
 
   const responder = (i: number) => {
     if (escolha !== null) return;
@@ -101,21 +112,15 @@ function Quiz({ disciplina, onFechar }: { disciplina: Disciplina; onFechar: () =
         <p className="mt-1 text-sm text-texto-2">
           {acertos === questoes.length ? "Mandou muito bem!" : acertos > 0 ? "Bom avanço — revise as explicações." : "Vale revisar o conteúdo com calma."}
         </p>
-        <div className="mt-4 flex justify-center gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           <Badge tom="neutro">+{acertos * 5} pontos</Badge>
           <Badge tom="neutro">+{acertos * 10} XP</Badge>
           <Badge tom="claro">domínio +{acertos * 4}%</Badge>
         </div>
+        <p className="mt-3 text-[13px] text-texto-2">{acertos > 0 ? "Recompensa já creditada na sua conta." : "Desafio registrado."}</p>
         <RodapeSheet>
-          <Button
-            tamanho="lg"
-            bloco
-            onClick={() => {
-              concluirDesafio(disciplina, acertos);
-              onFechar();
-            }}
-          >
-            Concluir desafio
+          <Button tamanho="lg" bloco onClick={onFechar}>
+            Fechar
           </Button>
         </RodapeSheet>
       </div>
@@ -156,7 +161,7 @@ function Quiz({ disciplina, onFechar }: { disciplina: Disciplina; onFechar: () =
                   <span
                     className={cn(
                       "grid size-6 shrink-0 place-items-center rounded-full border text-[11px] font-medium",
-                      certa ? "border-verde bg-verde text-white" : errada ? "border-alerta bg-alerta text-white" : "border-borda text-texto-2",
+                      certa ? "border-acao bg-acao text-white" : errada ? "border-alerta bg-alerta text-white" : "border-borda text-texto-2",
                     )}
                   >
                     {certa ? <Check className="size-3.5" /> : errada ? <X className="size-3.5" /> : String.fromCharCode(65 + i)}
@@ -179,10 +184,7 @@ function Quiz({ disciplina, onFechar }: { disciplina: Disciplina; onFechar: () =
           tamanho="lg"
           bloco
           disabled={escolha === null}
-          onClick={() => {
-            setIndice((i) => i + 1);
-            setEscolha(null);
-          }}
+          onClick={avancar}
         >
           {indice + 1 === questoes.length ? "Ver resultado" : "Próxima questão"}
         </Button>
