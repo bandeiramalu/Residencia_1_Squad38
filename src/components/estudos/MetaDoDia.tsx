@@ -35,7 +35,7 @@ export function MetaDoDia({ resumo, meta, className }: { resumo: ResumoEstudos; 
     <Card semPadding className={cn("p-5", className)}>
       <TituloSecao
         extra={
-          <button type="button" onClick={() => setEditando(true)} className="rounded font-medium text-acento hover:underline">
+          <button type="button" onClick={() => setEditando(true)} className="alvo-toque rounded font-medium text-acento hover:underline">
             Editar
           </button>
         }

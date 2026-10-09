@@ -7,6 +7,7 @@ import { TituloPagina } from "@/components/ui/Blocos";
 import { useAgora } from "@/hooks/useAgora";
 import { formatarMinutos, resumoEstudos } from "@/lib/estudos";
 import { useSeletor } from "@/store/store";
+import { InterclassesFoco } from "./InterclassesFoco";
 import { MetaDoDia } from "./MetaDoDia";
 import { RankingFoco } from "./RankingFoco";
 import { SalasAoVivo } from "./SalasAoVivo";
@@ -34,8 +35,8 @@ function useColunaFixa() {
 
 /**
  * Sala de Estudos (/estudos): timer de foco (protagonista), meta do dia, uma linha de números,
- * atalho das salas ao vivo, sessões recentes e ranking de foco. Sem gráficos (ficam na aba
- * Estatísticas do professor). A página lê só sessões e meta; o relógio de 1 s fica isolado no timer.
+ * atalho das salas ao vivo, sessões recentes, ranking de foco e a disputa do Interclasses do Foco.
+ * Sem gráficos (ficam na aba Estatísticas do professor). A página lê só sessões e meta; o relógio de 1 s fica isolado no timer.
  */
 export function EstudosView() {
   const agora = useAgora(60_000);
@@ -55,7 +56,7 @@ export function EstudosView() {
         acao={
           <Link
             href="/estudos/salas"
-            className="inline-flex h-9 items-center gap-2 rounded-lg border border-borda bg-superficie px-3.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2"
+            className="alvo-toque inline-flex h-9 items-center gap-2 rounded-lg border border-borda bg-superficie px-3.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2"
           >
             <Users className="size-4 text-texto-2" aria-hidden />
             Salas ao vivo
@@ -75,7 +76,7 @@ export function EstudosView() {
         </span>
       </p>
 
-      <Link href="/estatisticas" className="inline-block text-[13px] font-medium text-acento hover:underline">
+      <Link href="/estatisticas" className="alvo-toque inline-block text-[13px] font-medium text-acento hover:underline">
         Ver minhas estatísticas
       </Link>
 
@@ -89,6 +90,7 @@ export function EstudosView() {
           <MetaDoDia className="order-2" resumo={resumo} meta={meta} />
           <SalasAoVivo className="order-3" agora={agora} />
           <RankingFoco className="order-5" agora={agora} resumo={resumo} />
+          <InterclassesFoco className="order-6" agora={agora} />
         </div>
       </div>
     </div>

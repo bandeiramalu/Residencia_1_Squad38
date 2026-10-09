@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { useAgora } from "@/hooks/useAgora";
 import { useModoApresentacao } from "@/lib/apresentacao";
 import { formatarRelogio, LIMITE_SAIDA_MS, lerTimer, MIN, restanteDaSaidaMs } from "@/lib/estudos";
-import { avisarFaltaUmMinuto, dispensarFocoPerdido, pausarFoco, pularSaidaDemo, recomecarFoco, registrarSaida, retomarFoco, tickFoco, verificarSalasAgendadas } from "@/store/actions";
+import { avisarFaltaUmMinuto, dispensarFocoPerdido, pausarFoco, pularSaidaDemo, recomecarFoco, registrarSaida, retomarFoco, retomarSeRecarregou, tickFoco, verificarSalasAgendadas } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 
 /**
@@ -28,6 +28,11 @@ export function MotorEstudos() {
     verificarSalasAgendadas();
     const id = setInterval(verificarSalasAgendadas, 10_000);
     return () => clearInterval(id);
+  }, []);
+
+  // F5 com o foco rodando: o `pagehide` congelou o timer; recarregar a página retoma sem a contagem de saída.
+  useEffect(() => {
+    retomarSeRecarregou();
   }, []);
 
   // Saiu da tela com o foco rodando: congela no instante da saída (a ação ignora pausa manual e intervalo).
@@ -70,21 +75,34 @@ export function MotorEstudos() {
   return timer ? <TituloDaAba /> : null;
 }
 
+/** Prefixo que o timer põe no título da aba ("⏱ 12:34 · "). */
+const PREFIXO_TITULO = /^[⏸⏱☕] [^·]+· /;
+
+/**
+ * Mostra o tempo no título da aba. A cada segundo parte do título ATUAL sem o prefixo: quando a aluna
+ * troca de tela, o título novo da página é preservado. O título original só é restaurado quando o timer acaba.
+ */
 function TituloDaAba() {
   const timer = useSeletor((e) => e.estudos.timer);
   const agora = useAgora(1000);
 
   useEffect(() => {
     if (!timer) return;
-    const original = document.title.replace(/^[⏸⏱☕] [^·]+· /, "");
+    const base = document.title.replace(PREFIXO_TITULO, "");
     const l = lerTimer(timer, agora);
     const tempo = formatarRelogio(l.restanteMs ?? l.decorridoMs);
     const icone = timer.pausado ? "⏸" : timer.fase === "pausa" ? "☕" : "⏱";
-    document.title = `${icone} ${tempo} · ${original}`;
-    return () => {
-      document.title = original;
-    };
+    const novo = `${icone} ${tempo} · ${base}`;
+    if (document.title !== novo) document.title = novo;
   }, [timer, agora]);
+
+  // Sem timer (acabou ou foi encerrado), este componente sai de cena: tira o prefixo do título que estiver na aba.
+  useEffect(
+    () => () => {
+      document.title = document.title.replace(PREFIXO_TITULO, "");
+    },
+    [],
+  );
 
   return null;
 }
@@ -236,7 +254,7 @@ function Pilula({ destino }: { destino: string }) {
         type="button"
         onClick={timer.pausado ? retomarFoco : pausarFoco}
         aria-label={timer.pausado ? "Retomar foco" : "Pausar foco"}
-        className="grid size-8 place-items-center rounded-full text-texto transition-colors hover:bg-superficie-2 active:scale-95"
+        className="alvo-toque grid size-8 place-items-center rounded-full text-texto transition-colors hover:bg-superficie-2 active:scale-95"
       >
         {timer.pausado ? <Play className="size-3.5 fill-current" /> : <Pause className="size-3.5 fill-current" />}
       </button>

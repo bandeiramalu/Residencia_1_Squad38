@@ -71,7 +71,7 @@ export function SessoesRecentes({ agora, disciplinaSugerida, className }: { agor
             <button
               type="button"
               onClick={() => setTodas((v) => !v)}
-              className="text-[13px] font-medium text-acento transition-opacity hover:opacity-80 active:opacity-70"
+              className="alvo-toque text-[13px] font-medium text-acento transition-opacity hover:opacity-80 active:opacity-70"
             >
               {todas ? "Mostrar menos" : "Mostrar mais sessões"}
             </button>
@@ -170,7 +170,7 @@ function FormManual({ sugerida, onFechar }: { sugerida: Disciplina; onFechar: ()
                 onClick={() => setMinutos(String(p))}
                 aria-pressed={ativo}
                 className={cn(
-                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tabular-nums transition-colors duration-150 active:scale-[0.97]",
+                  "rounded-full px-3.5 py-1.5 text-[13px] font-medium tabular-nums transition-colors duration-150 active:scale-[0.97] toque:min-h-11",
                   ativo ? "bg-tinta text-superficie" : "bg-superficie text-texto ring-1 ring-inset ring-borda hover:bg-superficie-2",
                 )}
               >
