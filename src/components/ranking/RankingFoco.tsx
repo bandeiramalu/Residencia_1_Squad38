@@ -161,7 +161,7 @@ function ResumoFoco({ rf, escopo, hojeMin, metaMin, emFoco }: { rf: RankingFoco;
 
       <Link
         href="/estudos"
-        className="mt-3 flex h-9 items-center justify-center gap-2 rounded-lg bg-verde text-sm font-medium text-white transition-colors duration-150 hover:bg-verde-2 active:scale-[0.98]"
+        className="alvo-toque mt-3 flex h-9 items-center justify-center gap-2 rounded-lg bg-acao text-sm font-medium text-white transition-colors duration-150 hover:bg-acao-2 active:scale-[0.98]"
       >
         <Play className="size-4" aria-hidden /> {emFoco ? "Voltar ao foco" : "Estudar agora"}
       </Link>

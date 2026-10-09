@@ -95,7 +95,7 @@ export function ResumoSemana({ usuario }: { usuario: Usuario }) {
           <button
             type="button"
             onClick={() => document.getElementById("visibilidade")?.scrollIntoView({ behavior: "smooth", block: "center" })}
-            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-texto transition-colors hover:bg-superficie-2"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-texto transition-colors hover:bg-superficie-2 toque:min-h-11"
           >
             <IconeVis className="size-4 shrink-0 text-texto-2" aria-hidden />
             <span className="min-w-0 flex-1 truncate">
