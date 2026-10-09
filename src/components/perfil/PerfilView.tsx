@@ -16,13 +16,15 @@ import {
 import { AnimatePresence, m as motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ItemVisual } from "@/components/loja/ItemVisual";
 import { PrivacidadeControle } from "@/components/ranking/PrivacidadeControle";
 import { RoteiroSheet } from "@/components/shell/RoteiroSheet";
+import { useSair } from "@/components/shell/SairSheet";
 import { TemaSegmentado } from "@/components/shell/TemaToggle";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { Avatar } from "@/components/ui/Avatar";
+import { aoTeclarNasAbas } from "@/components/ui/abas";
 import { Badge } from "@/components/ui/Badge";
 import { TituloSecao, Vazio } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
@@ -32,7 +34,7 @@ import { Switch } from "@/components/ui/Switch";
 import { ITENS } from "@/data/loja";
 import { MEDALHAS } from "@/data/medalhas";
 import { useAgora } from "@/hooks/useAgora";
-import { entrarComoDemo, sair } from "@/lib/auth";
+import { entrarComoDemo } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { definirModoApresentacao, useModoApresentacao } from "@/lib/apresentacao";
 import { fmt } from "@/lib/format";
@@ -57,7 +59,7 @@ const ABAS: { id: AbaPerfil; rotulo: string }[] = [
   { id: "config", rotulo: "Configurações" },
 ];
 
-const TIPO_POST: Record<Post["tipo"], string> = { duvida: "Pergunta", material: "Material", aviso: "Aviso", publicacao: "Publicação" };
+const TIPO_POST: Record<Post["tipo"], string> = { duvida: "Dúvida", material: "Material", aviso: "Aviso", publicacao: "Publicação" };
 
 /** Perfil da aluna, minimalista: identidade, nível, medalhas, publicações e configurações. */
 export function PerfilView() {
@@ -73,6 +75,7 @@ export function PerfilView() {
 
   const estatisticas: { valor: number; rotulo: string; acao?: () => void; href?: string }[] = [
     { valor: meus.length, rotulo: meus.length === 1 ? "Publicação" : "Publicações", acao: () => setAba("publicacoes") },
+    { valor: usuario.respostasUteis, rotulo: usuario.respostasUteis === 1 ? "Resposta útil" : "Respostas úteis" },
     { valor: conquistadas, rotulo: conquistadas === 1 ? "Medalha" : "Medalhas", acao: () => setAba("conquistas") },
     { valor: sequencia.dias, rotulo: sequencia.dias === 1 ? "Dia seguido" : "Dias seguidos", href: "/missoes" },
   ];
@@ -97,14 +100,14 @@ export function PerfilView() {
                 <Link
                   href="/estatisticas"
                   aria-label="Minhas estatísticas"
-                  className="inline-flex h-8 whitespace-nowrap items-center gap-1.5 rounded-lg border border-borda bg-superficie px-3 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98]"
+                  className="alvo-toque inline-flex h-8 whitespace-nowrap items-center gap-1.5 rounded-lg border border-borda bg-superficie px-3 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98] toque:min-w-11 toque:justify-center"
                 >
                   <ChartColumn className="size-4" aria-hidden /> <span className="hidden sm:inline">Minhas estatísticas</span>
                 </Link>
                 <Link
                   href="/loja"
                   aria-label="Loja"
-                  className="inline-flex h-8 whitespace-nowrap items-center gap-1.5 rounded-lg border border-borda bg-superficie px-3 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2"
+                  className="alvo-toque inline-flex h-8 whitespace-nowrap items-center gap-1.5 rounded-lg border border-borda bg-superficie px-3 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 toque:min-w-11 toque:justify-center"
                 >
                   <ShoppingBag className="size-4" aria-hidden /> <span className="hidden sm:inline">Loja</span>
                 </Link>
@@ -145,7 +148,8 @@ export function PerfilView() {
                 </div>
               )}
 
-              <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[14px]">
+              {/* No toque cada número ocupa uma faixa de 44 px (sem espaço entre as linhas que quebram): a área de um não invade a do vizinho. */}
+              <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-[14px] toque:mt-0 toque:gap-y-0">
                 {estatisticas.map((s) => {
                   const conteudo = (
                     <>
@@ -153,17 +157,17 @@ export function PerfilView() {
                     </>
                   );
                   return (
-                    <li key={s.rotulo}>
+                    <li key={s.rotulo} className="toque:flex toque:min-h-11 toque:items-center">
                       {s.acao ? (
-                        <button type="button" onClick={s.acao} className="group">
+                        <button type="button" onClick={s.acao} className="group alvo-toque">
                           {conteudo}
                         </button>
                       ) : s.href ? (
-                        <Link href={s.href} className="group">
+                        <Link href={s.href} className="group alvo-toque">
                           {conteudo}
                         </Link>
                       ) : (
-                        conteudo
+                        <span>{conteudo}</span>
                       )}
                     </li>
                   );
@@ -193,7 +197,7 @@ export function PerfilView() {
 
 function AbasPerfil({ aba, onChange }: { aba: AbaPerfil; onChange: (a: AbaPerfil) => void }) {
   return (
-    <div role="tablist" aria-label="Seções do perfil" className="sem-scrollbar mt-4 flex overflow-x-auto border-t border-borda sm:px-2">
+    <div role="tablist" aria-label="Seções do perfil" onKeyDown={aoTeclarNasAbas} className="sem-scrollbar mt-4 flex overflow-x-auto border-t border-borda sm:px-2">
       {ABAS.map((a) => {
         const ativo = a.id === aba;
         return (
@@ -204,9 +208,10 @@ function AbasPerfil({ aba, onChange }: { aba: AbaPerfil; onChange: (a: AbaPerfil
             id={`aba-${a.id}`}
             aria-selected={ativo}
             aria-controls={ativo ? `painel-${a.id}` : undefined}
+            tabIndex={ativo ? 0 : -1}
             onClick={() => onChange(a.id)}
             className={cn(
-              "relative flex-auto shrink-0 whitespace-nowrap px-1.5 py-3 text-[13px] font-medium transition-colors duration-150 hover:bg-superficie-2 sm:flex-none sm:px-4 sm:text-[14px]",
+              "relative flex-auto shrink-0 whitespace-nowrap px-1.5 py-3 text-[13px] font-medium transition-colors duration-150 hover:bg-superficie-2 toque:min-h-11 sm:flex-none sm:px-4 sm:text-[14px]",
               ativo ? "text-tinta" : "text-texto-2 hover:text-tinta",
             )}
           >
@@ -268,7 +273,7 @@ function Publicacoes({ posts }: { posts: Post[] }) {
               <p className="text-[12px] text-texto-2">
                 {TIPO_POST[p.tipo]}
                 {p.disciplina ? ` · ${p.disciplina}` : ""}
-                {p.emRevisao && <span className="text-ambar"> · em revisão</span>}
+                {p.emRevisao && <span className="text-ouro"> · em revisão</span>}
               </p>
               <p className="mt-1.5 line-clamp-3 text-[14px] leading-relaxed text-texto">{p.texto}</p>
               <div className="mt-2 flex items-center gap-4 text-[12px] text-texto-2">
@@ -348,11 +353,13 @@ function Conquistas({ conquistadas }: { conquistadas: number }) {
 
 function Configuracoes() {
   const router = useRouter();
+  const { pedir: pedirSaida, dialogo: dialogoSaida } = useSair();
   const usuario = useSeletor((e) => e.usuario);
   const compras = useSeletor((e) => e.compras);
   const [roteiro, setRoteiro] = useState(false);
   const apresentacao = useModoApresentacao();
   const [confirmarReset, setConfirmarReset] = useState(false);
+  const apagando = useRef(false);
   const eq = new Set(usuario.equipados);
   const cosmeticos = ITENS.filter((i) => i.slot !== "voucher" && compras.some((c) => c.itemId === i.id));
 
@@ -361,7 +368,7 @@ function Configuracoes() {
       <section>
         <TituloSecao
           extra={
-            <Link href="/ranking" className="font-medium text-acento hover:underline">
+            <Link href="/ranking" className="alvo-toque font-medium text-acento hover:underline">
               Ver no ranking
             </Link>
           }
@@ -390,7 +397,7 @@ function Configuracoes() {
           <Card className="flex items-center gap-3">
             <Palette className="size-5 shrink-0 text-texto-2" aria-hidden />
             <p className="min-w-0 flex-1 text-[13px] text-texto-2">Molduras, capas e efeitos para o perfil ficam na Loja.</p>
-            <Link href="/loja" className="shrink-0 text-[13px] font-medium text-acento hover:underline">
+            <Link href="/loja" className="alvo-toque shrink-0 text-[13px] font-medium text-acento hover:underline">
               Ver loja
             </Link>
           </Card>
@@ -424,7 +431,7 @@ function Configuracoes() {
             </>
           )}
           <div>
-            <LinhaAcao icone={<Trash2 />} titulo="Apagar dados deste dispositivo" detalhe="Volta tudo ao estado inicial, inclusive foto e lembretes" onClick={() => setConfirmarReset((v) => !v)} />
+            <LinhaAcao icone={<Trash2 />} titulo="Apagar dados deste dispositivo" detalhe="Volta tudo ao estado inicial, inclusive foto, arquivos e lembretes" onClick={() => setConfirmarReset((v) => !v)} />
             <AnimatePresence initial={false}>
               {confirmarReset && (
                 <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
@@ -437,7 +444,12 @@ function Configuracoes() {
                       tamanho="sm"
                       className="flex-1"
                       onClick={() => {
-                        apagarDadosDoDispositivo();
+                        if (apagando.current) return;
+                        apagando.current = true;
+                        // Apaga também os arquivos do IndexedDB (assíncrono); a trava evita um segundo "Sim, apagar tudo".
+                        void apagarDadosDoDispositivo().finally(() => {
+                          apagando.current = false;
+                        });
                         setConfirmarReset(false);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
@@ -454,16 +466,14 @@ function Configuracoes() {
             titulo="Sair"
             detalhe="Encerra a sessão neste navegador"
             perigo
-            onClick={() => {
-              sair();
-              router.push("/login");
-            }}
+            onClick={pedirSaida}
           />
         </Card>
         <p className="mt-3 text-center text-[12px] text-texto-2">Portal do Aluno · versão 1.0 · CEPI Expansão. Os dados ficam salvos neste dispositivo.</p>
       </section>
 
       {apresentacao && <RoteiroSheet aberto={roteiro} onFechar={() => setRoteiro(false)} />}
+      {dialogoSaida}
     </div>
   );
 }

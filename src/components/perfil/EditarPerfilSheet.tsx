@@ -30,6 +30,7 @@ function Formulario({ onFechar }: { onFechar: () => void }) {
   const usuario = useSeletor((e) => e.usuario);
   const temSelos = usuario.equipados.includes("pf5");
   const entrada = useRef<HTMLInputElement>(null);
+  const enviando = useRef(false);
 
   const [nome, setNome] = useState(usuario.nome);
   const [arroba, setArroba] = useState((usuario.arroba ?? arrobaPadrao(usuario.nome)).replace(/^@/, ""));
@@ -57,8 +58,10 @@ function Formulario({ onFechar }: { onFechar: () => void }) {
   };
 
   const salvar = () => {
+    if (enviando.current) return;
     setTentou(true);
     if (erroNome || erroArroba) return;
+    enviando.current = true;
     editarPerfil({
       nome: nomeLimpo,
       iniciais: iniciaisDe(nomeLimpo),
@@ -118,7 +121,7 @@ function Formulario({ onFechar }: { onFechar: () => void }) {
                       aria-pressed={ativo}
                       onClick={() => setSelos((s) => (ativo ? s.filter((x) => x !== n) : [...s, n]))}
                       className={cn(
-                        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors duration-150 active:scale-[0.98]",
+                        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[13px] transition-colors duration-150 active:scale-[0.98] toque:min-h-11",
                         ativo ? "border-tinta bg-tinta text-superficie" : "border-borda text-texto-2 hover:bg-superficie-2 hover:text-tinta",
                       )}
                     >
