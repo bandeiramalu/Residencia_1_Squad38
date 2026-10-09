@@ -2,7 +2,7 @@
 
 Rede social educacional integrada ao portal do [Colégio CEPI Expansão](https://www.cepiexpansao.com.br) (Aracaju · SE) — projeto da **Residência de Software, Squad 38**.
 
-Dois perfis de acesso (**aluno** e **professor**) com **sala de estudos e métricas**, **salas coletivas**, **campeonatos internos**, **estatísticas**, feed de dúvidas com busca por conceitos e sugestão de dúvidas parecidas, missões e flashcards, loja de recompensas, **arquivos reais** (PDF e imagem), relatórios em PDF/CSV, calendário com lembretes e **tema claro/escuro**. Tudo roda no navegador com dados de demonstração, e o caminho do backend já está desenhado.
+Dois perfis de acesso (**aluno** e **professor**, os dois no mesmo **feed da escola**) com **sala de estudos e métricas**, **salas coletivas**, **campeonatos internos**, **estatísticas**, feed de dúvidas com busca por conceitos e sugestão de dúvidas parecidas, missões e flashcards, loja de recompensas, **arquivos reais** (PDF, imagem e documentos), relatórios em PDF/CSV, calendário com lembretes e **tema claro/escuro**. Tudo roda no navegador com dados de demonstração, e o caminho do backend já está desenhado.
 
 Feito em **Next.js 16 (App Router) + React 19**, seguindo os documentos do squad: _Correção dos Épicos_, _Design System_, _Navegação e fluxos_ e _Stack e Ferramentas IA_.
 
@@ -55,7 +55,10 @@ Os atalhos de demonstração ficam escondidos para não poluir o uso normal. Lig
 
 - **Pular 5 min** no timer de foco (fecha um ciclo em segundos);
 - **Simular saída da tela** (mostra o aviso de foco perdido e a trava de 5 minutos);
-- **Roteiro de apresentação** (menu da conta) com os passos clicáveis e o atalho **Ver como professor / Ver como aluna**.
+- **Roteiro de apresentação** (menu da conta) com os passos clicáveis e o atalho **Ver como professor / Ver como aluna**;
+- **Simular falhas** (no Roteiro): sem conexão, IA indisponível, busca por significado indisponível, falha ao salvar o
+  progresso e falha ao carregar uma tela — para mostrar como o portal se comporta quando algo dá errado. As simulações
+  **só existem com o modo apresentação ligado** (ficam em `localStorage["cepi-simulacoes"]`) e nunca geram erro no console.
 
 ## Roteiro de apresentação sugerido
 
@@ -67,8 +70,9 @@ Ligue o modo apresentação e entre como aluna (Ana).
 4. **Ranking** → Visibilidade → **Invisível**: a aluna sai dos rankings e só ela vê a própria posição.
 5. **Feed** → publicar uma **Dúvida** (dúvidas parecidas aparecem) ou um **Material** com um PDF real; **Estatísticas** → ver o período e baixar o relatório (PDF/CSV).
 6. **Missões** → **Entregar** a Lista 7, anexando um arquivo.
-7. **Ver como professor** → Atividades → Lista 7 → **Corrigir** a entrega da Ana; **Dúvidas** → dar a resposta oficial; **Moderação** → remover com motivo; **Trocas** → marcar a recompensa como entregue.
-8. **Ver como aluna** → sino de notificações: correção, pontos, resposta oficial e entrega chegaram.
+7. **Ver como professor** → Atividades → Lista 7 → **Corrigir** a entrega da Ana; **Feed** → **Publicar um Aviso** para o 9º A e responder a dúvida da Ana (resposta oficial); **Moderação** → remover com motivo; **Trocas** → marcar a recompensa como entregue.
+8. **Ver como aluna** → sino de notificações: correção, pontos, resposta oficial, aviso e entrega chegaram.
+9. **Simular falhas** (Roteiro) → ligue "Sem conexão" e publique uma dúvida: faixa "Sem conexão" e selo "Aguardando envio"; ligue "IA indisponível" e abra uma nova dúvida: o portal avisa e deixa escolher a disciplina à mão.
 
 ### Tempo real entre duas janelas
 
@@ -87,7 +91,7 @@ Abra o app em **duas janelas do mesmo navegador**: numa entre como aluna, na out
 | **Missões** (`/missoes`) | sequência com congeladores · missões diárias · **atividades do professor** (entrega com arquivo e nota) · **flashcards** com cartas próprias e repetição espaçada (Leitner) · desafios · missão coletiva · relatos à escola (ouvidoria) |
 | **Feed** (`/feed`) | dúvidas, materiais e avisos · busca por conceitos (sinônimos e termos da matéria) · dúvidas parecidas ao escrever · **resposta oficial** do professor fixada · **PDF e imagens reais** (envio, abrir e baixar) · denúncia |
 | **Estatísticas** (`/estatisticas`) | foco por período, disciplina e hora · evolução de pontos e XP · notas e média · duelos · missões · medalhas · relatório em **PDF** e **CSV** |
-| **Loja e Perfil** | troca de pontos por itens e vouchers (comprovante em PDF) · medalhas, domínio por disciplina · **foto, bio e @** editáveis · calendário com **lembretes** (aviso na hora marcada) · boletim e certificado em PDF · calendário `.ics` · aparência claro/escuro/sistema |
+| **Loja e Perfil** | troca de pontos por itens e vouchers (comprovante em PDF) · medalhas, domínio por disciplina · **foto, bio e @** editáveis · calendário com **lembretes** (avisos 72 h, 24 h e 2 h antes) · boletim e certificado em PDF · calendário `.ics` · aparência claro/escuro/sistema |
 | **Pessoas** (`/pessoas/[id]`) | perfil de colegas e professores, com medalhas e publicações |
 
 Não há mensagens privadas nem ranking entre colégios: a interação é pelo feed, pelas salas e pelos campeonatos da própria escola.
@@ -96,13 +100,14 @@ Não há mensagens privadas nem ranking entre colégios: a interação é pelo f
 
 | Área | Funcionalidades |
 | --- | --- |
-| **Painel** (`/professor`) | por turma: ativos hoje, estudo médio, domínio, alunos em risco, entregas a corrigir · **lembrar alunos** (no máximo 1 aviso a cada 12 h por aluno) · publicar aviso |
+| **Painel** (`/professor`) | por turma: ativos hoje, estudo por aluno, domínio médio, em risco e para corrigir · listas Precisa de atenção, Para corrigir, Destaques da semana (**Reconhecer os 3**) e Atribuições recentes · **lembrar alunos** (no máximo 1 aviso a cada 6 h por aluno) · publicar aviso (Toda a escola, 9º A, 9º B ou 8º A) · bloco Comunidade e engajamento (Dúvidas, Moderação, Salas, Campeonatos e Trocas) |
+| **Feed** (`/feed`, o mesmo da aluna) | publicar **Aviso**, **Material** ou **Publicação** com destino (Toda a escola, 9º A, 9º B ou 8º A) · responder dúvidas (resposta **oficial**) e marcar a resposta de um aluno como **Útil** · **remover** a publicação de um aluno (com motivo) · curtir e salvar por usuário · filtros Tudo, Dúvidas, Sem resposta, Materiais, Avisos e Minhas turmas · aviso "N publicações aguardando revisão" |
 | **Alunos** (`/professor/alunos`) | tabela com XP, minutos, sequência, domínio e risco · ficha do aluno · **dar pontos/XP** com motivo registrado · **trocas da loja** (marcar a recompensa como entregue) |
 | **Atividades** (`/professor/atividades`) | criar (com arquivo), acompanhar entregas **ao vivo**, **corrigir** com nota e comentário (recompensa proporcional), corrigir todas, lembrar pendentes |
 | **Dúvidas** (`/professor/duvidas`) | fila das dúvidas da turma · **resposta oficial** (o aluno é notificado e ganha pontos) |
 | **Estatísticas** (`/professor/estatisticas`) | engajamento, foco, desempenho, missões, ranking da turma, campeonatos, moderação e alunos em risco · relatórios em PDF/CSV |
 | **Salas e campeonatos** | criar salas oficiais (inclusive agendadas) e campeonatos oficiais · iniciar, encerrar e premiar |
-| **Moderação** (`/professor/moderacao`) | publicações sinalizadas ou denunciadas: **a IA só classifica, a decisão é humana** · remover exige **motivo** · histórico das decisões · relatos da ouvidoria (coordenação) |
+| **Moderação** (`/professor/moderacao`) | publicações sinalizadas ou denunciadas: **a IA só classifica, a decisão é humana** · remover exige **motivo** · histórico das decisões · relatos da ouvidoria (coordenação) · indicadores Na fila, Urgentes e Decisões · contestações das autoras · remoções feitas pelo feed (origem no histórico e no CSV) |
 
 ### Regras de gamificação
 
@@ -147,13 +152,34 @@ O time faz só o frontend, mas a integração já está desenhada:
 - **[`docs/api/schema.sql`](docs/api/schema.sql)** — esquema PostgreSQL (tabelas, restrições, gatilhos e views de ranking que respeitam o modo invisível).
 - **`src/api/`** — cliente HTTP (`client.ts`), catálogo tipado de endpoints (`endpoints.ts`), **fila de sincronização** com reenvio, idempotência e upload prévio de arquivos (`sync.ts`) e cliente WebSocket (`realtime.ts`).
 
-Toda mudança de estado passa por `commit()` (`src/store/nucleo.ts`), que chama `sincronizar(acao)`. Sem API configurada, nada é enviado; com `NEXT_PUBLIC_API_URL` no `.env.local` (veja `.env.example`), o login e as ações passam a usar o backend.
+Toda mudança de estado passa por `commit()` (`src/store/nucleo.ts`), que chama `sincronizar(acao)`. Sem API configurada, nada é enviado; com `NEXT_PUBLIC_API_URL` no `.env.local` (veja `.env.example`), o login e as ações passam a usar o backend (`Authorization: Bearer` em todo pedido) e o tempo real conecta para as notificações.
+
+A fila de saída espera 1 s, 2 s, 4 s… até 5 min; erro 5xx nunca descarta o pedido (só os 7 dias de validade); **sair da conta apaga só a fila daquela conta**. `lib/auth.ts` e `api/sync.ts` se falam por eventos da janela (`cepi:sessao-iniciada`, `cepi:sessao-encerrada`), sem importar um ao outro.
+
+**Pendências do modo integrado** (documentadas em `docs/BACKEND.md` §11): a leitura pela API (`/me/bootstrap`, `GET /posts`…) e as telas de duelo, desafio e rodada ainda não chamam os endpoints do servidor; quando ele recusa um pedido, a tela avisa mas o estado otimista não é desfeito; o tempo real só cobre notificações.
 
 ## Visual e desempenho
 
 Minimalista e alinhado ao portal da escola: fonte **Geist**, neutros em slate, verde só para ações e estados ativos, cards brancos com borda fina e tema claro/escuro sem "piscar" (script no `<head>`). **React Compiler**, **Motion com LazyMotion**, modais sob demanda (`next/dynamic`), relógios isolados (o timer é calculado por horário), `content-visibility` em listas longas e gráficos em SVG/HTML puro com paleta validada para daltonismo.
 
-A **guarda de rotas** roda no cliente (`src/lib/guarda.ts`, aplicada no `AppShell` e na demo): aluno fora de `/professor/*`, professor só em `/professor/*` e nas rotas compartilhadas. É só UX; a segurança real fica na API (veja `docs/BACKEND.md`).
+A **guarda de rotas** roda no cliente (`src/lib/guarda.ts`, aplicada no `AppShell` e na demo): aluno fora de `/professor/*`; professor fora das áreas só da aluna (`/estudos`, `/missoes`, `/ranking`, `/loja`, `/perfil`, `/estatisticas`); `/feed`, `/estudos/salas`, `/campeonatos` e `/pessoas` são **compartilhadas** pelos dois papéis; rota que não existe mostra a página 404. É só UX; a segurança real fica na API (veja `docs/BACKEND.md`).
+
+### Acessibilidade e celular
+
+- **Teclado**: link "Pular para o conteúdo" no começo de toda página e foco sempre visível.
+- **Toque**: alvos de pelo menos **44 × 44 px** no celular (a área aumenta, o visual não) e nenhuma rolagem horizontal a partir de 320 px.
+- **Gráficos**: cada gráfico tem um **resumo em texto** para leitor de tela (automático ou escrito pela tela).
+- **Imagens enviadas** têm campo de **texto alternativo** (descrição); sem ele, o `alt` é "Imagem enviada por …".
+- **Reduzir movimento**: respeita a preferência do sistema.
+- **Contraste**: botões e realces com texto branco usam o verde **#15803D** (e **#166534** ao passar o mouse); o verde claro fica para anéis, barras e ícones. Texto âmbar usa o tom `text-ouro`; placeholders são legíveis (sem opacidade).
+
+### Estados de erro e segurança
+
+- **Estados de erro** (telas 71 a 79 dos wireframes): faixa "Sem conexão" e selo "Aguardando envio · salvo neste aparelho", tela "Não foi possível carregar agora", IA com **tempo-limite e plano B** (`lib/ia.ts`: P01 2 s, P02 2,5 s, P04 2 s, P05 1 s, P07 3 s), busca por palavra-chave quando a de significado cai, "Isso foi um engano? Conteste aqui" em publicação retida, "Não conseguimos salvar seu progresso" e estados vazios com ícone, frase e ação. Detalhes e contratos em [`docs/BACKEND.md` §7.3](docs/BACKEND.md).
+- **Anexos**: só a lista permitida (`.pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx`, até 10 MB), no clique e ao arrastar; `.html`, `.svg` e `.exe` são recusados. Só PDF, imagem e texto abrem em outra aba; o resto baixa. O servidor repete a regra (tipo real, `nosniff`, `attachment`).
+- **Planilhas CSV** neutralizam fórmulas (`=HYPERLINK(...)` vira texto); **PDF** nunca mostra "?" no lugar de emoji ou setas; **`.ics`** dobra linhas por bytes.
+- **Triagem de ofensas** por palavra inteira (sem reter dúvidas como "Como excluir os valores negativos?").
+- **Cabeçalhos HTTP** em todas as rotas (`next.config.ts`): `nosniff`, `Referrer-Policy`, `X-Frame-Options: DENY`, `Permissions-Policy` e `Content-Security-Policy` (`frame-ancestors`, `object-src`, `base-uri`).
 
 ## Arquitetura
 
@@ -171,8 +197,10 @@ src/
 │   ├── ui/                Design System (Button, Card, Sheet, Segmentado, Anel, gráficos…)
 │   └── estudos/ salas/ campeonatos/ professor/ atividades/ feed/ estatisticas/ ranking/ missoes/ …
 ├── data/                  Dados de demonstração (turmas, salas, campeonatos, atividades, histórico…)
-├── lib/                   Regras puras e utilitários: estudos, campeonatos, turmas, gamificação, busca,
-│                          moderação, auth, guarda, arquivos (IndexedDB), pdf, exportar, apresentação, tema
+├── hooks/                 Hooks de cliente: useAtor (quem usa esta aba), useConexao, useAgora, useMidia…
+├── lib/                   Regras puras e utilitários: estudos, campeonatos, turmas, gamificação, busca, ia,
+│                          moderação, auth, guarda, arquivos (IndexedDB), pdf, exportar, simulacoes,
+│                          conexao, apresentação, tema
 ├── api/                   Cliente HTTP, endpoints, DTOs, sincronização e tempo real (backend)
 └── store/
     ├── types.ts           Tipos do domínio
@@ -185,8 +213,10 @@ src/
     └── ui.ts              Estado não salvo: toasts, comemorações
 scripts/demo/              Gerador da demo em HTML único (`npm run demo`)
 demonstração/              Portal_do_Aluno.html (saída do gerador)
-docs/                      BACKEND.md e api/ (OpenAPI + SQL)
+docs/                      BACKEND.md e api/ (OpenAPI com 117 operações + SQL com 59 tabelas)
 ```
+
+Documentos do projeto em Markdown (Arquitetura da Solução, Design System, Navegação e Fluxos e Wireframes, com as telas): [`docs/projeto/`](docs/projeto/).
 
 ## Stack
 
