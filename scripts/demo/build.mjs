@@ -40,15 +40,27 @@ function lerCss() {
   return { css, variaveis };
 }
 
-// ── Script do tema (roda no <head>, antes da primeira pintura) ──
+// ── Script do tema (roda no <head>, antes da primeira pintura) e cores da barra do navegador ──
 async function scriptTema() {
   const r = await esbuild.build({
-    stdin: { contents: `import { SCRIPT_TEMA } from ${JSON.stringify(path.join(SRC, "lib/tema-script.ts"))}; saida(SCRIPT_TEMA);`, resolveDir: AQUI, loader: "ts" },
+    stdin: { contents: `import { SCRIPT_TEMA, COR_BARRA } from ${JSON.stringify(path.join(SRC, "lib/tema-script.ts"))}; saida(SCRIPT_TEMA, COR_BARRA);`, resolveDir: AQUI, loader: "ts" },
     bundle: true, write: false, format: "iife", platform: "neutral",
   });
-  let s = "";
-  vm.runInNewContext(r.outputFiles[0].text, { saida: (x) => (s = x) });
-  return s;
+  let script = "";
+  let cores = { claro: "#ffffff", escuro: "#0f1623" };
+  vm.runInNewContext(r.outputFiles[0].text, { saida: (x, c) => ((script = x), (cores = { ...c })) });
+  return { script, cores };
+}
+
+// ── Nome da escola (fonte única: src/data/escola.ts), para o <title> estático ficar igual ao título em execução ──
+async function dadosEscola() {
+  const r = await esbuild.build({
+    stdin: { contents: `import { ESCOLA } from ${JSON.stringify(path.join(SRC, "data/escola.ts"))}; saida(ESCOLA);`, resolveDir: AQUI, loader: "ts" },
+    bundle: true, write: false, format: "iife", platform: "neutral",
+  });
+  let escola = {};
+  vm.runInNewContext(r.outputFiles[0].text, { saida: (x) => (escola = { ...x }) });
+  return escola;
 }
 
 // ── Bundle do app ──
@@ -71,7 +83,6 @@ const pluginDemo = {
       if (!path.resolve(a.path).startsWith(path.resolve(SRC))) return undefined;
       let t = fs.readFileSync(a.path, "utf8");
       t = t.replaceAll('="/cepi-logo.png"', "={globalThis.__LOGO_CEPI}").replaceAll('"/cepi-logo.png"', "globalThis.__LOGO_CEPI");
-      t = t.replaceAll("${location.origin}/feed#post-", '${location.href.split("#")[0]}#/feed#post-');
       return { contents: t, loader: a.path.endsWith("x") ? "tsx" : "ts" };
     });
   },
@@ -92,7 +103,8 @@ const r = await esbuild.build({
 const js = r.outputFiles[0].text.replaceAll("</script", "<\\/script");
 
 const { css, variaveis } = lerCss();
-const tema = await scriptTema();
+const { script: tema, cores: corBarra } = await scriptTema();
+const ESCOLA = await dadosEscola();
 const icone = dataUri(path.join(SRC, "app/icon.png"), "image/png");
 
 const html = `<!doctype html>
@@ -100,9 +112,10 @@ const html = `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#ffffff">
-<meta name="description" content="Portal do Aluno — Colégio CEPI Expansão. Versão de demonstração em arquivo único (funciona offline).">
-<title>Portal do Aluno · CEPI</title>
+<meta name="theme-color" content="${corBarra.claro}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="${corBarra.escuro}" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Portal do Aluno — ${ESCOLA.nome}. Versão de demonstração em arquivo único (funciona offline).">
+<title>Portal do Aluno · ${ESCOLA.curto}</title>
 <link rel="icon" href="${icone}">
 <script>${tema};window.__LOGO_CEPI=${JSON.stringify(LOGO)}</script>
 <style>${css}</style>
