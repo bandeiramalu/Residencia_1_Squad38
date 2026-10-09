@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Caveat, Geist, Geist_Mono } from "next/font/google";
 import { AppShell } from "@/components/shell/AppShell";
 import { ESCOLA } from "@/data/escola";
-import { SCRIPT_TEMA } from "@/lib/tema-script";
+import { COR_BARRA, SCRIPT_TEMA } from "@/lib/tema-script";
 import "./globals.css";
 
 // Mesma família do portal Zenix Education — o módulo social parece parte do portal.
@@ -39,7 +39,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#ffffff",
+  // Barra do navegador na cor do tema. O script do tema e o AppShell reescrevem os metas quando a pessoa
+  // escolhe um tema diferente do sistema (preferência "claro"/"escuro").
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: COR_BARRA.claro },
+    { media: "(prefers-color-scheme: dark)", color: COR_BARRA.escuro },
+  ],
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

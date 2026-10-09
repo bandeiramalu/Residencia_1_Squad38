@@ -4,6 +4,39 @@
 @custom-variant dark (&:where([data-tema="escuro"], [data-tema="escuro"] *));
 
 /*
+ * `toque:` vale no celular (< 640 px) e em qualquer aparelho de toque (ponteiro "grosso").
+ * Serve para mudar só o que for preciso no celular (ex.: `toque:h-11` num campo); para ampliar apenas a ÁREA de toque
+ * de um controle pequeno até 44 × 44 px (DS §16), sem mudar o visual, use `alvo-toque` (abaixo).
+ */
+@custom-variant toque {
+  @media (pointer: coarse), (max-width: 639px) {
+    @slot;
+  }
+}
+
+/*
+ * `alvo-toque`: área de toque de no mínimo 44 × 44 px, centrada no controle (qualquer tamanho), só no celular/toque.
+ * Troca o `toque:after:-inset-*` à mão, que parte do tamanho do controle e deixa texto de 18–20 px em 42 px.
+ * Já posiciona o elemento (`relative`, salvo `absolute`/`fixed`/`sticky`). Não serve com `overflow: hidden` (o `::after` seria cortado): lá use `toque:py-3.5 toque:-my-3.5`.
+ */
+@utility alvo-toque {
+  &:where(:not(.absolute, .fixed, .sticky)) {
+    position: relative;
+  }
+  @variant toque {
+    &::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: max(100%, 2.75rem);
+      height: max(100%, 2.75rem);
+      translate: -50% -50%;
+    }
+  }
+}
+
+/*
  * Design System — Portal do Aluno (Squad 38) · v3 "minimalista"
  * Alinhado ao portal Zenix Education (ambiente de teste da escola): fonte Geist,
  * neutros em slate, verde como cor de ação, cards brancos com borda fina e sem sombra.
@@ -12,6 +45,9 @@
 @theme {
   --color-verde: #16a34a; /* Ação principal (botões, ativos) */
   --color-verde-2: #15803d; /* Hover / ênfase */
+  /* Botão primário e realces com texto branco: 5,0:1 (repouso) e 7,1:1 (hover) nos dois temas. */
+  --color-acao: #15803d;
+  --color-acao-2: #166534;
   --color-verde-claro: #dcfce7; /* Fundo de estado ativo e badges */
   --color-verde-mclaro: #f0fdf4; /* Fundo suave de destaque */
   --color-verde-suave: #bbf7d0; /* Trilhos e detalhes */
@@ -72,6 +108,8 @@
   color-scheme: dark;
   --color-verde: #16a34a;
   --color-verde-2: #22c55e;
+  --color-acao: #15803d;
+  --color-acao-2: #166534;
   --color-verde-claro: #12291c;
   --color-verde-mclaro: #0d1f16;
   --color-verde-suave: #1c4a31;
@@ -362,14 +400,16 @@ body {
 /* ───────────── Dados (gráficos) ─────────────
  * Cor por disciplina: paleta categórica validada (daltonismo + contraste) nos dois temas,
  * sempre na mesma ordem de DISCIPLINAS — a cor segue a disciplina, nunca a posição.
+ * Objeto gráfico precisa de 3:1 contra a superfície (WCAG 1.4.11): no claro, as três cores que ficavam abaixo
+ * (História, Português, Química) foram escurecidas só até passar, mantendo o matiz (3,08 / 3,06 / 3,06 : 1 sobre branco).
  * Mapa de calor: rampa sequencial de um só tom (verde), do claro ao escuro.
  */
 :root {
   --disc-1: #2a78d6;
   --disc-2: #eb6834;
-  --disc-3: #1baf7a;
-  --disc-4: #eda100;
-  --disc-5: #e87ba4;
+  --disc-3: #1aa775;
+  --disc-4: #c68700;
+  --disc-5: #e56a99;
   --disc-6: #008300;
   --disc-7: #4a3aa7;
   --disc-8: #e34948;

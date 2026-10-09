@@ -4,6 +4,7 @@ import { Coins, Flame, ShoppingBag, Sparkles, Trophy } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { classesDoBotao } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Sheet } from "@/components/ui/Sheet";
 import { fmt } from "@/lib/format";
@@ -48,18 +49,10 @@ function Conteudo({ onFechar }: { onFechar: () => void }) {
       <p className="mt-3 text-[12.5px] text-texto-2">Gastar pontos na Loja não muda seu XP nem sua posição no ranking.</p>
 
       <div className="mt-4 grid grid-cols-2 gap-2.5">
-        <Link
-          href="/loja"
-          onClick={onFechar}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg bg-verde px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-verde-2 active:scale-[0.98]"
-        >
+        <Link href="/loja" onClick={onFechar} className={classesDoBotao({ variante: "primario", tamanho: "lg", bloco: true })}>
           <ShoppingBag className="size-4" /> Ir para a Loja
         </Link>
-        <Link
-          href="/ranking"
-          onClick={onFechar}
-          className="flex h-10 items-center justify-center gap-2 rounded-lg border border-borda bg-superficie px-4 text-sm font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98]"
-        >
+        <Link href="/ranking" onClick={onFechar} className={classesDoBotao({ variante: "secundario", tamanho: "lg", bloco: true })}>
           <Trophy className="size-4 text-texto-2" /> Ver ranking
         </Link>
       </div>

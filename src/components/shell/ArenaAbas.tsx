@@ -22,7 +22,7 @@ export function ArenaAbas({ className }: { className?: string }) {
             href={href}
             aria-current={ativo ? "page" : undefined}
             className={cn(
-              "-mb-px border-b-2 pb-2.5 text-[14px] transition-colors",
+              "-mb-px border-b-2 pb-2.5 text-[14px] transition-colors toque:pt-3 toque:pb-3",
               ativo ? "border-tinta font-semibold text-tinta" : "border-transparent text-texto-2 hover:text-tinta",
             )}
           >

@@ -17,17 +17,18 @@ export function BottomNav({ papel }: { papel: PapelSessao }) {
           const Icone = aba.icone;
           const ativo = itemAtivo(aba, caminho);
           return (
-            <li key={aba.href}>
+            <li key={aba.href} className="min-w-0">
               <Link
                 href={aba.href}
                 aria-current={ativo ? "page" : undefined}
                 className={cn(
-                  "flex h-full flex-col items-center justify-center gap-0.5 transition-colors duration-150 active:scale-95",
+                  "flex h-full min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition-colors duration-150 active:scale-95",
                   ativo ? "text-tinta" : "text-texto-2 hover:text-tinta",
                 )}
               >
                 <Icone className="size-[22px]" strokeWidth={ativo ? 2.25 : 1.75} />
-                <span className={cn("text-[10.5px] leading-none", ativo ? "font-semibold" : "font-medium")}>{aba.rotulo}</span>
+                {/* 10 px e `truncate`: "Estatísticas" cabe nos 64 px de cada aba em 320 px de largura. */}
+                <span className={cn("max-w-full truncate text-[10px] leading-tight tracking-tight min-[360px]:text-[10.5px] min-[360px]:tracking-normal", ativo ? "font-semibold" : "font-medium")}>{aba.rotulo}</span>
               </Link>
             </li>
           );

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { Sheet } from "@/components/ui/Sheet";
 import { useAgora } from "@/hooks/useAgora";
+import { useSessao } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { tempoRelativo } from "@/lib/tempo";
 import { lerNotificacao, lerTodasNotificacoes } from "@/store/actions";
@@ -41,6 +42,7 @@ export function NotificacoesSheet({ aberto, onFechar, notificacoes: todas }: { a
   const pessoas = useSeletor((e) => e.pessoas);
   const usuarioEu = useSeletor((e) => e.usuario);
   const notificacoes = todas;
+  const professor = useSessao()?.papel === "professor";
   const agora = useAgora(30_000);
   const naoLidas = notificacoes.filter((n) => !n.lida).length;
 
@@ -55,7 +57,15 @@ export function NotificacoesSheet({ aberto, onFechar, notificacoes: todas }: { a
   return (
     <Sheet aberto={aberto} onFechar={onFechar} titulo="Notificações" subtitulo={naoLidas ? `${naoLidas} não ${naoLidas === 1 ? "lida" : "lidas"}` : "Tudo em dia"}>
       {notificacoes.length === 0 ? (
-        <Vazio icone={<BellOff />} titulo="Nenhuma notificação" descricao="Quando algo acontecer nas suas turmas, aparece aqui." />
+        <Vazio
+          icone={<BellOff />}
+          titulo="Nenhuma notificação por enquanto"
+          descricao={
+            professor
+              ? "Aqui aparecem entregas dos alunos, dúvidas das turmas e publicações para revisar."
+              : "Aqui aparecem correções, avisos dos professores, lembretes e convites para salas e campeonatos."
+          }
+        />
       ) : (
         <>
           {naoLidas > 0 && (

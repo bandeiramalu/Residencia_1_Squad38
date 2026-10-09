@@ -6,15 +6,16 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { ESCOLA } from "@/data/escola";
 import { useFecharFora } from "@/hooks/useFecharFora";
 import { useModoApresentacao } from "@/lib/apresentacao";
-import { entrarComoDemo, sair, type PapelSessao, type Sessao } from "@/lib/auth";
+import { entrarComoDemo, type PapelSessao, type Sessao } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { useSeletor } from "@/store/store";
 import { itemAtivo, NAV_LATERAL } from "./abas";
+import { useSair } from "./SairSheet";
 import { TemaSegmentado } from "./TemaToggle";
 
 const RoteiroSheet = dynamic(() => import("./RoteiroSheet").then((m) => m.RoteiroSheet));
@@ -24,6 +25,7 @@ export function Sidebar({ papel, sessao }: { papel: PapelSessao; sessao: Sessao 
   const caminho = usePathname();
   const [roteiro, setRoteiro] = useState(false);
   const apresentacao = useModoApresentacao();
+  const idGrupo = useId();
 
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-(--sidebar) flex-col border-r border-borda bg-superficie lg:flex">
@@ -37,30 +39,36 @@ export function Sidebar({ papel, sessao }: { papel: PapelSessao; sessao: Sessao 
 
       <nav aria-label="Navegação principal" className="sem-scrollbar flex-1 overflow-y-auto px-3 py-1">
         {NAV_LATERAL[papel].map((grupo, g) => (
-          <ul key={grupo.titulo} className={cn("space-y-0.5", g > 0 && "mt-2 border-t border-borda pt-2")}>
-            {grupo.itens.map((item) => {
-              const ativo = itemAtivo(item, caminho);
-              const Icone = item.icone;
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    aria-current={ativo ? "page" : undefined}
-                    className={cn(
-                      "relative flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] transition-colors duration-150",
-                      ativo ? "font-semibold text-tinta" : "text-texto hover:bg-superficie-2 hover:text-tinta",
-                    )}
-                  >
-                    {ativo && (
-                      <motion.span layoutId="lateral-ativa" className="absolute inset-0 rounded-lg bg-superficie-2" transition={{ type: "spring", stiffness: 600, damping: 45 }} />
-                    )}
-                    <Icone className="relative size-[19px]" strokeWidth={ativo ? 2.25 : 1.75} />
-                    <span className="relative flex-1 truncate">{item.rotulo}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+          <div key={grupo.titulo} className={cn(g > 0 && "mt-2 border-t border-borda pt-2")}>
+            {/* Título do grupo: visível (DS §10) e usado como nome da lista para leitores de tela. */}
+            <p id={`${idGrupo}-${g}`} className="px-3 pb-1 pt-1.5 text-[11.5px] font-medium leading-none text-texto-2">
+              {grupo.titulo}
+            </p>
+            <ul aria-labelledby={`${idGrupo}-${g}`} className="space-y-0.5">
+              {grupo.itens.map((item) => {
+                const ativo = itemAtivo(item, caminho);
+                const Icone = item.icone;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      aria-current={ativo ? "page" : undefined}
+                      className={cn(
+                        "relative flex h-10 items-center gap-3 rounded-lg px-3 text-[14px] transition-colors duration-150 toque:h-11",
+                        ativo ? "font-semibold text-tinta" : "text-texto hover:bg-superficie-2 hover:text-tinta",
+                      )}
+                    >
+                      {ativo && (
+                        <motion.span layoutId="lateral-ativa" className="absolute inset-0 rounded-lg bg-superficie-2" transition={{ type: "spring", stiffness: 600, damping: 45 }} />
+                      )}
+                      <Icone className="relative size-[19px]" strokeWidth={ativo ? 2.25 : 1.75} />
+                      <span className="relative flex-1 truncate">{item.rotulo}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         ))}
       </nav>
 
@@ -81,6 +89,7 @@ function Conta({ papel, sessao, apresentacao, onRoteiro }: { papel: PapelSessao;
   const nome = papel === "aluno" ? nomeAluna : sessao.nome;
   const fecharMenu = useCallback(() => setAberto(false), []);
   useFecharFora(ref, aberto, fecharMenu);
+  const { pedir: pedirSaida, dialogo: dialogoSaida } = useSair();
   const outro: PapelSessao = papel === "professor" ? "aluno" : "professor";
 
   const itens = [
@@ -91,14 +100,7 @@ function Conta({ papel, sessao, apresentacao, onRoteiro }: { papel: PapelSessao;
           { icone: Repeat2, texto: outro === "professor" ? "Ver como professor" : "Ver como aluna", acao: () => router.push(entrarComoDemo(outro)) },
         ]
       : []),
-    {
-      icone: LogOut,
-      texto: "Sair",
-      acao: () => {
-        sair();
-        router.push("/login");
-      },
-    },
+    { icone: LogOut, texto: "Sair", acao: pedirSaida },
   ];
 
   return (
@@ -127,7 +129,7 @@ function Conta({ papel, sessao, apresentacao, onRoteiro }: { papel: PapelSessao;
                     setAberto(false);
                     acao();
                   }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-texto transition-colors hover:bg-superficie-2 hover:text-tinta"
+                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-texto transition-colors hover:bg-superficie-2 hover:text-tinta toque:py-3"
                 >
                   <Icone className="size-4 text-texto-2" /> {texto}
                 </button>
@@ -150,6 +152,7 @@ function Conta({ papel, sessao, apresentacao, onRoteiro }: { papel: PapelSessao;
         </span>
         <MoreHorizontal className="size-4 text-texto-2" />
       </button>
+      {dialogoSaida}
     </div>
   );
 }

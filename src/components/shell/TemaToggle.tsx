@@ -41,7 +41,7 @@ export function BotaoTema({ className }: { className?: string }) {
       type="button"
       onClick={alternar}
       aria-label={tema === "escuro" ? "Usar tema claro" : "Usar tema escuro"}
-      className={cn("grid size-9 place-items-center rounded-full text-texto transition-colors hover:bg-verde-mclaro hover:text-acento active:scale-90", className)}
+      className={cn("grid size-9 place-items-center rounded-full text-texto transition-colors hover:bg-verde-mclaro hover:text-acento active:scale-90 toque:size-11", className)}
     >
       {tema === "escuro" ? <Sun className="size-[18px]" /> : <Moon className="size-[18px]" />}
     </button>

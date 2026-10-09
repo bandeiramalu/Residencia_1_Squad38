@@ -6,6 +6,7 @@ import {
   Hourglass,
   House,
   LayoutDashboard,
+  Newspaper,
   ShieldAlert,
   ShoppingBag,
   Swords,
@@ -46,10 +47,10 @@ export const NAV_MOBILE: Record<PapelSessao, ItemNav[]> = {
   ],
   professor: [
     { href: "/professor", rotulo: "Painel", icone: LayoutDashboard, exato: true },
+    { href: "/feed", rotulo: "Feed", icone: Newspaper },
     { href: "/professor/alunos", rotulo: "Alunos", icone: UsersRound },
     { href: "/professor/atividades", rotulo: "Atividades", icone: ClipboardList },
     { href: "/professor/estatisticas", rotulo: "Estatísticas", icone: ChartColumn },
-    { href: "/campeonatos", rotulo: "Campeonatos", icone: Swords },
   ],
 };
 
@@ -88,7 +89,6 @@ export const NAV_LATERAL: Record<PapelSessao, GrupoNav[]> = {
         { href: "/professor", rotulo: "Painel", icone: LayoutDashboard, exato: true },
         { href: "/professor/alunos", rotulo: "Alunos", icone: UsersRound },
         { href: "/professor/atividades", rotulo: "Atividades", icone: ClipboardList },
-        { href: "/professor/duvidas", rotulo: "Dúvidas", icone: CircleHelp },
         { href: "/professor/estatisticas", rotulo: "Estatísticas", icone: ChartColumn },
       ],
     },
@@ -101,7 +101,11 @@ export const NAV_LATERAL: Record<PapelSessao, GrupoNav[]> = {
     },
     {
       titulo: "Comunidade",
-      itens: [{ href: "/professor/moderacao", rotulo: "Moderação", icone: ShieldAlert }],
+      itens: [
+        { href: "/feed", rotulo: "Feed da escola", icone: Newspaper },
+        { href: "/professor/duvidas", rotulo: "Dúvidas", icone: CircleHelp },
+        { href: "/professor/moderacao", rotulo: "Moderação", icone: ShieldAlert },
+      ],
     },
   ],
 };
@@ -114,16 +118,4 @@ export function itemAtivo(item: ItemNav, caminho: string) {
   if (item.exato) return caminho === item.href;
   if (item.exceto?.some((p) => casa(caminho, p))) return false;
   return (item.prefixos ?? [item.href]).some((p) => casa(caminho, p));
-}
-
-/**
- * Ordem "espacial" das telas para a transição: abas da esquerda para a direita;
- * telas internas (detalhes) vêm depois da aba a que pertencem.
- */
-export function ordemDaRota(caminho: string, papel: PapelSessao) {
-  const abas = NAV_MOBILE[papel];
-  const i = abas.findIndex((a) => itemAtivo(a, caminho));
-  if (i < 0) return -1;
-  const profundidade = caminho.split("/").filter(Boolean).length - abas[i].href.split("/").filter(Boolean).length;
-  return i + Math.max(0, profundidade) * 0.1;
 }
