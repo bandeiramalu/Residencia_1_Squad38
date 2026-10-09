@@ -1,5 +1,7 @@
 "use client";
 
+import { Hourglass, Info } from "lucide-react";
+import Link from "next/link";
 import { type ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { Barras, BarrasHorizontais, MapaDeCalor, Rosca } from "@/components/ui/graficos";
@@ -21,8 +23,18 @@ function Cab({ titulo, nota }: { titulo: string; nota?: ReactNode }) {
   );
 }
 
-function Vazio({ children }: { children: ReactNode }) {
-  return <p className="mt-4 rounded-xl border border-dashed border-borda px-4 py-6 text-center text-[13px] text-texto-2">{children}</p>;
+function Vazio({ children, icone, acao }: { children: ReactNode; icone?: ReactNode; acao?: { rotulo: string; href: string } }) {
+  return (
+    <div className="mt-4 rounded-xl border border-dashed border-borda px-4 py-6 text-center text-[13px] text-texto-2">
+      {icone && <span className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-superficie-2 text-texto-2 [&_svg]:size-4">{icone}</span>}
+      <p>{children}</p>
+      {acao && (
+        <Link href={acao.href} className="alvo-toque mt-2 inline-block font-medium text-acento hover:underline">
+          {acao.rotulo}
+        </Link>
+      )}
+    </div>
+  );
 }
 
 const sufixo = (r: Recorte) => (r.disciplina ? ` · ${r.disciplina}` : "");
@@ -116,7 +128,7 @@ export function PorDisciplinaRecorte({ recorte, className }: { recorte: Recorte;
           </div>
         </>
       ) : (
-        <Vazio>Nada registrado neste recorte.</Vazio>
+        <Vazio icone={<Hourglass />} acao={{ rotulo: "Iniciar um foco", href: "/estudos" }}>Nada registrado neste recorte.</Vazio>
       )}
     </Card>
   );
@@ -133,7 +145,7 @@ export function VoceVsTurmaRecorte({ recorte, turma, className }: { recorte: Rec
     <Card semPadding className={cn("p-5", className)}>
       <Cab titulo="Você × turma" nota="média por semana" />
       {recorte.disciplina ? (
-        <Vazio>A média da turma considera todas as disciplinas. Escolha &ldquo;Todas as disciplinas&rdquo; para comparar.</Vazio>
+        <Vazio icone={<Info />}>A média da turma considera todas as disciplinas. Escolha &ldquo;Todas as disciplinas&rdquo; para comparar.</Vazio>
       ) : (
         <>
           <div className="mt-4">
