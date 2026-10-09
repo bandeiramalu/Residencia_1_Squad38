@@ -22,9 +22,10 @@ export function baixarDoPost(post: Post, autor?: Pessoa) {
   toast({ tipo: "info", titulo: "Download iniciado", mensagem: post.anexo.nome }, 2400);
 }
 
-/** Link que funciona no HTML offline: abre o feed e destaca o post. */
+/** Link do post: rota por hash no HTML offline (file://); no Next, URL normal. */
 export function linkDoPost(postId: string) {
-  return `${location.href.split("#")[0]}#/feed?post=${encodeURIComponent(postId)}`;
+  const id = encodeURIComponent(postId);
+  return location.protocol === "file:" ? `${location.href.split("#")[0]}#/feed?post=${id}` : `${location.origin}/feed?post=${id}`;
 }
 
 async function copiar(texto: string) {

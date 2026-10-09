@@ -262,9 +262,10 @@ export function BotaoLembrar({ sala, className }: { sala: SalaEstudo; className?
   );
 }
 
-/** Link da sala que funciona também no HTML offline (rotas por hash). */
+/** Link da sala: rota por hash no HTML offline (file://); no Next, URL normal. */
 export function linkDaSala(id: string) {
-  return `${location.href.split("#")[0]}#/estudos/salas/${id}`;
+  const caminho = `/estudos/salas/${encodeURIComponent(id)}`;
+  return location.protocol === "file:" ? `${location.href.split("#")[0]}#${caminho}` : `${location.origin}${caminho}`;
 }
 
 /** Convida: compartilha o link da sala (navigator.share) ou copia como alternativa. */

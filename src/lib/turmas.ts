@@ -6,7 +6,8 @@
  */
 import { alunosDaTurma, type AlunoTurma } from "@/data/turmas";
 import { TURMAS_DO_PROFESSOR } from "@/data/professor";
-import type { AppState, Post } from "@/store/types";
+import { ganhosPorDia } from "@/components/estatisticas/calculos";
+import type { AppState, Post, SessaoEstudo } from "@/store/types";
 import { minutosPorDia } from "./estudos";
 
 export type Risco = "alto" | "medio" | "baixo";
@@ -20,6 +21,10 @@ export interface AlunoPainel extends AlunoTurma {
   dominioMedio: number;
   /** Atividades desta turma ainda não entregues pelo aluno. */
   pendentes: number;
+  /** Só na aluna ao vivo: sessões reais de estudo (para recortes por disciplina e períodos longos). */
+  sessoes?: SessaoEstudo[];
+  /** Só na aluna ao vivo: XP ganho por dia nos últimos 90 dias (do mais antigo até hoje). */
+  xpDiario90?: number[];
 }
 
 const DIA_MIN = 24 * 60;
@@ -39,8 +44,12 @@ export function alunosDoPainel(estado: AppState, turma: string, agora: number): 
 
   return alunosDaTurma(turma).map((base) => {
     const bonus = estado.bonus[base.id] ?? { pontos: 0, xp: 0 };
+    // Nome e iniciais atuais vêm do cadastro no store (a pessoa pode ter editado o perfil).
+    const cadastro = estado.pessoas[base.id];
     let a: AlunoTurma = {
       ...base,
+      nome: cadastro?.nome ?? base.nome,
+      iniciais: cadastro?.iniciais ?? base.iniciais,
       xp: base.xp + bonus.xp,
       xpSemana: base.xpSemana + bonus.xp,
       pontos: base.pontos + bonus.pontos,
@@ -70,6 +79,7 @@ export function alunosDoPainel(estado: AppState, turma: string, agora: number): 
       risco: aoVivo ? "baixo" : risco(a),
       dominioMedio: Math.round(valores.reduce((s, v) => s + v, 0) / valores.length),
       pendentes: pendentesPorAluno.get(a.id) ?? 0,
+      ...(aoVivo ? { sessoes: estado.estudos.sessoes, xpDiario90: ganhosPorDia(estado, 90, agora).map((g) => g.xp) } : {}),
     };
   });
 }

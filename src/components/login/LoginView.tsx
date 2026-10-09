@@ -2,7 +2,7 @@
 
 import { ArrowRight, ChevronDown, Eye, EyeOff, GraduationCap, IdCard, Lock, Mail, Presentation } from "lucide-react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { BotaoTema } from "@/components/shell/TemaToggle";
 import { Button } from "@/components/ui/Button";
@@ -10,16 +10,12 @@ import { Campo, Entrada } from "@/components/ui/Campo";
 import { Segmentado } from "@/components/ui/Segmentado";
 import { ESCOLA } from "@/data/escola";
 import { CONTAS_DEMO, ErroLogin, confirmarMatricula, entrar, entrarComoDemo, redefinirSenha, type PapelSessao } from "@/lib/auth";
-
-function destinoSeguro(padrao: string) {
-  const voltar = new URLSearchParams(window.location.search).get("voltar");
-  // Só caminhos internos (evita redirecionamento aberto).
-  return voltar && voltar.startsWith("/") && !voltar.startsWith("//") ? voltar : padrao;
-}
+import { destinoAposLogin } from "@/lib/guarda";
 
 /** Entrada no portal: um cartão simples, no padrão visual do portal da escola. */
 export function LoginView() {
   const router = useRouter();
+  const voltar = useSearchParams().get("voltar");
   const [papel, setPapel] = useState<PapelSessao>("aluno");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
@@ -71,7 +67,7 @@ export function LoginView() {
     setEntrando(true);
     try {
       const home = await entrar(email, senha, papel);
-      router.replace(papel === "aluno" ? destinoSeguro(home) : home);
+      router.replace(destinoAposLogin(papel, voltar) || home);
     } catch (err) {
       setErro(err instanceof ErroLogin ? err.message : "Não foi possível entrar agora. Tente de novo.");
       setEntrando(false);
@@ -219,7 +215,7 @@ export function LoginView() {
                   <button
                     key={p}
                     type="button"
-                    onClick={() => router.replace(entrarComoDemo(p))}
+                    onClick={() => { entrarComoDemo(p); router.replace(destinoAposLogin(p, voltar)); }}
                     className="flex items-center gap-3 rounded-xl border border-borda bg-superficie p-3 text-left transition-colors hover:bg-superficie-2 active:scale-[0.98]"
                   >
                     <span className="grid size-8 shrink-0 place-items-center rounded-full bg-superficie-2 text-texto-2">

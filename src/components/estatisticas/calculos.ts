@@ -72,7 +72,7 @@ export function ganhosPorDia(estado: AppState, dias: number, agora: number): Gan
   for (const a of estado.atividades) {
     for (const e of a.entregas) if (e.alunoId === u.id && e.status === "corrigida") somar(e.entregueEm ?? a.prazo, e.xp ?? 0, e.pontos ?? 0);
   }
-  for (const a of estado.atribuicoes) if (a.alunoId === u.id) somar(a.criadoEm, a.xp, a.pontos);
+  for (const a of estado.atribuicoes) if (a.alunoId === u.id && a.origem !== "correcao") somar(a.criadoEm, a.xp, a.pontos);
 
   const base = minutosPorDia(estado.estudos.sessoes, JANELA, agora);
   const pesoTotal = base.reduce((s, d) => s + d.minutos, 0);

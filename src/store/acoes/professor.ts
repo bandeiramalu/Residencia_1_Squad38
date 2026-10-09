@@ -2,9 +2,11 @@
  * Ações exclusivas do professor: pontos, avisos, lembretes, dúvidas, moderação,
  * relatos à coordenação e trocas da loja. Tudo vira estado persistido e notificação real.
  */
+import { MODO_API } from "@/api/client";
 import { ALUNOS_TURMAS } from "@/data/turmas";
 import { lerSessao } from "@/lib/auth";
 import { gerarId, primeiroNome } from "@/lib/format";
+import { responderPost } from "../actions";
 import { commit, ehAluno, notificar, premiar } from "../nucleo";
 import { obterEstado } from "../store";
 import type { DecisaoModeracao, EspacoId, Notificacao } from "../types";
@@ -72,6 +74,11 @@ export function publicarAviso(texto: string, espaco: EspacoId) {
 export const INTERVALO_LEMBRETE_MS = 6 * 60 * 60 * 1000;
 
 /** Quanto falta para o aluno poder receber outro lembrete (0 = já pode). */
+/** Chave da trava de 6 h: lembrete de estudos usa o id do aluno; o de atividade tem trava própria. */
+export function chaveLembrete(alunoId: string, tipo?: Notificacao["tipo"]) {
+  return tipo === "atividade" ? `atividade:${alunoId}` : alunoId;
+}
+
 export function liberaLembreteEm(lembradoEm: number | undefined, agora: number) {
   return lembradoEm ? Math.max(0, lembradoEm + INTERVALO_LEMBRETE_MS - agora) : 0;
 }
@@ -90,7 +97,7 @@ export function lembrarAlunos(alunoIds: string[], op: OpcoesLembrete = {}) {
   const agora = Date.now();
   const { lembradoEm = {}, pessoas } = obterEstado();
   const prof = professorId();
-  const alvo = [...new Set(alunoIds)].filter((id) => op.forcar || liberaLembreteEm(lembradoEm[id], agora) === 0);
+  const alvo = [...new Set(alunoIds)].filter((id) => op.forcar || liberaLembreteEm(lembradoEm[chaveLembrete(id, op.tipo)], agora) === 0);
   if (!alvo.length) return 0;
   notificarTodos(alvo, {
     tipo: op.tipo ?? "sistema",
@@ -99,7 +106,7 @@ export function lembrarAlunos(alunoIds: string[], op: OpcoesLembrete = {}) {
     href: op.href ?? "/estudos",
     deId: prof,
   });
-  commit({ type: "lembrarAlunos", ids: alvo, em: agora });
+  commit({ type: "lembrarAlunos", ids: alvo.map((id) => chaveLembrete(id, op.tipo)), em: agora });
   const nome = alvo.length === 1 ? primeiroNome(pessoas[alvo[0]]?.nome ?? "") : `${alvo.length} alunos`;
   toast({ tipo: "info", titulo: `Lembrete enviado para ${nome}`, mensagem: "Chega como notificação no portal." }, 2600);
   return alvo.length;
@@ -107,17 +114,14 @@ export function lembrarAlunos(alunoIds: string[], op: OpcoesLembrete = {}) {
 
 /* ───────────── Dúvidas ───────────── */
 
-/** Resposta oficial do professor a uma dúvida; o autor é notificado. */
+/** Resposta oficial do professor a uma dúvida: mesma regra do feed (`responderPost`: pontos, XP e notificação). */
 export function responderDuvida(postId: string, texto: string) {
   const post = obterEstado().posts.find((p) => p.id === postId);
-  const limpo = texto.trim();
-  if (!post || !limpo) return false;
-  const prof = professorId();
-  commit({ type: "responder", postId, resposta: { id: gerarId("r"), autorId: prof, texto: limpo, criadoEm: Date.now(), uteis: 0, util: false, oficial: true } });
-  if (post.autorId !== prof) {
-    notificar(post.autorId, { tipo: "sistema", titulo: `${nomeDoProfessor()} respondeu sua dúvida`, texto: limpo.slice(0, 90), href: `/feed?post=${postId}`, deId: prof });
-  }
-  toast({ tipo: "info", titulo: "Resposta publicada", mensagem: `${primeiroNome(obterEstado().pessoas[post.autorId]?.nome ?? "O aluno")} foi avisado.` }, 2400);
+  if (!post || !texto.trim()) return false;
+  const id = responderPost(postId, texto, { autorId: professorId(), oficial: true });
+  if (!id) return false;
+  const nome = primeiroNome(obterEstado().pessoas[post.autorId]?.nome ?? "");
+  toast({ tipo: "info", titulo: "Resposta publicada", mensagem: nome ? `Notificação enviada para ${nome}.` : "O autor recebeu a notificação." }, 2400);
   return true;
 }
 
@@ -153,19 +157,22 @@ export function moderarPost(postId: string, decisao: DecisaoModeracao, motivo?: 
     type: "registrarModeracao",
     registro: { id: gerarId("mod"), postId, decisao, decididoPor: prof, em: Date.now(), motivo: limpo, autorId: post.autorId, texto: post.texto },
   });
+  const sala = post.origemSala;
   if (post.autorId !== prof) {
+    const removido = decisao === "removido";
     notificar(post.autorId, {
       tipo: "moderacao",
-      titulo: decisao === "removido" ? "Sua publicação foi removida" : "Sua publicação foi liberada",
-      texto: decisao === "removido" ? `Motivo: ${limpo}` : "Depois da revisão, ela voltou a aparecer no feed.",
-      href: decisao === "removido" ? undefined : "/feed",
+      titulo: sala ? (removido ? "Sua mensagem na sala foi removida" : "Sua mensagem na sala foi liberada") : removido ? "Sua publicação foi removida" : "Sua publicação foi liberada",
+      texto: removido ? `Motivo: ${limpo}` : sala ? `Depois da revisão, ela foi publicada na sala “${sala.salaNome}”.` : "Depois da revisão, ela voltou a aparecer no feed.",
+      href: removido ? undefined : sala ? `/estudos/salas/${sala.salaId}` : "/feed",
       deId: prof,
     });
   }
+  const alvo = sala ? "Mensagem" : "Publicação";
   toast(
     decisao === "aprovado"
-      ? { tipo: "info", titulo: "Publicação liberada", mensagem: "Ela volta a aparecer no feed e o autor foi avisado." }
-      : { tipo: "alerta", titulo: "Publicação removida", mensagem: "O autor foi avisado com o motivo." },
+      ? { tipo: "info", titulo: `${alvo} liberada`, mensagem: sala ? "Ela foi publicada na sala e o autor recebeu a notificação." : "Ela volta a aparecer no feed e o autor recebeu a notificação." }
+      : { tipo: "alerta", titulo: `${alvo} removida`, mensagem: "O autor recebeu a notificação com o motivo." },
     2800,
   );
 }
@@ -177,7 +184,8 @@ export function validarRelato(id: string, aprovado: boolean) {
   if (!relato || relato.status !== "em análise") return;
   const prof = professorId();
   commit({ type: "decidirRelato", id, aprovado, em: Date.now(), por: prof });
-  if (aprovado) premiar(30, 0, "seu relato foi validado pela coordenação", undefined, !ehAluno());
+  // Com backend, os +30 pontos são creditados pelo servidor (PUT /moderacao/relatos/{id}).
+  if (aprovado && MODO_API === "mock") premiar(30, 0, "seu relato foi validado pela coordenação", undefined, !ehAluno());
   notificar(estado.usuario.id, {
     tipo: "moderacao",
     titulo: aprovado ? "Seu relato foi validado" : "Seu relato não foi aceito",
@@ -185,7 +193,7 @@ export function validarRelato(id: string, aprovado: boolean) {
     href: "/missoes",
     deId: prof,
   });
-  toast(aprovado ? { tipo: "ganho", titulo: "Relato validado", mensagem: "+30 pontos para a aluna." } : { tipo: "info", titulo: "Relato recusado", mensagem: "A aluna foi avisada." }, 2600);
+  toast(aprovado ? { tipo: "ganho", titulo: "Relato validado", mensagem: "+30 pontos para a aluna." } : { tipo: "info", titulo: "Relato recusado", mensagem: "O resultado foi enviado como notificação." }, 2600);
 }
 
 /* ───────────── Trocas da loja ───────────── */
@@ -197,5 +205,5 @@ export function marcarTrocaEntregue(compraId: string, nomeItem: string) {
   if (!compra || compra.entregueEm) return;
   commit({ type: "entregarCompra", id: compraId, em: Date.now() });
   notificar(estado.usuario.id, { tipo: "sistema", titulo: "Recompensa entregue", texto: `${nomeItem} foi entregue. Aproveite!`, href: "/loja", deId: professorId() });
-  toast({ tipo: "info", titulo: "Marcada como entregue", mensagem: `${primeiroNome(estado.usuario.nome)} foi avisada.` }, 2400);
+  toast({ tipo: "info", titulo: "Marcada como entregue", mensagem: `Notificação enviada para ${primeiroNome(estado.usuario.nome)}.` }, 2400);
 }

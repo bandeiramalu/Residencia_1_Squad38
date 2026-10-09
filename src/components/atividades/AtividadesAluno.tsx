@@ -11,7 +11,7 @@ import { ROTULO_ATIVIDADE } from "@/data/atividades";
 import { useAgora } from "@/hooks/useAgora";
 import { cn } from "@/lib/cn";
 import { abrirAnexo, abrirAnexoDe, baixarAnexoDe } from "@/lib/materiais";
-import { tempoRelativo } from "@/lib/tempo";
+import { dataCurta, tempoRelativo } from "@/lib/tempo";
 import { useSeletor } from "@/store/store";
 import type { Atividade, Entrega, Pessoa } from "@/store/types";
 import { focarPost } from "@/store/ui";
@@ -156,7 +156,7 @@ function ItemAtividade({
               )}
               <button
                 type="button"
-                onClick={() => abrirAnexo(`entrega-${a.id}.pdf`, { ...contextoDe(a, professor), autor: "Você", texto: lerResposta(entrega.resposta).texto })}
+                onClick={() => abrirAnexo(`entrega-${a.id}.pdf`, { ...contextoDe(a, professor), autor: "Você", texto: lerResposta(entrega.resposta).texto || (entrega.anexo || lerResposta(entrega.resposta).anexo ? "" : `Entrega registrada${entrega.entregueEm ? ` em ${dataCurta(entrega.entregueEm)}` : ""}.`) })}
                 className="inline-flex items-center gap-1 font-medium text-acento underline-offset-2 hover:underline"
               >
                 <FileText className="size-3.5" aria-hidden /> Ver minha entrega (PDF)

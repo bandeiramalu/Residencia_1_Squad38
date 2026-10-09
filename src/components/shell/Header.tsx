@@ -42,7 +42,7 @@ function Contador({ valor, tom = "verde" }: { valor: number; tom?: "verde" | "al
           transition={{ type: "spring", stiffness: 600, damping: 18 }}
           className={cn(
             "absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-superficie",
-            tom === "alerta" ? "bg-alerta" : "bg-texto-2",
+            tom === "alerta" ? "bg-alerta dark:text-fundo" : "bg-texto-2 dark:text-fundo",
           )}
         >
           {valor}
@@ -96,7 +96,7 @@ export function Header({ papel, usuarioId }: { papel: PapelSessao; usuarioId: st
 
         <div className="flex shrink-0 items-center">
           {papel === "aluno" && (
-            <button type="button" onClick={() => setAberto("calendario")} aria-label={`Calendário: ${eventosDaSemana} compromissos nos próximos 7 dias`} className={BOTAO_ICONE}>
+            <button type="button" onClick={() => setAberto("calendario")} aria-label={`Calendário: ${eventosDaSemana} ${eventosDaSemana === 1 ? "compromisso" : "compromissos"} nos próximos 7 dias`} className={BOTAO_ICONE}>
               <CalendarDays className="size-5" />
               <Contador valor={eventosDaSemana} />
             </button>

@@ -91,3 +91,6 @@ export function notificar(para: string, n: Omit<Notificacao, "id" | "para" | "cr
     toast({ tipo: TOAST_DA_NOTIFICACAO[n.tipo], titulo: n.titulo, mensagem: n.texto, href: n.href }, 4200);
   }
 }
+
+/** Quem recebe os avisos de moderação, relatos e trocas (o professor da demonstração, que atende a coordenação). */
+export const MODERADOR_ID = "prof_ricardo";

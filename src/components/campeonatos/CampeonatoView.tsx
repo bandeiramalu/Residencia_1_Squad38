@@ -17,7 +17,7 @@ import { CAPAS_CAMPEONATO, nomeDaRodada, ROTULO_FORMATO, ROTULO_METRICA } from "
 import { useSessao } from "@/lib/auth";
 import { classificacao, partidaDoAluno, partidasPendentes, participa, podeInscrever, rodadaAtual, totalRodadas } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
-import { fmt } from "@/lib/format";
+import { fmt, plural } from "@/lib/format";
 import { encerrarCampeonato, excluirCampeonato, iniciarCampeonato, inscreverCampeonato, sairDoCampeonato } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 import type { Campeonato, Pessoa, Usuario } from "@/store/types";
@@ -221,7 +221,7 @@ function Cabecalho({ c, pessoas }: { c: Campeonato; pessoas: Record<string, Pess
           {c.disciplina && <li>{c.disciplina}</li>}
           <li className="inline-flex items-center gap-1.5 tabular-nums">
             <Users aria-hidden />
-            {c.formato === "interclasses" ? `${c.participantes.length} turmas` : `${c.participantes.length}/${c.maxParticipantes} participantes`}
+            {c.formato === "interclasses" ? plural(c.participantes.length, "turma", "turmas") : `${c.participantes.length}/${c.maxParticipantes} ${c.maxParticipantes === 1 ? "participante" : "participantes"}`}
           </li>
         </ul>
 
@@ -269,7 +269,7 @@ function Chamada({ c, usuario, pessoas, onJogarDuelo, onJogarRodada }: ChamadaPr
         <Aviso
           icone={<UserPlus />}
           titulo="Você está inscrita"
-          texto={`${c.participantes.length} de ${c.maxParticipantes} vagas preenchidas.`}
+          texto={`${c.participantes.length} de ${plural(c.maxParticipantes, "vaga preenchida", "vagas preenchidas")}.`}
           acao={
             <Button variante="secundario" onClick={() => sairDoCampeonato(c.id)}>
               <UserMinus />
@@ -285,7 +285,7 @@ function Chamada({ c, usuario, pessoas, onJogarDuelo, onJogarRodada }: ChamadaPr
       <Aviso
         icone={<UserPlus />}
         titulo={pode ? "Inscrições abertas" : lotado ? "Vagas esgotadas" : "Inscrição indisponível"}
-        texto={pode ? `Restam ${c.maxParticipantes - c.participantes.length} vagas.` : lotado ? "Todas as vagas foram preenchidas." : "Este campeonato é para outras turmas."}
+        texto={pode ? `${c.maxParticipantes - c.participantes.length === 1 ? "Resta 1 vaga" : `Restam ${c.maxParticipantes - c.participantes.length} vagas`}.` : lotado ? "Todas as vagas foram preenchidas." : "Este campeonato é para outras turmas."}
         acao={
           pode ? (
             <Button onClick={() => inscreverCampeonato(c.id)}>
@@ -414,7 +414,7 @@ function Disputa({ c, pessoas, euId, turma }: { c: Campeonato; pessoas: Record<s
   if (c.status === "inscricoes" || (c.formato === "mata-mata" && !c.partidas.length)) {
     return (
       <Card className="p-4 sm:p-5">
-        <TituloSecao extra={c.formato === "interclasses" ? `${c.participantes.length} turmas` : `${c.participantes.length}/${c.maxParticipantes} vagas`}>{c.formato === "interclasses" ? "Turmas" : "Inscritos"}</TituloSecao>
+        <TituloSecao extra={c.formato === "interclasses" ? plural(c.participantes.length, "turma", "turmas") : `${c.participantes.length}/${c.maxParticipantes} ${c.maxParticipantes === 1 ? "vaga" : "vagas"}`}>{c.formato === "interclasses" ? "Turmas" : "Inscritos"}</TituloSecao>
         {c.participantes.length ? <ListaInscritos c={c} pessoas={pessoas} euId={euId} /> : <p className="py-6 text-center text-[13px] text-texto-2">Ninguém se inscreveu ainda.</p>}
       </Card>
     );
@@ -429,7 +429,7 @@ function Disputa({ c, pessoas, euId, turma }: { c: Campeonato; pessoas: Record<s
   }
   return (
     <section>
-      <TituloSecao extra={`${c.participantes.length} participantes`}>Classificação</TituloSecao>
+      <TituloSecao extra={plural(c.participantes.length, "participante", "participantes")}>Classificação</TituloSecao>
       <TabelaClassificacao c={c} pessoas={pessoas} euId={euId} />
     </section>
   );

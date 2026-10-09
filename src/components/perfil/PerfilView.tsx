@@ -68,7 +68,7 @@ export function PerfilView() {
   const nivel = nivelDe(usuario.xp);
   const eq = new Set(usuario.equipados);
   const conquistadas = medalhas.filter((m) => m.desbloqueadaEm).length;
-  const meus = posts.filter((p) => p.autorId === usuario.id).sort((a, b) => b.criadoEm - a.criadoEm);
+  const meus = posts.filter((p) => p.autorId === usuario.id && !p.origemSala).sort((a, b) => b.criadoEm - a.criadoEm);
   const capa = eq.has("pf2") ? "tema-bosque" : eq.has("pf3") ? "capa-pautada" : "bg-superficie-2";
 
   const estatisticas: { valor: number; rotulo: string; acao?: () => void; href?: string }[] = [

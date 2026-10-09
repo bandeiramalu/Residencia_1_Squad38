@@ -122,6 +122,22 @@ export type Acao =
 /** Limite de cartas exibidas numa rodada de prática (inclui as revistas). */
 export const MAX_CARTAS_RODADA = FLASHCARDS.length + 3;
 
+/** Notificações guardadas por destinatário: as 120 mais recentes de cada pessoa; as não lidas nunca saem. */
+export const MAX_NOTIFICACOES_POR_PESSOA = 120;
+
+function limitarNotificacoes(lista: Notificacao[]): Notificacao[] {
+  const contagem = new Map<string, number>();
+  let cortou = false;
+  const mantidas = lista.filter((n) => {
+    const qtd = (contagem.get(n.para) ?? 0) + 1;
+    contagem.set(n.para, qtd);
+    if (qtd <= MAX_NOTIFICACOES_POR_PESSOA || !n.lida) return true;
+    cortou = true;
+    return false;
+  });
+  return cortou ? mantidas : lista;
+}
+
 function mapPost(estado: AppState, postId: string, fn: (p: Post) => Post): AppState {
   return { ...estado, posts: estado.posts.map((p) => (p.id === postId ? fn(p) : p)) };
 }
@@ -534,6 +550,14 @@ export function reducer(estado: AppState, acao: Acao): AppState {
     case "moderarPost": {
       const moderacao = { ...estado.moderacao, [acao.postId]: acao.decisao };
       if (acao.decisao === "removido") return { ...estado, moderacao, posts: estado.posts.filter((p) => p.id !== acao.postId) };
+      const retida = estado.posts.find((p) => p.id === acao.postId);
+      if (retida?.origemSala) {
+        // Mensagem de chat liberada: publica na sala (com o horário original) e sai da fila.
+        const { salaId, mensagem } = retida.origemSala;
+        const publicada: MensagemSala = { id: `sm-${retida.id}`, autorId: retida.autorId, texto: mensagem, criadoEm: retida.criadoEm, tipo: "mensagem" };
+        const comSala = mapSala(estado, salaId, (s) => ({ ...s, mensagens: [...s.mensagens, publicada].slice(-60) }));
+        return { ...comSala, moderacao, posts: estado.posts.filter((p) => p.id !== acao.postId) };
+      }
       return { ...mapPost(estado, acao.postId, (p) => ({ ...p, emRevisao: undefined, denuncia: undefined })), moderacao };
     }
 
@@ -562,11 +586,10 @@ export function reducer(estado: AppState, acao: Acao): AppState {
     }
 
     case "notificarVarios":
-      return acao.notificacoes.length ? { ...estado, notificacoes: [...acao.notificacoes, ...estado.notificacoes].slice(0, 300) } : estado;
+      return acao.notificacoes.length ? { ...estado, notificacoes: limitarNotificacoes([...acao.notificacoes, ...estado.notificacoes]) } : estado;
 
     case "notificar":
-      // Guarda as 300 mais recentes (avisos geram uma por aluno).
-      return { ...estado, notificacoes: [acao.notificacao, ...estado.notificacoes].slice(0, 300) };
+      return { ...estado, notificacoes: limitarNotificacoes([acao.notificacao, ...estado.notificacoes]) };
 
     case "lerNotificacao":
       return {

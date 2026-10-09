@@ -23,8 +23,15 @@ function carregar(): AppState {
   try {
     const salvo = localStorage.getItem(CHAVE);
     if (salvo) {
-      const dados = migrarEstado(JSON.parse(salvo));
+      let dados: AppState | null = null;
+      try {
+        dados = migrarEstado(JSON.parse(salvo));
+      } catch {
+        dados = null;
+      }
       if (dados) return dados;
+      // Versão desconhecida ou JSON ilegível: o próximo salvamento sobrescreveria, então guarda uma cópia antes.
+      guardarBackup(salvo);
     }
   } catch {
     // localStorage indisponível (aba anônima, bloqueio): segue com o estado inicial.
@@ -32,12 +39,26 @@ function carregar(): AppState {
   return criarEstadoInicial(Date.now());
 }
 
+function guardarBackup(conteudo: string) {
+  try {
+    localStorage.setItem(`${CHAVE}-backup-${new Date().toISOString().slice(0, 10)}`, conteudo);
+  } catch {
+    // Sem espaço para o backup: segue assim mesmo.
+  }
+}
+
+let avisouCota = false;
+
 function salvarAgora() {
   if (!estado) return;
   try {
     localStorage.setItem(CHAVE, JSON.stringify(estado));
   } catch {
-    // Sem armazenamento: o app funciona, só não persiste.
+    // Sem armazenamento: o app funciona, só não persiste. Avisa uma única vez.
+    if (!avisouCota) {
+      avisouCota = true;
+      toast({ tipo: "alerta", titulo: "Armazenamento do navegador cheio", mensagem: "Suas alterações continuam funcionando agora, mas não serão salvas ao recarregar a página." }, 7000);
+    }
   }
 }
 

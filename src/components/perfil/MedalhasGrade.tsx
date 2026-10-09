@@ -26,7 +26,7 @@ function baixarCertificado(medalha: MedalhaDef, nome: string, em: number) {
     blocos: [
       { tipo: "paragrafo", texto: `Certificamos que ${nome} conquistou a medalha "${medalha.nome}" no Portal do Aluno do ${ESCOLA.nome}.` },
       { tipo: "quadro", titulo: "Critério da medalha", texto: medalha.criterio },
-      { tipo: "tabela", colunas: ["Aluno(a)", "Medalha", "Conquistada em"], linhas: [[nome, medalha.nome, data]] },
+      { tipo: "tabela", colunas: ["Nome", "Medalha", "Conquistada em"], linhas: [[nome, medalha.nome, data]] },
       { tipo: "paragrafo", texto: `${ESCOLA.cidade} · emitido em ${new Date().toLocaleDateString("pt-BR")}.` },
     ],
   });

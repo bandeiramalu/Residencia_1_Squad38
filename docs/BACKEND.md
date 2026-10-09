@@ -7,7 +7,7 @@
 
 | Arquivo | Para que serve |
 | --- | --- |
-| [`docs/api/openapi.yaml`](api/openapi.yaml) | Contrato REST completo (OpenAPI 3.1): 109 endpoints, schemas, erros, exemplos. Abra no [Swagger Editor](https://editor.swagger.io) para navegar. |
+| [`docs/api/openapi.yaml`](api/openapi.yaml) | Contrato REST completo (OpenAPI 3.1): 115 endpoints, schemas, erros, exemplos. Abra no [Swagger Editor](https://editor.swagger.io) para navegar. |
 | [`docs/api/schema.sql`](api/schema.sql) | Banco PostgreSQL pronto para rodar: tabelas, enums, chaves, índices, gatilhos e views de ranking. |
 | [`src/api/endpoints.ts`](../src/api/endpoints.ts) | O mesmo catálogo em TypeScript, tipado: o front chama `chamar(ENDPOINTS.feed.curtir, …)`. |
 | [`src/api/dto.ts`](../src/api/dto.ts) | Formatos dos corpos e respostas que diferem do estado do app. |
@@ -142,7 +142,7 @@ Cada regra devolve uma requisição ou `null`. Há quatro famílias:
 | **Criação** com id do cliente | `publicar`, `responder`, `comprar`, `registrarSessao` | `POST` com o `id` gerado no front; a chave de idempotência é fixa (`post:p1…`). |
 | **Evento** | `missaoProgresso`, `responderCarta`, `entrarSala` | Um fato novo a cada vez; chave aleatória. |
 | **Estado desejado** | `curtir`, `salvar`, `equipar`, `definirPrivacidade` | `PUT`/`DELETE` idempotentes; se houver outro pedido do mesmo recurso na fila, **o mais novo substitui** (curtir → descurtir → curtir offline = 1 pedido). |
-| **Não sobe** (`null`) | `premiar`, `notificar`, `desbloquearMedalha`, `virarCarta`, `adiantarTimer`, `receberMensagem` | Calculado pelo servidor, só visual, só da demo ou chega pelo tempo real. |
+| **Não sobe** (`null`) | `premiar`, `notificar`, `notificarVarios`, `desbloquearMedalha`, `virarCarta`, `adiantarTimer`, `ajustarSaida`, `dispensarFocoPerdido`, `selecionarEspaco`, `membrosSala` | Calculado pelo servidor (pontos, XP, medalhas, notificações), só visual, só da demo ou chega pelo tempo real. |
 
 ### A fila de saída (outbox)
 
@@ -155,6 +155,12 @@ Cada regra devolve uma requisição ou `null`. Há quatro famílias:
 - 401 dispara `cepi:sessao-expirada` (hora de chamar `POST /auth/renovar`).
 - Cada pedido guarda o `usuarioId`: se outra pessoa entrar no mesmo computador, nada sai com o token errado.
 - Só uma aba envia por vez (Web Locks). Pedidos com mais de 7 dias são descartados.
+- **Arquivos reais**: anexos escolhidos pela pessoa ficam no IndexedDB do navegador (`src/lib/arquivos.ts`, `anexo.arquivoId`).
+  Quando a ação leva um anexo (`publicar` de material, `criarAtividade`, entrega de atividade), o pedido na fila traz `arquivo`:
+  antes de enviá-lo, a fila faz `POST /anexos` (multipart, campo `arquivo`, `Idempotency-Key: <chave>:anexo`), grava o `anexoId`
+  devolvido no corpo (`anexoId` de `NovoPostCorpo`, `NovaAtividadeCorpo`, `EntregaCorpo`) e só então envia o pedido. O id do upload fica
+  na própria fila, então um reenvio não sobe o arquivo de novo. Se o arquivo não existe neste navegador, o pedido segue sem anexo;
+  se o upload for recusado de forma definitiva (413/415…), o pedido segue sem anexo e a recusa vai para `cepi-api-rejeitadas`.
 
 ### IDs gerados no cliente
 
@@ -241,12 +247,12 @@ Se preferir não guardar a resposta, devolva `409` com `{ "codigo": "ja_processa
 ```mermaid
 sequenceDiagram
   participant N as Navegador
-  participant P as Next proxy.ts
+  participant P as Front (guarda no cliente)
   participant A as API
   N->>A: POST /auth/login { email, senha }
   A-->>N: 200 { token, usuario } + Set-Cookie cepi_sessao (JWT) e cepi_refresh
-  N->>P: GET /feed (cookie cepi_sessao vai junto)
-  P->>P: valida a assinatura e o papel do JWT
+  N->>P: abre /feed
+  P->>P: guarda.ts confere o papel da sessão (só UX)
   P-->>N: página do aluno (ou redireciona)
   N->>A: PUT /posts/p1/curtida (Bearer ou cookie)
   A->>A: valida JWT e permissão DE NOVO
@@ -261,40 +267,26 @@ sequenceDiagram
   `cepi_refresh` (`HttpOnly; Secure; SameSite=Strict; Path=/auth`).
 - Senhas com **argon2id**; limite de 5 tentativas/min por e-mail+IP; mensagens que não revelam se o e-mail existe.
 
-### O que o `src/proxy.ts` faz hoje e o que trocar
+### Onde fica a guarda de rotas
 
-Hoje o proxy lê o cookie **`cepi_papel`**, gravado pelo próprio JavaScript no login (`src/lib/auth.ts`). Qualquer
-pessoa pode editá-lo no DevTools — serve **só para UX** (não piscar a tela errada), nunca para segurança.
+O front **não usa mais `proxy.ts` nem o cookie `cepi_papel`**. A regra de acesso (login, home por papel, rotas
+compartilhadas `/estudos/salas`, `/campeonatos`, `/pessoas`; aluno fora de `/professor/*`; professor só em
+`/professor/*` e nas compartilhadas) está em `src/lib/guarda.ts` e roda **no cliente**, no `AppShell` (Next) e na demo em
+HTML único. A sessão fica no `sessionStorage` (uma por aba) e `src/lib/auth.ts` só apaga o cookie antigo, se existir.
+Isso é **só UX** (não piscar a tela errada): qualquer pessoa pode editar o `sessionStorage`; a segurança está no backend.
 
-Na integração:
+Na integração com a API real:
 
-1. **Proxy**: ler `cepi_sessao` e validar a assinatura do JWT (o proxy do Next 16 roda em Node e pode ser `async`;
-   `crypto.subtle` já existe, sem dependências):
-
-   ```ts
-   // src/proxy.ts (esboço) — JWT_CHAVE_PUBLICA é um JWK da chave ES256, em variável de ambiente do servidor
-   async function papelDoJwt(jwt?: string): Promise<"aluno" | "professor" | null> {
-     const [cabecalho, corpo, assinatura] = jwt?.split(".") ?? [];
-     if (!assinatura) return null;
-     const b64 = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
-     const chave = await crypto.subtle.importKey("jwk", JSON.parse(process.env.JWT_CHAVE_PUBLICA!), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
-     const ok = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, chave, b64(assinatura), new TextEncoder().encode(`${cabecalho}.${corpo}`));
-     const dados = ok ? JSON.parse(new TextDecoder().decode(b64(corpo))) : null;
-     if (!dados || dados.exp * 1000 < Date.now()) return null;
-     return dados.papel === "aluno" || dados.papel === "professor" ? dados.papel : null;
-   }
-   // no proxy(): const papel = await papelDoJwt(request.cookies.get("cepi_sessao")?.value);
-   ```
-
-2. **Mesmo site**: o cookie da API só chega ao proxy do Next se os dois estiverem no mesmo domínio
-   (ex.: `portal.cepiexpansao.com.br` e `api.cepiexpansao.com.br` com `Domain=cepiexpansao.com.br`). Se não der,
-   use um *route handler* do Next como intermediário (padrão BFF — veja
-   `node_modules/next/dist/docs/01-app/02-guides/backend-for-frontend.md`).
-3. **`src/lib/auth.ts`**: com o cookie httpOnly, pare de guardar o `token` no `localStorage` (um XSS poderia
+1. **A API valida tudo de novo em cada endpoint** — assinatura do JWT (ES256, chave pública em variável de ambiente),
+   expiração, papel (`aluno`/`professor`), flag `coord` e dono do recurso. Esta é a única barreira de segurança.
+2. **Opcional — checagem otimista no servidor do Next** (para não entregar nem o HTML de `/professor/*` a quem não é
+   professor): recriar um `src/proxy.ts` que valide o JWT do cookie `cepi_sessao` (o proxy do Next 16 roda em Node e
+   pode ser `async`; `crypto.subtle` já existe). Só funciona se API e site estiverem no mesmo domínio
+   (ex.: `portal.cepiexpansao.com.br` e `api.cepiexpansao.com.br` com `Domain=cepiexpansao.com.br`); senão use um
+   *route handler* do Next como intermediário (padrão BFF — `node_modules/next/dist/docs/01-app/02-guides/backend-for-frontend.md`).
+   Não é solução de autorização: a própria documentação do Next diz isso.
+3. **`src/lib/auth.ts`**: com o cookie httpOnly, pare de guardar o `token` no `sessionStorage` (um XSS poderia
    roubá-lo) — guarde só `{ papel, usuarioId, nome }` e deixe `credentials: "include"` levar o cookie.
-   Apague o cookie `cepi_papel`.
-4. **A API confere tudo de novo** em cada endpoint. O proxy é só uma "checagem otimista" (a própria documentação
-   do Next diz que ele não é solução de autorização).
 
 ### Papéis e permissões
 
@@ -303,7 +295,10 @@ Na integração:
 | Feed: publicar, responder, curtir, denunciar | ✔ (espaços em que participa) | ✔ | ✔ |
 | Aviso oficial | — | ✔ (turmas dele / escola) | ✔ |
 | Resposta oficial fixada | — | ✔ (automático em dúvidas) | ✔ |
-| Mensagens diretas | ✔ (colegas, professores, coordenação) | ✔ | ✔ + mensagens retidas |
+| Chat de sala | ✔ (na sala em que está) | ✔ | ✔ + mensagens retidas |
+| Perfil (foto, bio, @), flashcards próprios | ✔ | ✔ (perfil) | ✔ |
+| Estatísticas | ✔ (as suas) | ✔ (turmas dele) | ✔ |
+| Entregar troca da loja, lembrar alunos | — | ✔ (turmas dele) | ✔ |
 | Loja, sequência, missões, prática, desafios | ✔ | — | — |
 | Salas: criar | ✔ (não oficial) | ✔ (oficial) | ✔ |
 | Campeonatos: criar | ✔ amistoso (sem prêmio) | ✔ oficial | ✔ |
@@ -345,10 +340,10 @@ erDiagram
   POSTS ||--o{ MATERIAIS_ABERTOS : "aberto por"
   POSTS ||--o{ DENUNCIAS : "denunciado"
   POSTS ||--o{ MODERACOES : "decisões"
-  MENSAGENS ||--o{ MODERACOES : "decisões"
-  CONVERSAS ||--o{ CONVERSA_PARTICIPANTES : "participantes"
-  PESSOAS ||--o{ CONVERSA_PARTICIPANTES : "conversa"
-  CONVERSAS ||--o{ MENSAGENS : "tem"
+  SALA_MENSAGENS ||--o{ MODERACOES : "decisões (chat de sala)"
+  PESSOAS ||--o{ FLASHCARDS_PROPRIOS : "cria"
+  PESSOAS ||--o{ FLASHCARDS_CAIXAS : "Leitner"
+  PESSOAS ||--o{ LEMBRETES_PROFESSOR : "avisada (trava 12 h)"
   MISSOES ||--o{ MISSAO_PROGRESSO : "progresso por dia"
   PESSOAS ||--o{ MISSAO_PROGRESSO : "cumpre"
   TURMAS ||--o{ MISSOES_COLETIVAS : "maratona"
@@ -422,10 +417,10 @@ Nomes de endpoint = chaves de `ENDPOINTS` em `src/api/endpoints.ts`.
 | `premiar` | várias (`premiar()`) | — | O servidor calcula pontos/XP a partir do evento original. |
 | `curtir` | `curtir` | `PUT`/`DELETE /posts/{id}/curtida` | Estado desejado (lê o `curtido` depois da ação). |
 | `salvar` | `salvar` | `PUT`/`DELETE /posts/{id}/salvo` | Estado desejado. |
-| `publicar` | `publicar`, `publicarAviso` | `POST /posts` ou `POST /professor/avisos` | Aviso vai para o endpoint do professor. Triagem US06 no servidor. |
+| `publicar` | `publicar`, `publicarAviso` | `POST /posts` ou `POST /professor/avisos` | Aviso vai para o endpoint do professor. Material com arquivo real sobe antes por `POST /anexos` (`anexoId`). Triagem US06 no servidor. |
 | `responder` | `responder` | `POST /posts/{id}/respostas` | Só respostas da própria pessoa (as simuladas não sobem). |
 | `marcarUtil` | `marcarUtil` | `POST /posts/{id}/respostas/{respostaId}/util` | |
-| `respostaAjudou` | simulação | — | No real, chega quando o autor da dúvida marca (notificação). |
+| `respostaAjudou` | resposta marcada como útil | — | A recompensa é do servidor (`marcarUtil`); o efeito local não sobe. |
 | `denunciar` | `denunciar` | `POST /posts/{id}/denuncias` | Triagem (categoria/prioridade) no servidor. |
 | `missaoProgresso` | `avancarMissao`, `concluirMissao` | `POST /missoes/{id}/progresso` | Só missões manuais; as automáticas o servidor deriva. |
 | `materialAberto` | `abrirMaterial` | `POST /posts/{id}/aberturas` | |
@@ -438,50 +433,73 @@ Nomes de endpoint = chaves de `ENDPOINTS` em `src/api/endpoints.ts`.
 | `reiniciarPratica` | `reiniciarPratica` | `POST /pratica/reinicio` | |
 | `contribuirColetiva` | `contribuirColetiva` | `POST /missoes/coletiva/contribuicoes` | Validada contra flashcards respondidos. |
 | `enviarRelato` | `enviarRelato` | `POST /relatos` | |
-| `validarRelato` | simulação | — | No real: coordenação usa `PUT /moderacao/relatos/{id}`. |
+| `validarRelato` | variante de tela | — | A decisão sobe em `decidirRelato`. |
+| `decidirRelato` | `validarRelato` (coordenação) | `PUT /moderacao/relatos/{id}` `{ status: validado\|recusado }` | O servidor credita os +30 pontos (nunca XP) e notifica a aluna. O cliente não deve fazer `premiar` em modo http. |
 | `comprar` | `comprar` | `POST /loja/compras` | Voucher gerado no servidor. |
 | `equipar` | `comprar`, `equipar` | `PUT`/`DELETE /me/equipados/{itemId}` | Estado desejado. |
 | `definirPrivacidade` | `definirPrivacidade` | `PUT /me/privacidade` | Estado desejado. |
 | `desbloquearMedalha` | `commit` (automático) | — | O servidor concede medalhas. |
 | `concluirDesafio` | `concluirDesafio` | — | A tela deve usar `desafios.abrir/responder` (gabarito no servidor). |
 | `alternarLembrete` | `alternarLembrete` | `PUT`/`DELETE /me/lembretes/{eventoId}` | Estado desejado. |
+| `definirLembretesAgendados` | `agendarLembrete…` | `PUT /me/lembretes-agendados` | Estado desejado: lista `{ eventoId, disparoEm }`. O servidor notifica na hora (job idempotente). |
+| `editarPerfil` | `editarPerfil` | `PUT /me` | Nome, @, bio, foto (dataURL JPEG ~256 px), selos. Estado desejado. |
+| `flashcards` | `salvarCarta`, `apagarCarta`, `iniciarRodada` | `PUT`/`DELETE /me/flashcards/{id}`, `POST /pratica/rodadas` | Cartas próprias; a caixa de Leitner é atualizada pelo servidor em `POST /pratica/respostas`. |
 | `selecionarEspaco` | `selecionarEspaco` | — | Preferência visual local. |
-| `criarConversa` | `iniciarConversa` | `POST /conversas` | Ver id determinístico no checklist. |
-| `enviarMensagem` | `enviarMensagem` | `POST /conversas/{id}/mensagens` | Pode voltar `retida`. |
-| `receberMensagem` | simulação | — | No real: evento `conversa.mensagem`. |
-| `abrirConversa` | `abrirConversa` | `POST /conversas/{id}/leitura` | Estado desejado. |
-| `confirmarLeitura` | simulação | — | No real: evento `conversa.leitura`. |
 | `resetar` | `resetarDemonstracao` | — | Só demonstração. |
 | `iniciarTimer` | `iniciarFoco` | `PUT /me/estudos/timer` | Opcional (continuar em outro aparelho). |
 | `pausarTimer` | `pausarFoco` | `PUT /me/estudos/timer` | Opcional. |
 | `retomarTimer` | `retomarFoco` | `PUT /me/estudos/timer` | Opcional. |
 | `trocarFase` | `tickFoco`, `pularPausa` | `PUT /me/estudos/timer` | Opcional. |
-| `adiantarTimer` | `adiantarFoco` (demo) | — | Só demonstração. |
+| `sairDaTela` | `visibilitychange`/saída da aba | `PUT /me/estudos/timer` | Opcional. Guarda o instante da saída; a trava de 5 min é do cliente (`LIMITE_SAIDA_MS`). |
+| `perderFoco` | saída acima do limite | `DELETE /me/estudos/timer` | Descarta o timer; sem sessão registrada. |
+| `adiantarTimer` | `adiantarFoco` (modo apresentação) | — | Só demonstração. |
+| `ajustarSaida`, `dispensarFocoPerdido` | modo apresentação / aviso | — | Estado de UI/demo. |
 | `encerrarTimer` | `encerrarFoco` | `DELETE /me/estudos/timer` | Opcional. |
 | `registrarSessao` | `encerrarFoco`, `tickFoco`, `registrarEstudoManual` | `POST /me/estudos/sessoes` | Teto diário, mínimo e anti-sobreposição no servidor. |
 | `definirMetaDiaria` | `definirMetaDiaria` | `PUT /me/estudos/meta` | Estado desejado. |
 | `criarSala` | `criarSala` | `POST /salas` | Código das privadas gerado no servidor. |
 | `entrarSala` | `entrarSala` | `POST /salas/{id}/entrar` | |
 | `sairSala` | `sairSala` | `POST /salas/sair` | O servidor sabe em que sala a pessoa está. |
-| `mensagemSala` | `enviarMensagemSala`, `reagirSala` | `POST /salas/{id}/mensagens` | Só as da própria pessoa e não-sistema. |
+| `mensagemSala` | `enviarMensagemSala`, `reagirSala` | `POST /salas/{id}/mensagens` | Só as da própria pessoa e não-sistema. A triagem US06 pode reter (vai para `GET /moderacao/salas/mensagens`). |
 | `membrosSala` | simulação | — | No real: evento `sala.presenca`. |
 | `fecharSala` | `fecharSala` | `DELETE /salas/{id}` | |
 | `criarCampeonato` | `criarCampeonato` | `POST /campeonatos` | `oficial` e prêmio decididos no servidor. |
 | `atualizarCampeonato` | inscrever, sair, iniciar, encerrar, duelo, rodada | `PUT`/`DELETE …/inscricao`, `POST …/iniciar`, `POST …/encerrar` | **Nunca** envia o objeto inteiro: deduz a intenção. Placar vem dos endpoints de duelo/rodada. |
 | `removerCampeonato` | `excluirCampeonato` | `DELETE /campeonatos/{id}` | |
-| `criarAtividade` | `criarAtividade` | `POST /atividades` | |
-| `atualizarEntrega` | `entregarAtividade`, `corrigirEntrega` | `POST /atividades/{id}/entrega` ou `PUT …/entregas/{alunoId}/correcao` | Entregas simuladas de colegas não sobem. |
+| `criarAtividade` | `criarAtividade` | `POST /atividades` | Anexo real sobe antes por `POST /anexos` (`anexoId`). |
+| `atualizarEntrega` | `entregarAtividade`, `corrigirEntrega` | `POST /atividades/{id}/entrega` ou `PUT …/entregas/{alunoId}/correcao` | Entregas simuladas de colegas não sobem. Arquivo real da entrega sobe antes por `POST /anexos` (`anexoId`). |
 | `removerAtividade` | `excluirAtividade` | `DELETE /atividades/{id}` | |
 | `atribuir` | `atribuirPontos` | `POST /professor/atribuicoes` | Ignora as atribuições automáticas da correção (o servidor já credita na correção). |
-| `moderarPost` | `moderarPost` | `PUT /moderacao/posts/{postId}` | Decisão humana. |
-| `notificar` | `notificar()` | — | O servidor cria as notificações. |
+| `moderarPost` | `moderarPost` | — | Efeito local; sobe junto com `registrarModeracao`. |
+| `registrarModeracao` | `moderarPost` | `PUT /moderacao/posts/{postId}` `{ decisao, observacao }` | `observacao` = motivo (obrigatório ao remover). O histórico (`GET /moderacao/historico`) é derivado da auditoria dessas decisões. |
+| `entregarCompra` | `entregarCompra` (professor) | `PUT /loja/compras/{id}/entrega` | Marca a troca como entregue (idempotente) e avisa a aluna. |
+| `lembrarAlunos` | `lembrarAlunos` (professor) | `POST /professor/lembretes` `{ alunoIds, em }` | Trava de 12 h por aluno no servidor. |
+| `notificar`, `notificarVarios` | `notificar()`, `notificarTodos()` | — | O servidor cria as notificações (uma por destinatário) ao processar a ação de origem; o sino local é só estado de UI até chegar `notificacao.nova`. |
 | `lerNotificacao` | `lerNotificacao` | `POST /notificacoes/{id}/leitura` | |
 | `lerTodasNotificacoes` | `lerTodasNotificacoes` | `POST /notificacoes/leitura` | |
 
 Endpoints que **não** saem de ações (chamados direto pelas telas ou só leitura): todo o grupo `auth`, os `GET`,
 `perfil.bootstrap`, `feed.buscar`, `feed.enviarAnexo`, `feed.excluir`, `desafios.*`, `campeonatos.editar`,
 `campeonatos.abrirDuelo/responderDuelo/abrirRodada/responderRodada`, `atividades.editar`, `atividades.corrigirTodas`,
-`atividades.lembrarPendentes`, `moderacao.decidirMensagem`, `moderacao.validarRelato`.
+`atividades.lembrarPendentes`, `moderacao.decidirMensagemSala`, `moderacao.historico`, `perfil.estatisticas`, `professor.estatisticas`, `missoes.flashcards`.
+
+
+### 7.1 O que o backend precisa cobrir (funcionalidades atuais)
+
+| Área | O que o front faz | O que o servidor garante |
+| --- | --- | --- |
+| **Perfil** (`PUT /me`) | Foto recortada (dataURL JPEG ~256 px), bio (até 160), @ (3–24 `[a-z0-9._]`), nome/iniciais, selos exibidos. | `arroba` único (409); nome e iniciais passam a valer para todos (pessoas, rankings, feed); a foto vem no `GET /pessoas/{id}` conforme a privacidade. |
+| **Arquivos/upload** (`POST /anexos`, `GET /anexos/{id}`) | PDFs e imagens reais (até 10 MB) em materiais, atividades e entregas; abrir/baixar pelo `url` assinado. | Confere mime e tamanho, guarda em storage privado, URL assinada e curta; só quem pode ver o post/entrega abre o anexo. |
+| **Dúvidas e resposta oficial** | Dúvida em `POST /posts` (tipo `duvida`); resposta de professor em `POST /posts/{id}/respostas`. A tela `/professor/duvidas` lista `GET /posts?tipo=duvida` das suas turmas, com e sem resposta oficial. | Resposta de professor vira `oficial` (fixada no topo, 1 premiação por dúvida, a mesma regra no feed e na tela Dúvidas); o autor é notificado. |
+| **Relatos** | `POST /relatos`; coordenação decide em `PUT /moderacao/relatos/{id}`. | Status `em análise` → `validado` ou `recusado`, com `decididoEm`/`decididoPor`; só `validado` credita +30 pontos (nunca XP); aluna notificada. |
+| **Moderação com motivo e histórico** | `PUT /moderacao/posts/{postId}` e `PUT /moderacao/salas/{salaId}/mensagens/{mensagemId}` com `observacao`; `GET /moderacao/historico` (até 300 itens na tela). | Remover exige motivo; decisão sempre de uma pessoa; auditoria imutável; o autor recebe o motivo; histórico inclui posts e chat de sala. |
+| **Trocas da loja e entrega** | `POST /loja/compras`; professor/secretaria marca `PUT /loja/compras/{id}/entrega`. | Compra atômica com voucher; `entregueEm`/`entregue_por`; só alunas das turmas do professor; aluna notificada. |
+| **Lembretes** | Evento do calendário: `PUT`/`DELETE /me/lembretes/{eventoId}` + `PUT /me/lembretes-agendados` (horário). Professor: `POST /professor/lembretes`. | O servidor dispara a notificação em `disparoEm` (job idempotente). Aviso do professor tem **trava de 12 h por aluno** (`lembretes_professor`); quem está na trava é ignorado e não conta em `avisados`. |
+| **Notificações por destinatário** | Sino com `GET /notificacoes`, leitura individual e geral. | Uma notificação por destinatário, criada pelo servidor ao processar a ação de origem (aviso, correção, atribuição, entrega, relato, troca, lembrete…); teto de 100 por pessoa no cliente. |
+| **Flashcards próprios e Leitner** | Cartas próprias em `PUT`/`DELETE /me/flashcards/{id}`; rodada em `POST /pratica/rodadas`; resposta em `POST /pratica/respostas`; estado em `GET /me/flashcards`. | Caixas 1–5 atualizadas no servidor (acerto sobe, erro volta à 1; intervalos 0/1/3/7/15 dias); só a dona vê as cartas. |
+| **Estatísticas** | Aluna: `GET /me/estatisticas`. Professor: `GET /professor/estatisticas` (+ relatório PDF/CSV gerado no cliente a partir deles). | Agregar no servidor a partir de `sessoes_estudo` (view `v_estudo_dia`), `entregas`, `lancamentos`, `missao_progresso`, duelos, medalhas e `sequencia_dias`. Aluno: foco por dia/disciplina/hora, mapa de calor, sequência, notas, duelos, medalhas. Professor: ativos, foco, notas e entregas no prazo, missões, ranking da turma (respeita anônimo e Sombra), campeonatos, moderação e alunos em risco. Só turmas do professor; cache de 1–5 min. |
+| **Sessão por aba** | Cada aba/janela tem o seu login (`sessionStorage`): dá para abrir aluna e professor lado a lado. | Tokens independentes por aba; o refresh cookie é por navegador, então use `POST /auth/ticket-tempo-real` para autenticar o WebSocket de cada aba. |
+| **Tempo real** | Salas, notificações, campeonatos e entregas (seção 8). Entre abas do mesmo navegador o front já sincroniza pelo evento `storage`. | Eventos com `id` único e entrega por destinatário; nada de mensagens privadas. |
 
 ---
 
@@ -510,9 +528,6 @@ O token nunca vai na URL (URLs acabam em logs). Para mais segurança, use o tick
 | `notificacao.nova` | qualquer notificação | a pessoa (`usuario:{id}`) | `despachar({ type: "notificar", … })` + toast |
 | `campeonato.atualizado` | inscrição, início, duelo decidido, fim | inscritos e turmas elegíveis (`campeonato:{id}`) | `despachar({ type: "atualizarCampeonato", … })` |
 | `atividade.entregue` | um aluno entregou | o professor (`usuario:{id}`) | `despachar({ type: "atualizarEntrega", … })` |
-| `conversa.mensagem` | nova mensagem direta | participantes (`usuario:{id}`) | `despachar({ type: "receberMensagem", … })` |
-| `conversa.leitura` | o outro leu | participantes | `despachar({ type: "confirmarLeitura", … })` |
-| `conversa.digitando` | começou/parou de digitar | participantes | `definirDigitando` de `store/ui.ts` |
 
 Como ligar no front (exemplo para a tela da sala):
 
@@ -647,7 +662,7 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
 > Orientação técnica, não parecer jurídico: valide com o encarregado (DPO) e o jurídico da escola.
 
 - **Base e consentimento**: dados de crianças e adolescentes são tratados no **melhor interesse** deles
-  (LGPD art. 14). Recursos sociais opcionais (ranking público, mensagens diretas) devem ter **consentimento
+  (LGPD art. 14). Recursos sociais opcionais (ranking público) devem ter **consentimento
   específico de um dos pais/responsável** — tabela `consentimentos`, uma linha por finalidade, revogável.
 - **Minimização**: só o necessário — nome, e-mail institucional, turma. **Não** coletar CPF, endereço, telefone,
   foto real, geolocalização. `GET /pessoas` nunca devolve e-mail. O `bootstrap` só traz as pessoas visíveis.
@@ -657,7 +672,7 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
   | Dado | Guarda |
   | --- | --- |
   | Registros de acesso (IP, data) | 6 meses (Marco Civil, art. 15) |
-  | Mensagens diretas e chat de salas | até o fim do ano letivo + 6 meses |
+  | Chat de salas | até o fim do ano letivo + 6 meses |
   | Sessões de estudo | 2 anos; depois, só agregados |
   | Denúncias e decisões de moderação | 2 anos |
   | Notificações lidas | 90 dias |
@@ -678,7 +693,7 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
   secretaria; só item comprado pode ser equipado (FK no banco).
 - **Sequência**: 1 registro por dia no fuso America/Maceio; até 2 congeladores/mês; recuperação por 200 pontos em
   até 48 h.
-- **Mensagens**: só participantes leem/enviam; limite de taxa (ex.: 30 mensagens/min); retidas não são entregues.
+- **Chat de sala**: só quem está na sala lê/envia; limite de taxa (ex.: 30 mensagens/min); retidas não são entregues.
 - **Salas**: capacidade, código das privadas (com limite de tentativas), horário agendado; 1 sala por vez.
 - **Campeonatos**: inscrição só em `inscricoes`, turma elegível e com vaga; só o organizador inicia/encerra;
   `iniciar`/`encerrar` idempotentes.
@@ -747,14 +762,14 @@ Faça em ordem; cada fase termina com um teste visível no front.
 - [ ] Front (`src/store/store.ts`): no modo `http`, depois do login, `despachar({ type: "resetar", estado })` com o
   bootstrap (mais `versao`, `criadoEm`, `espaco: "escola"`) em vez do seed local.
 - [ ] Front (`src/store/actions.ts`): trocar a constante `USUARIO_ID` (`"ana"`) por `obterEstado().usuario.id` em
-  `publicar`, `responder`, `iniciarConversa` e `enviarMensagem`. O sync só envia o que foi escrito por quem está
+  `publicar` e `responder`. O sync só envia o que foi escrito por quem está
   logado — com o id fixo, os posts de outro aluno seriam ignorados.
 - [ ] Teste: apague um post no banco, recarregue — ele some da tela.
 
 **Fase 3 — Escritas do dia a dia (sync)**
 
 - [ ] Middleware de idempotência + ids do cliente (seção 3).
-- [ ] Feed (publicar, responder, curtir, salvar, denunciar), mensagens, perfil, loja, sequência, estudos.
+- [ ] Feed (publicar, responder, curtir, salvar, denunciar), upload de anexos, perfil (`PUT /me`), loja e entrega, flashcards, lembretes, sequência, estudos.
 - [ ] Teste: use o app, veja `cepi-api-fila` esvaziar; desligue o Wi-Fi, curta 3 posts, religue — os pedidos saem.
 
 **Fase 4 — Regras de pontos e ranking**
@@ -771,7 +786,7 @@ Faça em ordem; cada fase termina com um teste visível no front.
 **Fase 6 — Tempo real**
 
 - [ ] Gateway `/ws` com autenticação no 1º frame, presença no Redis, eventos da seção 8.
-- [ ] Front: ligar `tempoReal` nas salas, notificações e mensagens (com `despachar`).
+- [ ] Front: ligar `tempoReal` nas salas, notificações e chat de sala (com `despachar`).
 - [ ] Teste: duas janelas (aluno e professor) — a entrega aparece para o professor sem recarregar.
 
 **Fase 7 — Quiz e desafios no servidor**
@@ -783,16 +798,14 @@ Faça em ordem; cada fase termina com um teste visível no front.
 
 **Fase 8 — Desligar as simulações no modo `http`**
 
-- [ ] `simularRespostasDaDuvida`, resposta automática no `responder` (`respostaAjudou`), respostas simuladas de DM
-  (`enviarMensagem`), entregas simuladas em `criarAtividade`, `simularAtividadeSala`, membros simulados em
+- [ ] `simularRespostasDaDuvida`, resposta automática no `responder` (`respostaAjudou`), entregas simuladas em `criarAtividade`, `simularAtividadeSala`, membros simulados em
   `criarSala`, `validarRelato` agendado em `enviarRelato`, adversário em `jogarDuelo`, colegas em
   `jogarRodadaQuiz`, `simularAusencia` e `adiantarFoco` (botões de demo).
 - [ ] Sugestão: um `if (MODO_API === "mock")` em volta de cada `agendar(...)` de simulação.
 
 **Fase 9 — Segurança, LGPD e produção**
 
-- [ ] `proxy.ts` validando o JWT; remover `cepi_papel` e o token do `localStorage` (seção 5).
-- [ ] `iniciarConversa`: id determinístico `dm:<idA>:<idB>` (ids em ordem) para os dois lados acharem a mesma conversa.
+- [ ] API validando o JWT em todo endpoint; token fora do `sessionStorage` (cookie httpOnly) e, se quiser, `proxy.ts` otimista (seção 5).
 - [ ] Ouvir `cepi:sync-rejeitada` (toast) e `cepi:sessao-expirada` (renovar ou mandar para o login).
 - [ ] Chamar `limparFila()` de `src/api/sync.ts` no `sair()` se o computador for compartilhado.
 - [ ] Limites de taxa, backups, jobs de retenção, termo de consentimento, política de privacidade.
@@ -816,7 +829,6 @@ para o front funcionar igual antes e depois da integração. **Nunca** use dados
 | `data/missoes.ts` (`MISSOES`, `COLETIVA`, `FLASHCARDS`) | `missoes`, `missoes_coletivas`, `flashcards` |
 | `data/calendario.ts` (`EVENTOS`, `emDias` → data real) | `eventos` |
 | `data/posts.ts` (`criarPosts`) | `posts`, `respostas`, `anexos` (arquivo de exemplo) |
-| `data/conversas.ts` (`criarConversas`) | `conversas`, `conversa_participantes`, `mensagens` |
 | `data/estudos.ts` (`criarHistoricoEstudos`) | `sessoes_estudo` (`fim = inicio + minutos`) |
 | `data/salas.ts` (`criarSalas`) | `salas`, `sala_mensagens` |
 | `data/campeonatos.ts` (`criarCampeonatos`) | `campeonatos`, `campeonato_turmas`, `campeonato_participantes`, `partidas` |

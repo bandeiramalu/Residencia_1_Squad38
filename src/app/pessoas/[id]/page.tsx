@@ -5,5 +5,5 @@ export const metadata: Metadata = { title: "Perfil" };
 
 export default async function Pagina({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <PessoaView id={id} />;
+  return <PessoaView key={id} id={id} />;
 }

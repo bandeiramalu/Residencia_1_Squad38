@@ -21,7 +21,7 @@ import { formatarMinutos } from "@/lib/estudos";
 import { fmt, normalizar } from "@/lib/format";
 import { ultimoAcesso, alunosDoPainel, type AlunoPainel } from "@/lib/turmas";
 import { useEstado } from "@/store/store";
-import { ligaDoAluno, missoesConcluidas, mapa, PERIODOS, porHora, SECOES, serie, TURMAS, type Liga, type Periodo, type SecaoId } from "./estatisticasDados";
+import { ligaDoAluno, missoesConcluidas, mapa, PERIODOS, porHora, SECOES, serie, TURMAS, xpNoPeriodo, type Liga, type Periodo, type SecaoId } from "./estatisticasDados";
 import { RiscoBadge, turmaCurta } from "./comum";
 import { baixarEstatisticasCsv, baixarEstatisticasPdf, type SecaoExport } from "./relatorios";
 
@@ -201,9 +201,8 @@ function Conteudo() {
   const totalCartoes = soma(cartoes.map((c) => c.valor));
 
   const porLiga = LIGAS.map((l) => ({ chave: l.id, rotulo: l.nome, valor: alunos.filter((a) => ligaDoAluno(a.xp) === l.id).length, cor: COR_LIGA[l.id] }));
-  const escalaXp = (dias / 7) * (disc === "todas" ? 1 : 0.2);
-  const topXp = [...alunos].sort((a, b) => b.xpSemana - a.xpSemana).slice(0, 6);
-  const xpPeriodo = (a: AlunoPainel) => Math.round(a.xpSemana * escalaXp);
+  const xpPeriodo = (a: AlunoPainel) => xpNoPeriodo(a, dias, disc, agora);
+  const topXp = [...alunos].sort((a, b) => xpPeriodo(b) - xpPeriodo(a)).slice(0, 6);
 
   const campeonatos = estado.campeonatos
     .map((c) => ({ c, qtd: c.formato === "interclasses" ? c.participantes.filter((t) => turmasEscopo.includes(t)).length : c.participantes.filter((id) => ids.has(id)).length }))

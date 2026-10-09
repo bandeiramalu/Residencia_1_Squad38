@@ -266,8 +266,8 @@ export function EstatisticasAlunoView() {
                   <Barras
                     className="mt-4"
                     altura={72}
-                    dados={ganhos.map((g, i) => ({ chave: g.dia, rotulo: "", valor: g.xp, dica: `${diaSemanaMes(g.dia)} · +${g.xp} XP`, destaque: i === ganhos.length - 1 }))}
-                    formatar={(v) => `${v} XP`}
+                    dados={ganhos.map((g, i) => ({ chave: g.dia, rotulo: "", valor: g.xp, dica: `${diaSemanaMes(g.dia)} · +${fmt(g.xp)} XP`, destaque: i === ganhos.length - 1 }))}
+                    formatar={(v) => `${fmt(v)} XP`}
                     rotulo="XP ganho por dia"
                   />
                 </>
@@ -279,7 +279,7 @@ export function EstatisticasAlunoView() {
               {ptsPeriodo > 0 ? (
                 <Barras
                   altura={150}
-                  dados={ganhos.map((g, i) => ({ chave: g.dia, rotulo: "", valor: g.pontos, dica: `${diaSemanaMes(g.dia)} · +${g.pontos} pts`, destaque: i === ganhos.length - 1 }))}
+                  dados={ganhos.map((g, i) => ({ chave: g.dia, rotulo: "", valor: g.pontos, dica: `${diaSemanaMes(g.dia)} · +${fmt(g.pontos)} pts`, destaque: i === ganhos.length - 1 }))}
                   formatar={(v) => `${v} pts`}
                   rotulo="Pontos ganhos por dia"
                 />

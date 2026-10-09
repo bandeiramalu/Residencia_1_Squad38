@@ -1,9 +1,10 @@
 /** PDFs reais das atividades: correção (aluna) e relatório (professor). */
 import { ESCOLA } from "@/data/escola";
 import { baixarArquivo, gerarPdfDocumento, type Bloco } from "@/lib/pdf";
+import { fmt } from "@/lib/format";
 import { dataCurta } from "@/lib/tempo";
 import type { Atividade, Entrega, Pessoa } from "@/store/types";
-import { contarEntregas, fmtNota } from "./comum";
+import { contarEntregas, fmtNota, lerResposta } from "./comum";
 
 function abrirBlob(blob: Blob, nome: string) {
   const url = URL.createObjectURL(blob);
@@ -23,21 +24,25 @@ function slugArq(t: string) {
 export function pdfCorrecao(a: Atividade, e: Entrega, aluno?: Pessoa, professor?: Pessoa) {
   const nota = e.nota ?? 0;
   const blocos: Bloco[] = [
-    { tipo: "quadro", titulo: `Nota ${fmtNota(nota)} de 10`, texto: `+${e.pontos ?? Math.round((a.pontos * nota) / 10)} pontos e +${e.xp ?? Math.round((a.xp * nota) / 10)} XP, proporcionais à nota.` },
+    { tipo: "quadro", titulo: `Nota ${fmtNota(nota)} de 10`, texto: `+${fmt(e.pontos ?? Math.round((a.pontos * nota) / 10))} pontos e +${fmt(e.xp ?? Math.round((a.xp * nota) / 10))} XP, proporcionais à nota.` },
     { tipo: "secao", texto: "Comentário do professor" },
     { tipo: "paragrafo", texto: e.feedback?.trim() || "Corrigida sem comentário escrito." },
     { tipo: "secao", texto: "Descrição e orientações da atividade" },
     { tipo: "paragrafo", texto: a.descricao },
   ];
-  const resposta = e.resposta?.split("\n").map((l) => l.trim()).filter(Boolean) ?? [];
+  const lida = lerResposta(e.resposta);
+  const resposta = lida.texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   blocos.push({ tipo: "secao", texto: "Sua entrega" });
   if (resposta.length) resposta.forEach((l) => blocos.push({ tipo: "paragrafo", texto: l }));
   if (e.anexo) blocos.push({ tipo: "paragrafo", texto: `Arquivo enviado: ${e.anexo.nome} (${e.anexo.tamanho}).` });
-  if (!resposta.length && !e.anexo) blocos.push({ tipo: "paragrafo", texto: "Entrega registrada sem texto nem arquivo." });
+  else if (lida.anexo) blocos.push({ tipo: "paragrafo", texto: `Arquivo enviado: ${lida.anexo}.` });
+  if (!resposta.length && !e.anexo && !lida.anexo) {
+    blocos.push({ tipo: "paragrafo", texto: e.entregueEm ? `Entrega registrada em ${dataCurta(e.entregueEm)}.` : "Entrega registrada pelo professor." });
+  }
   return gerarPdfDocumento({
     escola: ESCOLA.nome,
     titulo: `Correção: ${a.titulo}`,
-    subtitulo: [a.disciplina, aluno?.nome, professor ? `Professor: ${professor.nome}` : undefined, e.entregueEm ? `Entregue em ${dataCurta(e.entregueEm)}` : undefined].filter(Boolean).join(" · "),
+    subtitulo: [a.disciplina, aluno?.nome, professor?.nome, e.entregueEm ? `Entregue em ${dataCurta(e.entregueEm)}` : undefined].filter(Boolean).join(" · "),
     blocos,
   });
 }

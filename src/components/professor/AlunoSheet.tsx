@@ -175,12 +175,12 @@ function Ficha({ aluno: a, onDarPontos }: { aluno: AlunoPainel; onDarPontos: () 
       </section>
 
       <RodapeSheet>
-        <Button variante="secundario" onClick={() => baixarBoletim(estado, a)}>
-          <FileDown /> Boletim (PDF)
+        <Button variante="secundario" onClick={() => baixarBoletim(estado, a)} aria-label="Boletim em PDF">
+          <FileDown /> Boletim<span className="max-sm:hidden"> (PDF)</span>
         </Button>
-        <BotaoLembrar alunoId={a.id} nome={a.nome} tamanho="md" />
-        <Button className="flex-1" onClick={onDarPontos}>
-          <Coins /> Dar pontos a {primeiroNome(a.nome)}
+        <BotaoLembrar alunoId={a.id} nome={a.nome} tamanho="md" rotuloCurto />
+        <Button className="min-w-0 flex-1" onClick={onDarPontos} aria-label={`Dar pontos a ${primeiroNome(a.nome)}`}>
+          <Coins className="shrink-0" /> <span className="truncate">Dar pontos<span className="max-sm:hidden"> a {primeiroNome(a.nome)}</span></span>
         </Button>
       </RodapeSheet>
     </div>

@@ -155,7 +155,8 @@ export function criarCampeonatos(agora: number): Campeonato[] {
       participantes: ["lucas", "sofia", "ana", "marina", "julia", "pedro", "rafael", "camila", "gustavo"],
       maxParticipantes: 40,
       partidas: [],
-      placar: { gustavo: 1690, lucas: 1422, sofia: 1380, ana: 1215, marina: 1104, rafael: 1010, julia: 960, camila: 720, pedro: 655 },
+      // XP de setembro de cada um: sempre menor que o XP total da pessoa (ver data/pessoas.ts).
+      placar: { gustavo: 1190, lucas: 1030, sofia: 980, ana: 640, marina: 590, rafael: 540, julia: 470, camila: 330, pedro: 260 },
       campeao: "gustavo",
       capa: "noite",
       turmas: [],
