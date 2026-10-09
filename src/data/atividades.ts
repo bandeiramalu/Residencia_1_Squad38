@@ -40,6 +40,11 @@ function entregasDaTurma(turma: string, semente: number, taxa: number, corrigida
   });
 }
 
+/** Semente e taxas da Lista 7 (a mesma geração alimenta a atividade e a notificação do professor). */
+function entregasDaLista7(agora: number) {
+  return entregasDaTurma("9º Ano A", 71, 0.55, 0.35, agora);
+}
+
 export function criarAtividades(agora: number): Atividade[] {
   const hoje = new Date(agora);
   hoje.setHours(23, 59, 0, 0);
@@ -60,7 +65,7 @@ export function criarAtividades(agora: number): Atividade[] {
       xp: 30,
       postId: "p1",
       anexo: { nome: "lista-7-funcoes-afins.pdf", paginas: 2, tamanho: "10 KB" },
-      entregas: entregasDaTurma("9º Ano A", 71, 0.55, 0.35, agora),
+      entregas: entregasDaLista7(agora),
     },
     {
       id: "at-citologia",
@@ -131,13 +136,18 @@ export function criarAtividades(agora: number): Atividade[] {
 
 export function criarNotificacoes(agora: number): Notificacao[] {
   const t = (ms: number) => agora - ms;
+  // Os textos do professor saem dos mesmos dados que o Painel mostra (nada de número fixo que contradiga a tela).
+  const lista7 = entregasDaLista7(agora);
+  const entregues = lista7.filter((e) => e.status !== "pendente").length;
+  const aCorrigir = lista7.filter((e) => e.status === "entregue").length;
+  const semAcesso = alunosDaTurma("9º Ano A").filter((a) => a.ultimoAcessoHa > 3 * 24 * 60).length; // `ultimoAcessoHa` em minutos
   return [
     { id: "n1", para: "ana", tipo: "atividade", titulo: "Nova atividade de Matemática", texto: "Prof. Ricardo publicou a Lista 7 — prazo em 2 dias.", href: "/missoes#atividades", deId: "prof_ricardo", criadoEm: t(14 * MIN), lida: false },
     { id: "n2", para: "ana", tipo: "campeonato", titulo: "Sua semifinal está liberada!", texto: "Copa CEPI de Matemática: você enfrenta Sofia Andrade.", href: "/campeonatos/copa-matematica", deId: "prof_ricardo", criadoEm: t(40 * MIN), lida: false },
     { id: "n3", para: "ana", tipo: "sala", titulo: "Sala de revisão aberta", texto: "“Revisão para a prova de Matemática” está com 11 colegas focando agora.", href: "/estudos/salas/sala-revisao-mat", deId: "prof_ricardo", criadoEm: t(2 * H), lida: false },
     { id: "n4", para: "ana", tipo: "correcao", titulo: "Leitura corrigida · nota 9,5", texto: "+19 pontos e +14 XP em “Capítulo 4 — Gráficos de funções”.", href: "/missoes#atividades", deId: "prof_ricardo", criadoEm: t(3 * D), lida: true },
-    { id: "n5", para: "prof_ricardo", tipo: "entrega", titulo: "14 entregas na Lista 7", texto: "9º Ano A · 5 aguardando correção.", href: "/professor/atividades/at-lista7", criadoEm: t(10 * MIN), lida: false },
+    { id: "n5", para: "prof_ricardo", tipo: "entrega", titulo: `${entregues} ${entregues === 1 ? "entrega" : "entregas"} na Lista 7`, texto: `9º Ano A · ${aCorrigir} aguardando correção.`, href: "/professor/atividades/at-lista7", criadoEm: t(10 * MIN), lida: false },
     { id: "n6", para: "prof_ricardo", tipo: "moderacao", titulo: "2 publicações aguardando revisão", texto: "A triagem automática sinalizou possível ofensa e spam.", href: "/professor/moderacao", criadoEm: t(1 * H), lida: false },
-    { id: "n7", para: "prof_ricardo", tipo: "sistema", titulo: "3 alunos sem acessar há mais de 3 dias", texto: "Veja o alerta de engajamento no painel da turma.", href: "/professor/alunos", criadoEm: t(5 * H), lida: true },
+    { id: "n7", para: "prof_ricardo", tipo: "sistema", titulo: `${semAcesso} ${semAcesso === 1 ? "aluno sem acessar" : "alunos sem acessar"} há mais de 3 dias`, texto: "9º Ano A · veja o alerta de engajamento no painel da turma.", href: "/professor/alunos", criadoEm: t(5 * H), lida: true },
   ];
 }

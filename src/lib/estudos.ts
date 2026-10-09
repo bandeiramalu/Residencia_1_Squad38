@@ -43,6 +43,20 @@ export function lerTimer(t: TimerAtivo, agora: number): LeituraTimer {
   };
 }
 
+/**
+ * Parte do foco que já tinha passado quando a aluna entrou numa sala em andamento (não conta).
+ * Só vale na primeira fase de foco da rodada: depois da primeira pausa, os ciclos são inteiros.
+ */
+export function descontoDoFocoMs(t: TimerAtivo) {
+  return t.fase === "foco" && t.ciclos === 0 ? Math.max(0, t.descontoMs ?? 0) : 0;
+}
+
+/** Minutos de foco já cumpridos na fase atual, sem o desconto de quem entrou no meio do ciclo. */
+export function minutosCumpridos(t: TimerAtivo, agora: number) {
+  if (t.fase !== "foco") return 0;
+  return Math.max(0, Math.floor((decorridoFaseMs(t, agora) - descontoDoFocoMs(t)) / MIN));
+}
+
 /** "07:42" · "1:05:09" */
 export function formatarRelogio(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));

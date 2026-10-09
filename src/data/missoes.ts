@@ -18,7 +18,7 @@ export const MISSOES: Missao[] = [
     id: "d2",
     tipo: "diaria",
     titulo: "Acertar 5 flashcards",
-    descricao: "Qualquer disciplina, na prática rápida desta tela. Revisar em intervalos fixa melhor que reler.",
+    descricao: "Qualquer disciplina, na prática rápida desta tela: contam os acertos em cartas vencidas. Revisar em intervalos fixa melhor que reler.",
     alvo: 5,
     progresso: 0,
     pontos: 25,

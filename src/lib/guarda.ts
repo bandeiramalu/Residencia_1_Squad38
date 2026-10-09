@@ -7,8 +7,11 @@ import type { PapelSessao } from "@/lib/auth";
 
 export const HOME: Record<PapelSessao, string> = { aluno: "/feed", professor: "/professor" };
 
-/** Rotas compartilhadas pelos dois papéis. */
-const COMPARTILHADAS = ["/estudos/salas", "/campeonatos", "/pessoas"];
+/** Rotas compartilhadas pelos dois papéis (o feed é o mesmo para a aluna e para o professor). */
+const COMPARTILHADAS = ["/feed", "/estudos/salas", "/campeonatos", "/pessoas"];
+
+/** Áreas só da aluna: o professor que cai nelas volta ao painel. Rota desconhecida segue para o 404. */
+const ROTAS_DE_ALUNO = ["/estudos", "/missoes", "/ranking", "/loja", "/perfil", "/estatisticas"];
 
 const comeca = (caminho: string, prefixo: string) => caminho === prefixo || caminho.startsWith(`${prefixo}/`);
 
@@ -44,6 +47,6 @@ export function destinoDaGuarda(caminho: string, papel: PapelSessao | null, busc
   const professor = comeca(caminho, "/professor");
   if (COMPARTILHADAS.some((r) => comeca(caminho, r))) return null;
   if (papel === "aluno" && professor) return HOME.aluno;
-  if (papel === "professor" && !professor) return HOME.professor;
+  if (papel === "professor" && !professor && ROTAS_DE_ALUNO.some((r) => comeca(caminho, r))) return HOME.professor;
   return null;
 }

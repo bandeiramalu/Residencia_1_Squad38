@@ -390,5 +390,19 @@ export function criarPosts(agora: number): Post[] {
       emRevisao: true,
       denuncia: { motivo: "Spam ou golpe", descricao: "Link suspeito no grupo da escola.", evidencia: true, categoriaIA: "Spam ou golpe", prioridade: "baixa", criadoEm: t(90 * MIN) },
     },
+    {
+      ...base,
+      id: "p19",
+      tipo: "duvida",
+      autorId: "camila",
+      espaco: "9B",
+      disciplina: "Matemática",
+      texto:
+        "Na lista de equações do 2º grau, quando o delta dá negativo eu devo dizer que não existe solução ou foi a minha conta que errou? O professor comentou algo sobre números reais, mas não peguei. #funcaoquadratica",
+      tags: ["funcaoquadratica"],
+      criadoEm: t(3 * H + 20 * MIN),
+      curtidas: 2,
+      respostas: [],
+    },
   ];
 }
