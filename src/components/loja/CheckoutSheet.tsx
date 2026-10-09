@@ -1,27 +1,35 @@
 "use client";
 
-import { Check, Coins, Download, Ticket } from "lucide-react";
+import { Check, Coins, Ticket, TriangleAlert } from "lucide-react";
 import { m as motion } from "motion/react";
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/Button";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Sheet } from "@/components/ui/Sheet";
 import type { ItemLoja } from "@/data/loja";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
-import { dataCurta } from "@/lib/tempo";
 import { comprar, equipar } from "@/store/actions";
-import { baixarComprovante } from "./comprovante";
 import { useEstado } from "@/store/store";
 import { ESTILO_RARIDADE, PreviaItem, ROTULO_SLOT } from "./ItemVisual";
 
 /** Modal "Confirmar troca": saldo atual × saldo após a compra (fluxo 3.3). */
 export function CheckoutSheet({ aberto, item, onFechar }: { aberto: boolean; item: ItemLoja; onFechar: () => void }) {
   const { usuario, compras } = useEstado();
-  const compra = compras.find((c) => c.itemId === item.id);
-  const adquirido = !!compra;
+  const voucher = item.slot === "voucher";
+  const trocas = compras.filter((c) => c.itemId === item.id);
+  // Itens do perfil são únicos; vouchers (cantina, secretaria) podem ser trocados de novo — cada troca gera um código novo
+  // (os códigos e o comprovante em PDF ficam no histórico de trocas da Loja).
+  const adquirido = !voucher && trocas.length > 0;
   const equipado = usuario.equipados.includes(item.id);
   const depois = usuario.pontos - item.custo;
-  const voucher = item.slot === "voucher";
+  const semSaldo = depois < 0;
+  const trocando = useRef(false);
+
+  // O modal fica montado entre aberturas: a trava de duplo clique volta a cada abertura.
+  useEffect(() => {
+    if (aberto) trocando.current = false;
+  }, [aberto]);
 
   return (
     <Sheet aberto={aberto} onFechar={onFechar} titulo={adquirido ? "Seu item" : "Confirmar troca"}>
@@ -50,41 +58,45 @@ export function CheckoutSheet({ aberto, item, onFechar }: { aberto: boolean; ite
           </span>
           <div className="min-w-0 text-[13.5px]">
             <p className="font-medium text-tinta">Você já tem este item</p>
-            {voucher ? (
-              <>
-                <p className="text-texto-2">
-                  Código: <span className="font-mono font-medium tracking-wide text-tinta">{compra.voucher}</span>
-                </p>
-                <p className="text-texto-2">{compra.entregueEm ? `Entregue em ${dataCurta(compra.entregueEm)}` : "Aguardando retirada"}</p>
-              </>
-            ) : (
-              <p className="text-texto-2">{equipado ? "Está equipado no seu perfil." : "Está guardado no seu perfil."}</p>
-            )}
+            <p className="text-texto-2">{equipado ? "Está equipado no seu perfil." : "Está guardado no seu perfil."}</p>
           </div>
         </div>
       ) : (
-        <dl className="mt-5 divide-y divide-borda overflow-hidden rounded-xl border border-borda text-[14px] tabular-nums">
-          <div className="flex items-center justify-between px-4 py-3">
-            <dt className="text-texto-2">Saldo atual</dt>
-            <dd className="font-medium text-texto">{fmt(usuario.pontos)} pontos</dd>
-          </div>
-          <div className="flex items-center justify-between px-4 py-3">
-            <dt className="text-texto-2">Custo do item</dt>
-            <dd className="flex items-center gap-1 font-medium text-tinta">
-              − <Coins className="size-3.5 text-ambar" aria-hidden /> {fmt(item.custo)}
-            </dd>
-          </div>
-          <div className="flex items-center justify-between bg-superficie-2 px-4 py-3">
-            <dt className="font-medium text-tinta">Saldo após a troca</dt>
-            <dd className={cn("text-[15px] font-semibold", depois < 0 ? "text-alerta" : "text-tinta")}>
-              {depois < 0 ? `faltam ${fmt(-depois)}` : `${fmt(depois)} pontos`}
-            </dd>
-          </div>
-        </dl>
+        <>
+          {voucher && trocas.length > 0 && (
+            <p className="mt-5 flex items-start gap-1.5 text-[12.5px] leading-snug text-texto-2">
+              <Ticket className="mt-px size-3.5 shrink-0" aria-hidden /> Você já trocou este item {trocas.length === 1 ? "1 vez" : `${trocas.length} vezes`}. Cada troca gera um código novo; os códigos ficam no histórico.
+            </p>
+          )}
+          <dl className={cn("divide-y divide-borda overflow-hidden rounded-xl border border-borda text-[14px] tabular-nums", voucher && trocas.length > 0 ? "mt-3" : "mt-5")}>
+            <div className="flex items-center justify-between px-4 py-3">
+              <dt className="text-texto-2">Saldo atual</dt>
+              <dd className="font-medium text-texto">{fmt(usuario.pontos)} pontos</dd>
+            </div>
+            <div className="flex items-center justify-between px-4 py-3">
+              <dt className="text-texto-2">Custo do item</dt>
+              <dd className="flex items-center gap-1 font-medium text-tinta">
+                − <Coins className="size-3.5 text-ambar" aria-hidden /> {fmt(item.custo)}
+              </dd>
+            </div>
+            <div className="flex items-center justify-between bg-superficie-2 px-4 py-3">
+              <dt className="font-medium text-tinta">Saldo após a troca</dt>
+              <dd className={cn("text-[15px] font-semibold", semSaldo ? "text-alerta" : "text-tinta")}>
+                {semSaldo ? `faltam ${fmt(-depois)}` : `${fmt(depois)} pontos`}
+              </dd>
+            </div>
+          </dl>
+          {semSaldo && (
+            <p role="alert" className="mt-3 flex items-start gap-2 rounded-xl border border-borda bg-superficie-2 px-3.5 py-3 text-[13.5px] font-medium leading-snug text-alerta">
+              <TriangleAlert className="mt-px size-4 shrink-0" aria-hidden />
+              Saldo insuficiente: você possui {fmt(usuario.pontos)} pontos e este item requer {fmt(item.custo)} pontos.
+            </p>
+          )}
+        </>
       )}
 
       <div className="mt-3 space-y-1.5 text-[12.5px] leading-snug text-texto-2">
-        {voucher && !adquirido && (
+        {voucher && (
           <p className="flex items-start gap-1.5">
             <Ticket className="mt-px size-3.5 shrink-0" aria-hidden /> Você recebe um código para retirar na secretaria do CEPI.
           </p>
@@ -102,25 +114,22 @@ export function CheckoutSheet({ aberto, item, onFechar }: { aberto: boolean; ite
           {adquirido ? "Fechar" : "Cancelar"}
         </Button>
         {adquirido ? (
-          voucher ? (
-            <Button tamanho="lg" className="flex-1" onClick={() => baixarComprovante(compra, item, usuario.nome, usuario.pontos)}>
-              <Download /> Baixar comprovante (PDF)
-            </Button>
-          ) : (
-            <Button variante={equipado ? "secundario" : "primario"} tamanho="lg" className="flex-1" onClick={() => equipar(item.id, !equipado)}>
-              {equipado ? "Remover do perfil" : "Equipar"}
-            </Button>
-          )
+          <Button variante={equipado ? "secundario" : "primario"} tamanho="lg" className="flex-1" onClick={() => equipar(item.id, !equipado)}>
+            {equipado ? "Remover do perfil" : "Equipar"}
+          </Button>
         ) : (
           <Button
             tamanho="lg"
             className="flex-1"
-            disabled={depois < 0}
+            disabled={semSaldo}
             onClick={() => {
+              if (trocando.current || semSaldo) return;
+              trocando.current = true;
               if (comprar(item.id)) onFechar();
+              else trocando.current = false;
             }}
           >
-            {depois < 0 ? "Saldo insuficiente" : "Trocar pontos"}
+            Trocar pontos
           </Button>
         )}
       </RodapeSheet>
