@@ -1,12 +1,12 @@
 "use client";
 
 import { Send, Users } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ICONE_ATIVIDADE } from "@/components/atividades/comum";
 import { SeletorArquivo } from "@/components/feed/SeletorArquivo";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
-import { AreaTexto, Campo, Entrada, Seletor } from "@/components/ui/Campo";
+import { AreaTexto, Campo, Entrada, Seletor, idErroDe } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Segmentado } from "@/components/ui/Segmentado";
 import { Sheet } from "@/components/ui/Sheet";
@@ -68,6 +68,8 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
   const [arquivo, setArquivo] = useState<ArquivoSalvo | null>(null);
   const [gerarPdf, setGerarPdf] = useState(false);
   const [tentou, setTentou] = useState(false);
+  // Trava de duplo clique: o 2º toque durante a animação de saída publicaria a atividade (e avisaria a turma) duas vezes.
+  const publicando = useRef(false);
 
   const hoje = paraInputData(agora);
   const prazoTs = deInputData(prazo);
@@ -88,7 +90,8 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
 
   const publicar = () => {
     setTentou(true);
-    if (!valido) return;
+    if (!valido || publicando.current) return;
+    publicando.current = true;
     let anexo: Anexo | undefined;
     if (arquivo) {
       anexo = { nome: arquivo.nome, paginas: arquivo.paginas ?? 0, tamanho: arquivo.tamanho, arquivoId: arquivo.id, mime: arquivo.mime, previa: arquivo.previa };
@@ -113,11 +116,28 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
   return (
     <div className="space-y-5">
       <Campo rotulo="Título" htmlFor="at-titulo" erro={tentou && erros.titulo}>
-        <Entrada id="at-titulo" value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Ex.: Lista 8 — Função quadrática" maxLength={80} autoComplete="off" />
+        <Entrada
+          id="at-titulo"
+          value={titulo}
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="Ex.: Lista 8 — Função quadrática"
+          maxLength={80}
+          autoComplete="off"
+          aria-invalid={!!(tentou && erros.titulo)}
+          aria-describedby={tentou && erros.titulo ? idErroDe("at-titulo") : undefined}
+        />
       </Campo>
 
       <Campo rotulo="Descrição" htmlFor="at-descricao" erro={tentou && erros.descricao} dica="O que entregar, como será avaliado e onde está o material.">
-        <AreaTexto id="at-descricao" value={descricao} onChange={(e) => setDescricao(e.target.value)} placeholder="Resolva as questões 1 a 10 e envie com o raciocínio…" maxLength={400} />
+        <AreaTexto
+          id="at-descricao"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          placeholder="Resolva as questões 1 a 10 e envie com o raciocínio…"
+          maxLength={400}
+          aria-invalid={!!(tentou && erros.descricao)}
+          aria-describedby={tentou && erros.descricao ? idErroDe("at-descricao") : undefined}
+        />
       </Campo>
 
       <div>
@@ -161,7 +181,15 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
           <Segmentado opcoes={OPCOES_TURMA} valor={turma} onChange={setTurma} grupo="nova-atividade-turma" rotulo="Turma da atividade" />
         </div>
         <Campo rotulo="Prazo de entrega" htmlFor="at-prazo" erro={tentou && erros.prazo} dica="Até 23h59 do dia escolhido.">
-          <Entrada id="at-prazo" type="date" value={prazo} min={hoje} onChange={(e) => setPrazo(e.target.value)} />
+          <Entrada
+            id="at-prazo"
+            type="date"
+            value={prazo}
+            min={hoje}
+            onChange={(e) => setPrazo(e.target.value)}
+            aria-invalid={!!(tentou && erros.prazo)}
+            aria-describedby={tentou && erros.prazo ? idErroDe("at-prazo") : undefined}
+          />
         </Campo>
       </div>
 
@@ -170,7 +198,7 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
           Anexo <span className="font-normal text-texto-2">· opcional</span>
         </p>
         <SeletorArquivo valor={arquivo} onChange={setArquivo} titulo="Anexar arquivo da atividade" />
-        <label className={cn("mt-2.5 flex cursor-pointer items-start gap-2.5 text-[13px] leading-snug", arquivo ? "opacity-50" : "text-texto")}>
+        <label className={cn("mt-2.5 flex min-h-11 cursor-pointer items-start gap-2.5 py-1 text-[13px] leading-snug", arquivo ? "opacity-50" : "text-texto")}>
           <input type="checkbox" checked={gerarPdf && !arquivo} disabled={!!arquivo} onChange={(e) => setGerarPdf(e.target.checked)} className="mt-0.5 size-4 accent-verde" />
           <span>
             Gerar um PDF a partir da descrição
@@ -185,7 +213,11 @@ function Formulario({ onCancelar, onCriada }: { onCancelar: () => void; onCriada
           <Stepper valor={pontos} onChange={setPontos} passo={5} max={200} rotulo="pontos" sufixo="pontos" atalhos={[20, 40, 60, 80]} />
           <Stepper valor={xp} onChange={setXp} passo={5} max={150} rotulo="XP" sufixo="XP" atalhos={[15, 30, 45, 60]} />
         </div>
-        {tentou && erros.recompensa && <p className="mt-1.5 text-[12px] font-medium text-alerta">{erros.recompensa}</p>}
+        {tentou && erros.recompensa && (
+          <p role="alert" className="mt-1.5 text-[12px] font-medium text-alerta">
+            {erros.recompensa}
+          </p>
+        )}
         <p className="mt-2 text-[12px] leading-snug text-texto-2">A recompensa é proporcional à nota: nota 8 rende {Math.round(pontos * 0.8)} pontos e {Math.round(xp * 0.8)} XP.</p>
       </div>
 

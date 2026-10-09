@@ -21,7 +21,7 @@ import { formatarMinutos } from "@/lib/estudos";
 import { fmt, normalizar } from "@/lib/format";
 import { ultimoAcesso, alunosDoPainel, type AlunoPainel } from "@/lib/turmas";
 import { useEstado } from "@/store/store";
-import { ligaDoAluno, missoesConcluidas, mapa, PERIODOS, porHora, SECOES, serie, TURMAS, xpNoPeriodo, type Liga, type Periodo, type SecaoId } from "./estatisticasDados";
+import { ajustarAoTotal, ligaDoAluno, missoesConcluidas, mapa, PERIODOS, porHora, SECOES, serie, TURMAS, xpNoPeriodo, type Liga, type Periodo, type SecaoId } from "./estatisticasDados";
 import { RiscoBadge, turmaCurta } from "./comum";
 import { baixarEstatisticasCsv, baixarEstatisticasPdf, type SecaoExport } from "./relatorios";
 
@@ -145,7 +145,8 @@ function Conteudo() {
   const mediaAtivos = Math.round(soma(pontos.map((p) => p.ativos)) / Math.max(1, pontos.length));
   const diario = dias <= 30;
   const barrasAtivos: Barra[] = pontos.map((p, i) => ({ chave: i, rotulo: p.rotulo, valor: p.ativos, destaque: i === pontos.length - 1, dica: `${p.rotulo} · ${p.ativos} ativos` }));
-  const barrasHoras: Barra[] = pontos.map((p, i) => ({ chave: i, rotulo: p.rotulo, valor: Math.round(p.minutos / 6) / 10, destaque: i === pontos.length - 1, dica: `${p.rotulo} · ${formatarMinutos(p.minutos)}` }));
+  // Em minutos (inteiros): a soma das barras, o resumo do gráfico e o total do cartão são o mesmo número.
+  const barrasHoras: Barra[] = pontos.map((p, i) => ({ chave: i, rotulo: p.rotulo, valor: p.minutos, destaque: i === pontos.length - 1, dica: `${p.rotulo} · ${formatarMinutos(p.minutos)}` }));
   const passo = pontos.length > 12 ? 5 : 1;
 
   const semanas = periodo === "7" ? 2 : periodo === "30" ? 5 : 9;
@@ -157,13 +158,13 @@ function Conteudo() {
   const pico = horas.reduce((m, h) => (h.minutos > m.minutos ? h : m), horas[0]);
   const barrasHora: Barra[] = horas.map((h) => ({ chave: h.hora, rotulo: `${h.hora}h`, valor: h.minutos, destaque: h.hora === pico.hora, dica: `${h.hora}h · ${formatarMinutos(h.minutos)}` }));
 
-  const totaisDisc = DISCIPLINAS.map((d) => {
-    const s = serie(alunos, dias, d, agora);
-    return { d, min: soma(s.map((p) => p.minutos)) };
-  });
-  const porDisc: BarraH[] = (disc === "todas" ? totaisDisc : [totaisDisc.find((t) => t.d === disc)!, { d: "Outras" as Disciplina, min: soma(totaisDisc.filter((t) => t.d !== disc).map((t) => t.min)) }])
+  // Com uma disciplina filtrada o recorte inteiro é ela (uma barra = "Estudo total"); sem filtro, as 8 barras somam o total.
+  const minutosDaDisciplina = (d: Disciplina) => soma(serie(alunos, dias, d, agora).map((p) => p.minutos));
+  const totaisDisc: { d: Disciplina; min: number }[] =
+    disc === "todas" ? ajustarAoTotal(DISCIPLINAS.map(minutosDaDisciplina), totalMin).map((min, i) => ({ d: DISCIPLINAS[i], min })) : [{ d: disc, min: totalMin }];
+  const porDisc: BarraH[] = [...totaisDisc]
     .sort((x, y) => y.min - x.min)
-    .map((t) => ({ chave: t.d, rotulo: t.d, valor: t.min, cor: t.d === ("Outras" as string) ? "var(--color-texto-2)" : COR_DISCIPLINA[t.d], valorTexto: formatarMinutos(t.min) }));
+    .map((t) => ({ chave: t.d, rotulo: t.d, valor: t.min, cor: COR_DISCIPLINA[t.d], valorTexto: formatarMinutos(t.min) }));
 
   const fator = disc === "todas" ? 1 : 0.125;
   const mediaTurma = (t: string) => {
@@ -210,7 +211,7 @@ function Conteudo() {
   const barrasCamp: BarraH[] = campeonatos.sort((x, y) => y.qtd - x.qtd).slice(0, 6).map(({ c, qtd }) => ({
     chave: c.id,
     rotulo: (
-      <Link href={`/campeonatos/${c.id}`} className="hover:underline">
+      <Link href={`/campeonatos/${c.id}`} className="alvo-toque hover:underline">
         {c.nome}
       </Link>
     ),
@@ -330,7 +331,7 @@ function Conteudo() {
             {escolhido ? (
               <div className="flex h-10 items-center gap-2 rounded-xl border border-borda bg-superficie px-3 text-[14px] text-tinta">
                 <span className="min-w-0 flex-1 truncate">{escolhido.nome}</span>
-                <button type="button" onClick={() => atualizar({ aluno: null })} aria-label="Remover filtro de aluno" className="text-texto-2 hover:text-tinta">
+                <button type="button" onClick={() => atualizar({ aluno: null })} aria-label="Remover filtro de aluno" className="alvo-toque text-texto-2 hover:text-tinta">
                   <X className="size-4" />
                 </button>
               </div>
@@ -347,7 +348,7 @@ function Conteudo() {
                             setBusca("");
                             atualizar({ aluno: a.id });
                           }}
-                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13.5px] text-tinta hover:bg-superficie-2"
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13.5px] text-tinta hover:bg-superficie-2 toque:min-h-11"
                         >
                           <span className="truncate">{a.nome}</span>
                           <span className="shrink-0 text-[12px] text-texto-2">{turmaCurta(a.turma)}</span>
@@ -380,7 +381,7 @@ function Conteudo() {
                 aria-pressed={ativa}
                 onClick={() => alternarSecao(s.id)}
                 className={cn(
-                  "h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97]",
+                  "h-8 shrink-0 rounded-full border px-3 text-[12.5px] font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.97] toque:h-11",
                   ativa ? "border-tinta bg-tinta text-superficie" : "border-borda bg-superficie text-texto-2 hover:text-tinta",
                 )}
               >
@@ -403,7 +404,16 @@ function Conteudo() {
           }
         />
       ) : visiveis.length === 0 ? (
-        <Vazio icone={<BarChart3 />} titulo="Nenhuma seção marcada" descricao="Ligue uma seção nos botões acima para ver os gráficos." />
+        <Vazio
+          icone={<BarChart3 />}
+          titulo="Nenhuma seção marcada"
+          descricao="Ligue uma seção nos botões acima para ver os gráficos."
+          acao={
+            <Button variante="secundario" tamanho="sm" onClick={() => atualizar({ secoes: null })}>
+              Mostrar todas as seções
+            </Button>
+          }
+        />
       ) : (
         <div className="space-y-8">
           <p className="text-[13px] text-texto-2">
@@ -413,10 +423,10 @@ function Conteudo() {
           {mostra("engajamento") && (
             <Bloco id="engajamento" titulo="Engajamento">
               <Cartao titulo={diario ? "Ativos por dia" : "Ativos por semana (média diária)"} destaque={`${mediaAtivos} de ${alunos.length}`} legenda="Alunos que estudaram">
-                <Barras dados={barrasAtivos} altura={140} passoRotulo={passo} rotulo="Alunos ativos por período" />
+                <Barras dados={barrasAtivos} altura={140} passoRotulo={passo} rotulo="Alunos ativos por período" somavel={false} />
               </Cartao>
               <Cartao titulo="Horas de estudo" destaque={formatarMinutos(totalMin)} legenda={`Horas somadas ${rotuloPeriodo}`}>
-                <Barras dados={barrasHoras} altura={140} passoRotulo={passo} formatar={(v) => `${v} h`} rotulo="Horas de estudo por período" />
+                <Barras dados={barrasHoras} altura={140} passoRotulo={passo} formatar={formatarMinutos} rotulo="Horas de estudo por período" />
               </Cartao>
             </Bloco>
           )}
@@ -429,7 +439,7 @@ function Conteudo() {
               <Cartao titulo="Horário de pico" destaque={`${pico.hora}h`} legenda="Quando mais estudam">
                 <Barras dados={barrasHora} altura={120} passoRotulo={3} rotulo="Minutos de estudo por hora do dia" />
               </Cartao>
-              <Cartao titulo="Por disciplina" destaque={formatarMinutos(disc === "todas" ? totalMin : (totaisDisc.find((t) => t.d === disc)?.min ?? 0))} legenda={disc === "todas" ? "Tempo total por matéria" : `${disc} contra as demais`}>
+              <Cartao titulo="Por disciplina" destaque={formatarMinutos(totalMin)} legenda={disc === "todas" ? "Tempo total por matéria" : `Só ${disc} neste recorte`}>
                 <BarrasHorizontais dados={porDisc} rotulo="Tempo de estudo por disciplina" />
               </Cartao>
               <Cartao titulo="Turma contra a escola" destaque={`${formatarMinutos(minhaMedia)}`} legenda={`Média por aluno por semana (escola ${formatarMinutos(mediaEscola)})`}>
@@ -486,6 +496,7 @@ function Conteudo() {
               </Cartao>
               <Cartao titulo="Mais XP" destaque={topXp[0] ? `${fmt(xpPeriodo(topXp[0]))} XP` : undefined} legenda={`Top 6 ${rotuloPeriodo}`}>
                 <BarrasHorizontais
+                  interativo
                   rotulo="Alunos com mais XP"
                   dados={topXp.map((a) => ({
                     chave: a.id,
@@ -501,7 +512,7 @@ function Conteudo() {
           {mostra("campeonatos") && (
             <Bloco id="campeonatos" titulo="Campeonatos">
               <Cartao titulo="Participação" destaque={`${participantes.size} de ${alunos.length}`} legenda="Alunos em algum campeonato" className="md:col-span-2">
-                {barrasCamp.length ? <BarrasHorizontais dados={barrasCamp} rotulo="Participantes por campeonato" /> : <p className="py-4 text-center text-[13px] text-texto-2">Nenhum campeonato com participantes neste recorte.</p>}
+                {barrasCamp.length ? <BarrasHorizontais dados={barrasCamp} rotulo="Participantes por campeonato" interativo /> : <p className="py-4 text-center text-[13px] text-texto-2">Nenhum campeonato com participantes neste recorte.</p>}
               </Cartao>
             </Bloco>
           )}
@@ -518,7 +529,7 @@ function Conteudo() {
                     { chave: "r", rotulo: "Removidas", valor: removidas, cor: "var(--color-alerta)" },
                   ]}
                 />
-                <Link href="/professor/moderacao" className="mt-3 inline-block text-[13px] font-medium text-acento hover:underline">
+                <Link href="/professor/moderacao" className="mt-3 inline-flex items-center text-[13px] font-medium text-acento hover:underline toque:min-h-11">
                   Abrir moderação
                 </Link>
               </Cartao>
@@ -544,8 +555,8 @@ function Conteudo() {
                 ) : (
                   <ul className="divide-y divide-borda">
                     {emRisco.slice(0, 6).map((a) => (
-                      <li key={a.id} className="flex items-center gap-3 py-2 text-[13.5px]">
-                        <LinkPessoa id={a.id} className="min-w-0 flex-1 truncate font-medium text-tinta hover:underline">
+                      <li key={a.id} className="flex items-center gap-3 text-[13.5px]">
+                        <LinkPessoa id={a.id} className="block min-w-0 flex-1 truncate py-2 font-medium text-tinta hover:underline toque:my-0 toque:py-3">
                           {a.nome}
                         </LinkPessoa>
                         <span className="shrink-0 text-[12px] text-texto-2">{ultimoAcesso(a.ultimoAcessoHa)}</span>
@@ -554,7 +565,7 @@ function Conteudo() {
                     ))}
                   </ul>
                 )}
-                <Link href="/professor/alunos?filtro=risco" className="mt-2 inline-block text-[13px] font-medium text-acento hover:underline">
+                <Link href="/professor/alunos?filtro=risco" className="mt-2 inline-flex items-center text-[13px] font-medium text-acento hover:underline toque:min-h-11">
                   Ver na lista de alunos
                 </Link>
               </Cartao>

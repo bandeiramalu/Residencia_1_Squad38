@@ -1,7 +1,8 @@
 "use client";
 
-import { CircleHelp, FileText, Send, ThumbsUp } from "lucide-react";
-import { useState } from "react";
+import { CircleHelp, FileText, Newspaper, Send, ThumbsUp } from "lucide-react";
+import Link from "next/link";
+import { useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { TituloPagina, Vazio } from "@/components/ui/Blocos";
@@ -17,7 +18,7 @@ import { duvidaRespondida, duvidasDasTurmas } from "@/lib/turmas";
 import { marcarRespostaUtil, responderDuvida } from "@/store/actions";
 import { useEstado } from "@/store/store";
 import type { Pessoa, Post } from "@/store/types";
-import { Abas, Metadados, useProfessorId } from "./comum";
+import { Abas, LinkBotao, Metadados, PessoaLink, useProfessorId } from "./comum";
 
 type Status = "pendentes" | "respondidas";
 
@@ -79,6 +80,15 @@ export function DuvidasView() {
           icone={<CircleHelp />}
           titulo={status === "pendentes" ? "Nenhuma dúvida aguardando" : "Nenhuma dúvida respondida ainda"}
           descricao={status === "pendentes" ? "Quando um aluno perguntar algo na sua disciplina, aparece aqui." : "As dúvidas que você responder ficam aqui."}
+          acao={
+            status === "pendentes" ? (
+              <LinkBotao href="/feed">Abrir o feed da escola</LinkBotao>
+            ) : (
+              <Button variante="secundario" onClick={() => setStatus("pendentes")}>
+                Ver as pendentes
+              </Button>
+            )
+          }
         />
       ) : (
         <ul className="space-y-3">
@@ -97,27 +107,39 @@ function CartaoDuvida({ post, autor, pessoas, agora }: { post: Post; autor?: Pes
   const [texto, setTexto] = useState("");
   const [respondendo, setRespondendo] = useState(!duvidaRespondida(post));
   const nome = autor?.nome ?? "Aluno";
+  // Trava de duplo clique: cada envio é uma resposta oficial nova (pontos e notificação ao aluno).
+  const enviando = useRef(false);
 
   const enviar = () => {
+    if (enviando.current) return;
+    enviando.current = true;
     if (responderDuvida(post.id, texto)) {
       setTexto("");
       setRespondendo(false);
+    } else {
+      enviando.current = false;
     }
   };
 
   return (
     <article className="rounded-2xl border border-borda bg-superficie p-4">
       <div className="flex items-center gap-3">
-        <LinkPessoa id={post.autorId} rotulo={`Perfil de ${nome}`} className="shrink-0">
-          <Avatar nome={nome} iniciais={autor?.iniciais} tamanho="sm" />
-        </LinkPessoa>
-        <div className="min-w-0 flex-1">
-          <LinkPessoa id={post.autorId} className="block truncate text-[14px] font-medium text-tinta hover:underline">
-            {nome}
-          </LinkPessoa>
-          <Metadados className="block truncate text-[12px] text-texto-2" itens={[autor?.turma, post.disciplina, tempoRelativo(post.criadoEm, agora)]} />
-        </div>
-        {duvidaRespondida(post) ? <Badge tom="claro">Respondida</Badge> : <Badge tom="ambar">Pendente</Badge>}
+        <PessoaLink
+          id={post.autorId}
+          nome={nome}
+          iniciais={autor?.iniciais}
+          className="flex-1"
+          apoio={<Metadados itens={[autor?.turma, post.disciplina, tempoRelativo(post.criadoEm, agora)]} />}
+        />
+        {duvidaRespondida(post) ? (
+          <Badge tom="claro" className="shrink-0">
+            Respondida
+          </Badge>
+        ) : (
+          <Badge tom="ambar" className="shrink-0">
+            Pendente
+          </Badge>
+        )}
       </div>
 
       <p className="mt-3 whitespace-pre-line text-[14px] leading-relaxed text-texto">{post.texto}</p>
@@ -146,9 +168,7 @@ function CartaoDuvida({ post, autor, pessoas, agora }: { post: Post; autor?: Pes
             const doProfessor = quem?.papel === "professor";
             return (
               <li key={r.id} className="flex items-start gap-2.5">
-                <LinkPessoa id={r.autorId} rotulo={`Perfil de ${quem?.nome ?? "autor"}`} className="shrink-0">
-                  <Avatar nome={quem?.nome ?? "Aluno"} iniciais={quem?.iniciais} tamanho="xs" />
-                </LinkPessoa>
+                <Avatar nome={quem?.nome ?? "Aluno"} iniciais={quem?.iniciais} tamanho="xs" className="mt-0.5" />
                 <div className="min-w-0 flex-1">
                   <p className="text-[12px] text-texto-2">
                     <LinkPessoa id={r.autorId} className="font-medium text-tinta hover:underline">
@@ -162,7 +182,7 @@ function CartaoDuvida({ post, autor, pessoas, agora }: { post: Post; autor?: Pes
                   <p className="mt-0.5 whitespace-pre-line text-[13.5px] leading-snug text-texto">{r.texto}</p>
                 </div>
                 {!doProfessor && !r.util && (
-                  <Button variante="secundario" tamanho="sm" onClick={() => marcarRespostaUtil(post.id, r.id)} aria-label={`Marcar resposta de ${quem?.nome ?? "aluno"} como útil`}>
+                  <Button variante="secundario" tamanho="sm" className="toque:h-11" onClick={() => marcarRespostaUtil(post.id, r.id)} aria-label={`Marcar resposta de ${quem?.nome ?? "aluno"} como útil`}>
                     <ThumbsUp /> <span className="hidden sm:inline">Útil</span>
                   </Button>
                 )}
@@ -187,11 +207,26 @@ function CartaoDuvida({ post, autor, pessoas, agora }: { post: Post; autor?: Pes
             </Button>
           </div>
         </div>
-      ) : (
-        <Button variante="secundario" tamanho="sm" className="mt-3" onClick={() => setRespondendo(true)}>
-          Responder de novo
-        </Button>
-      )}
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Link href={`/feed?post=${post.id}`} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-acento hover:underline toque:min-h-11">
+          <Newspaper className="size-4" aria-hidden /> Ver no feed
+        </Link>
+        {!respondendo && (
+          <Button
+            variante="secundario"
+            tamanho="sm"
+            className="ml-auto"
+            onClick={() => {
+              enviando.current = false;
+              setRespondendo(true);
+            }}
+          >
+            Responder de novo
+          </Button>
+        )}
+      </div>
     </article>
   );
 }

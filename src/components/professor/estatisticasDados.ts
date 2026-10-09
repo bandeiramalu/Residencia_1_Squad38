@@ -35,11 +35,39 @@ export function hash01(s: string) {
   return hashTexto(s) / 4294967296;
 }
 
+const FATIAS = new Map<string, number[]>();
+
+/** Fração do estudo do aluno em cada disciplina (na ordem de `DISCIPLINAS`; soma 1). */
+function fatiasDoAluno(alunoId: string) {
+  let fatias = FATIAS.get(alunoId);
+  if (!fatias) {
+    const pesos = DISCIPLINAS.map((d) => 0.5 + hash01(`${alunoId}:${d}`));
+    const soma = pesos.reduce((s, p) => s + p, 0);
+    fatias = pesos.map((p) => p / soma);
+    FATIAS.set(alunoId, fatias);
+  }
+  return fatias;
+}
+
 /** Fração do estudo do aluno dedicada à disciplina (1 = todas). */
 export function fatiaDisciplina(alunoId: string, disc: Disciplina | "todas") {
   if (disc === "todas") return 1;
-  const pesos = DISCIPLINAS.map((d) => 0.5 + hash01(`${alunoId}:${d}`));
-  return pesos[DISCIPLINAS.indexOf(disc)] / pesos.reduce((s, p) => s + p, 0);
+  return fatiasDoAluno(alunoId)[DISCIPLINAS.indexOf(disc)];
+}
+
+/** Reparte `total` (inteiro) na proporção de `pesos` em parcelas inteiras que somam exatamente `total` (maior resto). */
+export function repartir(total: number, pesos: number[]): number[] {
+  const somaPesos = pesos.reduce((s, p) => s + p, 0);
+  const exatos = pesos.map((p) => (somaPesos > 0 ? (total * p) / somaPesos : 0));
+  const parcelas = exatos.map(Math.floor);
+  let resto = total - parcelas.reduce((s, v) => s + v, 0);
+  const porResto = exatos.map((e, i) => ({ i, f: e - Math.floor(e) })).sort((a, b) => b.f - a.f || a.i - b.i);
+  for (const { i } of porResto) {
+    if (resto <= 0) break;
+    parcelas[i] += 1;
+    resto -= 1;
+  }
+  return parcelas;
 }
 
 /** Aluna ao vivo: soma as sessões reais do dia (e da disciplina, se houver filtro). */
@@ -54,14 +82,19 @@ function minutosReais(a: AlunoPainel, diasAtras: number, disc: Disciplina | "tod
 /**
  * Minutos de estudo do aluno `diasAtras` dias atrás (0 = hoje). Para a aluna ao vivo vêm sempre das sessões reais;
  * para os colegas, os 7 últimos dias são os dados de exemplo e os mais antigos uma derivação determinística.
+ * Com disciplina, a fatia dela é tirada do total do dia por `repartir`: as 8 disciplinas somam exatamente o total do dia,
+ * então o recorte de uma disciplina, a barra dela sem filtro e o total mostrado coincidem (arredondar cada fatia sozinha não fecha).
  */
 export function minutosDia(a: AlunoPainel, diasAtras: number, disc: Disciplina | "todas", agora: number) {
   if (a.sessoes) return minutosReais(a, diasAtras, disc, agora);
-  const f = fatiaDisciplina(a.id, disc);
-  if (diasAtras < 7) return Math.round((a.minutos7d[6 - diasAtras] ?? 0) * f);
-  const media = a.minutosSemana / 7;
-  const h = hash01(`${a.id}:d${diasAtras}`);
-  return h < 0.28 ? 0 : Math.round(media * (0.45 + 1.3 * hash01(`${a.id}:v${diasAtras}`)) * f * (a.risco === "alto" ? 0.6 : 1));
+  let total: number;
+  if (diasAtras < 7) total = Math.round(a.minutos7d[6 - diasAtras] ?? 0);
+  else {
+    const media = a.minutosSemana / 7;
+    const h = hash01(`${a.id}:d${diasAtras}`);
+    total = h < 0.28 ? 0 : Math.round(media * (0.45 + 1.3 * hash01(`${a.id}:v${diasAtras}`)) * (a.risco === "alto" ? 0.6 : 1));
+  }
+  return disc === "todas" ? total : repartir(total, fatiasDoAluno(a.id))[DISCIPLINAS.indexOf(disc)];
 }
 
 export interface PontoSerie {
@@ -130,13 +163,31 @@ export function xpNoPeriodo(a: AlunoPainel, dias: number, disc: Disciplina | "to
   return disc === "todas" ? total : Math.round(total * fatiaDisciplina(a.id, disc));
 }
 
+/**
+ * Reparte `total` entre as parcelas na proporção de `valores` (método do maior resto).
+ * Cada parcela é arredondada sozinha e a soma das barras perdia alguns minutos; assim ela bate com o total mostrado.
+ */
+export function ajustarAoTotal(valores: number[], total: number): number[] {
+  const soma = valores.reduce((s, v) => s + v, 0);
+  if (soma <= 0 || soma === total) return valores;
+  const exatos = valores.map((v) => (v * total) / soma);
+  const resultado = exatos.map(Math.floor);
+  let resto = total - resultado.reduce((s, v) => s + v, 0);
+  const porResto = exatos.map((e, i) => ({ i, f: e - Math.floor(e) })).sort((a, b) => b.f - a.f);
+  for (const { i } of porResto) {
+    if (resto <= 0) break;
+    resultado[i] += 1;
+    resto -= 1;
+  }
+  return resultado;
+}
+
 /** Curva de estudo por hora (6h–23h), com pico à tarde e à noite. */
 const CURVA_HORA = [0.2, 0.5, 0.9, 0.7, 0.4, 0.6, 1, 1.1, 0.9, 0.7, 0.6, 0.8, 1.3, 1.7, 1.9, 1.7, 1.2, 0.6];
 
 export function porHora(totalMinutos: number, chave: string) {
   const pesos = CURVA_HORA.map((p, i) => p * (0.85 + 0.3 * hash01(`${chave}:h${i}`)));
-  const soma = pesos.reduce((s, p) => s + p, 0);
-  return pesos.map((p, i) => ({ hora: 6 + i, minutos: Math.round((p / soma) * totalMinutos) }));
+  return repartir(totalMinutos, pesos).map((minutos, i) => ({ hora: 6 + i, minutos }));
 }
 
 export type Liga = "bronze" | "prata" | "ouro" | "diamante";

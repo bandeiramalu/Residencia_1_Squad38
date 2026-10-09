@@ -127,7 +127,10 @@ export function AlunosView() {
           type="button"
           onClick={() => setSoRisco((v) => !v)}
           aria-pressed={soRisco}
-          className={cn("rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors", soRisco ? "border-alerta text-alerta" : "border-borda text-texto-2 hover:text-tinta")}
+          className={cn(
+            "alvo-toque rounded-full border px-3 py-1 text-[12px] font-medium transition-colors",
+            soRisco ? "border-alerta text-alerta" : "border-borda text-texto-2 hover:text-tinta",
+          )}
         >
           Só em risco
         </button>
@@ -201,7 +204,7 @@ export function AlunosView() {
 
           {/* Celular, tablet e desktop estreito: lista num card só. */}
           <div className="overflow-hidden rounded-2xl border border-borda bg-superficie xl:hidden">
-            <div className="flex items-center gap-3 border-b border-borda bg-superficie-2 px-4 py-2.5">
+            <div className="flex items-center gap-3 border-b border-borda bg-superficie-2 px-4 py-3">
               <Caixa marcada={todosVisiveis} mista={algunsVisiveis} onChange={alternarTodos} rotulo="Selecionar todos" />
               <span className="text-[12px] font-medium text-texto-2">Selecionar todos</span>
             </div>
@@ -267,7 +270,7 @@ function Tendencia({ valores }: { valores: number[] }) {
   const sobe = recente > antes * 1.15;
   const desce = recente < antes * 0.85;
   const Icone = sobe ? TrendingUp : desce ? TrendingDown : Minus;
-  return <Icone className={cn("size-3.5", sobe ? "text-acento" : desce ? "text-alerta" : "text-texto-2/50")} aria-label={sobe ? "Em alta" : desce ? "Em queda" : "Estável"} />;
+  return <Icone className={cn("size-3.5", sobe ? "text-acento" : desce ? "text-alerta" : "text-texto-2")} aria-label={sobe ? "Em alta" : desce ? "Em queda" : "Estável"} />;
 }
 
 function BarraDominio({ valor }: { valor: number }) {
@@ -317,14 +320,14 @@ function LinhaAluno({ aluno: a, marcado, onMarcar, onAbrir }: PropsLinha) {
         <span className="text-[12px] tabular-nums text-texto">{formatarMinutos(a.minutosSemana)}</span>
         <Tendencia valores={a.minutos7d} />
       </span>
-      <span role="cell" className={cn("inline-flex items-center justify-end gap-1 tabular-nums", a.sequencia ? "text-tinta" : "text-texto-2/60")}>
+      <span role="cell" className={cn("inline-flex items-center justify-end gap-1 tabular-nums", a.sequencia ? "text-tinta" : "text-texto-2")}>
         <Flame className={cn("size-3.5", a.sequencia ? "text-ambar" : "text-texto-2/50")} aria-hidden />
         {a.sequencia}
       </span>
       <span role="cell">
         <BarraDominio valor={a.dominioMedio} />
       </span>
-      <span role="cell" className={cn("text-center tabular-nums", a.pendentes ? "text-tinta" : "text-texto-2/60")}>
+      <span role="cell" className={cn("text-center tabular-nums", a.pendentes ? "text-tinta" : "text-texto-2")}>
         {a.pendentes || "—"}
       </span>
       <span role="cell">
