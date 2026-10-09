@@ -1,9 +1,9 @@
 "use client";
 
-import { FileText, Loader2, Paperclip, X } from "lucide-react";
+import { CircleAlert, FileText, Loader2, Paperclip, X } from "lucide-react";
 import { useId, useRef, useState, type DragEvent } from "react";
 import { cn } from "@/lib/cn";
-import { formatarTamanho, LIMITE_BYTES, salvarArquivo, type ArquivoSalvo } from "@/lib/arquivos";
+import { ACEITA_ARQUIVOS, formatarTamanho, LIMITE_BYTES, salvarArquivo, type ArquivoSalvo } from "@/lib/arquivos";
 import { toast } from "@/store/ui";
 
 interface Props {
@@ -21,7 +21,7 @@ export function SeletorArquivo({
   onChange,
   titulo = "Anexar arquivo",
   dica = `PDF, imagem ou documento · até ${formatarTamanho(LIMITE_BYTES)}`,
-  accept = ".pdf,.doc,.docx,.png,.jpg,.jpeg,.heic,.txt",
+  accept = ACEITA_ARQUIVOS,
   className,
 }: Props) {
   const id = useId();
@@ -29,15 +29,17 @@ export function SeletorArquivo({
   const [sobre, setSobre] = useState(false);
   const [lendo, setLendo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const idErro = `${id}-erro`;
 
   const receber = async (file?: File | null) => {
     if (!file) return;
     setErro(null);
     setLendo(true);
     try {
-      onChange(await salvarArquivo(file));
+      // O mesmo `accept` do campo vale para o clique e para arrastar e soltar (que o navegador não filtra).
+      onChange(await salvarArquivo(file, accept));
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Não foi possível guardar o arquivo.";
+      const msg = e instanceof Error && e.message ? e.message : "Não foi possível guardar o arquivo.";
       setErro(msg);
       toast({ tipo: "alerta", titulo: "Arquivo não anexado", mensagem: msg }, 4200);
     } finally {
@@ -57,7 +59,7 @@ export function SeletorArquivo({
         <div className="flex items-center gap-3 rounded-xl border border-borda bg-superficie-2 p-3">
           {valor.previa ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={valor.previa} alt="" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-inset ring-borda" />
+            <img src={valor.previa} alt="Prévia da imagem escolhida" className="size-10 shrink-0 rounded-lg object-cover ring-1 ring-inset ring-borda" />
           ) : (
             <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-superficie text-texto-2 ring-1 ring-inset ring-borda">
               <FileText className="size-[18px]" />
@@ -74,7 +76,7 @@ export function SeletorArquivo({
             type="button"
             onClick={() => onChange(null)}
             aria-label="Remover arquivo"
-            className="grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-[background-color,color,transform] duration-150 hover:bg-superficie hover:text-alerta active:scale-95"
+            className="grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-[background-color,color,transform] duration-150 hover:bg-superficie hover:text-alerta active:scale-95 max-sm:size-11"
           >
             <X className="size-4" />
           </button>
@@ -109,6 +111,7 @@ export function SeletorArquivo({
             type="file"
             className="sr-only"
             accept={accept}
+            aria-describedby={erro ? idErro : undefined}
             onChange={(e) => {
               void receber(e.target.files?.[0]);
               e.target.value = "";
@@ -117,7 +120,8 @@ export function SeletorArquivo({
         </label>
       )}
       {erro && (
-        <p role="alert" className="mt-1.5 text-[12px] font-medium text-alerta">
+        <p id={idErro} role="alert" className="mt-1.5 flex items-start gap-1.5 text-[12px] font-medium leading-snug text-alerta">
+          <CircleAlert className="mt-px size-3.5 shrink-0" aria-hidden />
           {erro}
         </p>
       )}

@@ -1,14 +1,12 @@
 "use client";
 
-import { BellRing, CheckCheck, ChevronLeft, FileDown, FileSpreadsheet, Inbox, Paperclip, SearchX, Star, Trash2 } from "lucide-react";
+import { BellRing, CheckCheck, ChevronLeft, FileDown, FileSpreadsheet, Inbox, LockKeyhole, Paperclip, SearchX, Star, Trash2 } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ICONE_ATIVIDADE, contarEntregas, fmtNota, lerResposta, prazoUrgente, textoPrazo } from "@/components/atividades/comum";
-import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { abrirAnexoDe, baixarAnexo, baixarAnexoDe } from "@/lib/materiais";
 import { baixarCsv } from "@/lib/exportar";
 import { baixarRelatorioAtividade, CABECALHO_NOTAS, linhasDeNotas, slugArq } from "@/components/atividades/pdfs";
@@ -28,19 +26,20 @@ import { ultimoAcesso } from "@/lib/turmas";
 import { excluirAtividade, lembrarPendentes } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 import type { Atividade, Entrega, Pessoa } from "@/store/types";
-import { Abas, FaixaNumeros, LinkBotao } from "./comum";
+import { Abas, FaixaNumeros, LinkBotao, PessoaLink, VazioLista, useProfessorId } from "./comum";
 import { CorrecaoSheet, CorrigirTodasSheet } from "./CorrecaoSheet";
 
 type Aba = "corrigir" | "corrigidas" | "pendentes";
 
 function corDaNota(nota: number) {
-  return nota >= 7 ? "text-acento" : nota >= 5 ? "text-ambar" : "text-alerta";
+  return nota >= 7 ? "text-acento" : nota >= 5 ? "text-ouro" : "text-alerta";
 }
 
-/** Detalhe da atividade: números, entregas ao vivo e correção com nota. */
+/** Detalhe da atividade: números, entregas ao vivo e correção com nota. Só o professor que a publicou vê as ações. */
 export function AtividadeView({ id }: { id: string }) {
   const atividades = useSeletor((e) => e.atividades);
   const pessoas = useSeletor((e) => e.pessoas);
+  const profId = useProfessorId();
   const agora = useAgora(30_000);
   const router = useRouter();
   const [aba, setAba] = useState<Aba>("corrigir");
@@ -49,9 +48,12 @@ export function AtividadeView({ id }: { id: string }) {
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
   const [excluida, setExcluida] = useState(false);
   const [lembrou, setLembrou] = useState(false);
+  // Trava de duplo clique: Excluir não pode repetir (o 2º clique chegaria antes da navegação).
+  const excluindo = useRef(false);
 
   const a = atividades.find((x) => x.id === id);
   if (!a) return excluida ? null : <NaoEncontrada />;
+  if (a.professorId !== profId) return <DeOutroProfessor atividade={a} dono={pessoas[a.professorId]?.nome} />;
 
   const c = contarEntregas(a.entregas);
   const encerrada = a.prazo < agora;
@@ -86,11 +88,14 @@ export function AtividadeView({ id }: { id: string }) {
   ];
 
   const lembrar = () => {
+    if (lembrou) return;
     lembrarPendentes(a.id);
     setLembrou(true);
   };
 
   const excluir = () => {
+    if (excluindo.current) return;
+    excluindo.current = true;
     setExcluida(true);
     setConfirmarExclusao(false);
     excluirAtividade(a.id);
@@ -99,9 +104,7 @@ export function AtividadeView({ id }: { id: string }) {
 
   return (
     <div className="space-y-5">
-      <Link href="/professor/atividades" className="inline-flex items-center gap-1 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta">
-        <ChevronLeft className="size-4" /> Atividades
-      </Link>
+      <VoltarAtividades />
 
       <header className="rounded-2xl border border-borda bg-superficie p-5">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -126,12 +129,12 @@ export function AtividadeView({ id }: { id: string }) {
               <button
                 type="button"
                 onClick={() => void abrirAnexoDe(a.anexo!, { titulo: a.titulo, autor: pessoas[a.professorId]?.nome, disciplina: a.disciplina, descricao: a.descricao })}
-                className="inline-flex min-w-0 items-center gap-1 hover:text-tinta hover:underline"
+                className="alvo-toque inline-flex min-w-0 items-center gap-1 hover:text-tinta hover:underline"
               >
                 <Paperclip className="size-3.5 shrink-0" />
                 <span className="truncate">{a.anexo.nome}</span>
               </button>
-              <button type="button" onClick={() => void baixarAnexoDe(a.anexo!, { titulo: a.titulo, disciplina: a.disciplina, descricao: a.descricao })} className="font-medium text-acento hover:underline">
+              <button type="button" onClick={() => void baixarAnexoDe(a.anexo!, { titulo: a.titulo, disciplina: a.disciplina, descricao: a.descricao })} className="alvo-toque font-medium text-acento hover:underline">
                 Baixar
               </button>
             </span>
@@ -145,7 +148,7 @@ export function AtividadeView({ id }: { id: string }) {
           )}
         </p>
 
-        <div className="mt-4 flex flex-wrap gap-2 border-t border-borda pt-4">
+        <div className="mt-4 flex flex-wrap gap-x-2 gap-y-3 border-t border-borda pt-4">
           <Button tamanho="sm" onClick={() => setTodasAberto(true)} disabled={c.paraCorrigir === 0}>
             <CheckCheck /> Corrigir todas{c.paraCorrigir > 0 && ` (${c.paraCorrigir})`}
           </Button>
@@ -197,7 +200,7 @@ export function AtividadeView({ id }: { id: string }) {
               transition={{ duration: 0.16, ease: [0.2, 0, 0, 1] }}
             >
               {itens.length === 0 ? (
-                <VazioAba aba={aba} encerrada={encerrada} />
+                <VazioAba aba={aba} encerrada={encerrada} onAba={setAba} />
               ) : (
                 <ul className="divide-y divide-borda">
                   <AnimatePresence initial={false}>
@@ -227,7 +230,7 @@ export function AtividadeView({ id }: { id: string }) {
             </span>
           </div>
           <ProgressBar valor={c.enviadas} max={c.total} fina rotulo="Taxa de entrega" className="mt-2" />
-          <Link href="/professor/estatisticas?secoes=desempenho" className="mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-acento hover:underline">
+          <Link href="/professor/estatisticas?secoes=desempenho" className="alvo-toque mt-4 inline-flex items-center gap-1 text-[13px] font-medium text-acento hover:underline">
             Ver gráficos de notas em Estatísticas
           </Link>
         </Card>
@@ -252,28 +255,26 @@ export function AtividadeView({ id }: { id: string }) {
   );
 }
 
-function VazioLista({ icone, titulo, descricao }: { icone: ReactNode; titulo: string; descricao: string }) {
-  return (
-    <div className="px-6 py-10 text-center">
-      <div className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-superficie-2 text-texto-2 [&_svg]:size-5">{icone}</div>
-      <p className="text-sm font-medium text-tinta">{titulo}</p>
-      <p className="mx-auto mt-1 max-w-xs text-[13px] text-texto-2">{descricao}</p>
-    </div>
+function VazioAba({ aba, encerrada, onAba }: { aba: Aba; encerrada: boolean; onAba: (aba: Aba) => void }) {
+  const ir = (destino: Aba, rotulo: string) => (
+    <Button variante="secundario" tamanho="sm" onClick={() => onAba(destino)}>
+      {rotulo}
+    </Button>
   );
-}
-
-function VazioAba({ aba, encerrada }: { aba: Aba; encerrada: boolean }) {
   if (aba === "corrigir") {
     return (
       <VazioLista
         icone={<CheckCheck />}
         titulo="Nada aguardando correção"
         descricao={encerrada ? "Todas as entregas já têm nota." : "Quando um aluno entregar, a entrega aparece aqui."}
+        acao={ir("pendentes", "Ver quem ainda não entregou")}
       />
     );
   }
-  if (aba === "corrigidas") return <VazioLista icone={<Star />} titulo="Nenhuma entrega corrigida" descricao="O aluno recebe nota, feedback e pontos na hora." />;
-  return <VazioLista icone={<Inbox />} titulo="Todos entregaram" descricao="A turma inteira enviou esta atividade." />;
+  if (aba === "corrigidas") {
+    return <VazioLista icone={<Star />} titulo="Nenhuma entrega corrigida" descricao="O aluno recebe nota, feedback e pontos na hora." acao={ir("corrigir", "Ver as entregas a corrigir")} />;
+  }
+  return <VazioLista icone={<Inbox />} titulo="Todos entregaram" descricao="A turma inteira enviou esta atividade." acao={ir("corrigir", "Ver as entregas a corrigir")} />;
 }
 
 function LinhaEntrega({
@@ -297,7 +298,7 @@ function LinhaEntrega({
   let lateral: ReactNode;
   if (e.status === "entregue") {
     lateral = (
-      <Button tamanho="sm" variante="secundario" onClick={onCorrigir}>
+      <Button tamanho="sm" variante="secundario" className="toque:h-11" onClick={onCorrigir}>
         Corrigir
       </Button>
     );
@@ -321,68 +322,83 @@ function LinhaEntrega({
       transition={{ type: "spring", stiffness: 500, damping: 42 }}
       className="cv-auto flex items-start gap-3 px-4 py-3.5 [contain-intrinsic-size:auto_76px]"
     >
-      <LinkPessoa id={e.alunoId} rotulo={`Perfil de ${nome}`} className="mt-0.5 shrink-0">
-        <Avatar nome={nome} iniciais={pessoa?.iniciais} tamanho="sm" />
-      </LinkPessoa>
       <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <LinkPessoa id={e.alunoId} className="text-[14px] font-medium text-tinta hover:underline">
-            {nome}
-          </LinkPessoa>
-        </p>
-        <p className="text-[12px] text-texto-2">
-          {e.entregueEm ? (
-            <>
-              Entregou {tempoRelativo(e.entregueEm, agora)}
-              {atrasada ? <span className="text-alerta"> · com atraso</span> : " · no prazo"}
-            </>
-          ) : (
-            <>Não entregou{acessoHa !== undefined && ` · último acesso ${ultimoAcesso(acessoHa)}`}</>
-          )}
-        </p>
-        {texto && e.status !== "pendente" && <p className="mt-1.5 line-clamp-2 text-[13px] leading-snug text-texto">{texto}</p>}
+        <PessoaLink
+          id={e.alunoId}
+          nome={nome}
+          iniciais={pessoa?.iniciais}
+          className="-my-1.5 max-w-full"
+          apoio={
+            e.entregueEm ? (
+              <>
+                Entregou {tempoRelativo(e.entregueEm, agora)}
+                {atrasada ? <span className="text-alerta"> · com atraso</span> : " · no prazo"}
+              </>
+            ) : (
+              <>Não entregou{acessoHa !== undefined && ` · último acesso ${ultimoAcesso(acessoHa)}`}</>
+            )
+          }
+        />
+        {texto && e.status !== "pendente" && <p className="mt-1.5 line-clamp-2 pl-11 text-[13px] leading-snug text-texto">{texto}</p>}
         {(e.anexo || anexo) && (
-          <span className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md border border-borda bg-superficie-2 py-1 pl-2 pr-1 text-[12px] text-tinta">
+          <span className="ml-11 mt-1.5 inline-flex max-w-[calc(100%-2.75rem)] items-center gap-1.5 rounded-md border border-borda bg-superficie-2 py-1 pl-2 pr-1 text-[12px] text-tinta">
             <Paperclip className="size-3 shrink-0 text-texto-2" />
             <span className="truncate">{e.anexo?.nome ?? anexo}</span>
             {e.anexo ? (
               <>
-                <button type="button" onClick={() => void abrirAnexoDe(e.anexo!, { titulo: a.titulo })} className="rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
+                <button type="button" onClick={() => void abrirAnexoDe(e.anexo!, { titulo: a.titulo })} className="alvo-toque rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
                   Abrir
                 </button>
-                <button type="button" onClick={() => void baixarAnexoDe(e.anexo!, { titulo: a.titulo })} className="rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
+                <button type="button" onClick={() => void baixarAnexoDe(e.anexo!, { titulo: a.titulo })} className="alvo-toque rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
                   Baixar
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => baixarAnexo(anexo!, { titulo: a.titulo, autor: nome, disciplina: a.disciplina, texto })} className="rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
+              <button type="button" onClick={() => baixarAnexo(anexo!, { titulo: a.titulo, autor: nome, disciplina: a.disciplina, texto })} className="alvo-toque rounded px-1.5 py-0.5 font-medium text-acento transition-colors hover:bg-superficie active:scale-95">
                 Baixar
               </button>
             )}
           </span>
         )}
-        {e.status === "corrigida" && e.feedback && <p className="mt-1.5 line-clamp-2 text-[12.5px] leading-snug text-texto-2">“{e.feedback}”</p>}
+        {e.status === "corrigida" && e.feedback && <p className="mt-1.5 line-clamp-2 pl-11 text-[12.5px] leading-snug text-texto-2">“{e.feedback}”</p>}
       </div>
       <div className="shrink-0 self-center">{lateral}</div>
     </motion.li>
   );
 }
 
+function VoltarAtividades() {
+  return (
+    <Link href="/professor/atividades" className="inline-flex items-center gap-1 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta toque:min-h-11">
+      <ChevronLeft className="size-4" /> Atividades
+    </Link>
+  );
+}
+
 function NaoEncontrada() {
   return (
     <div className="space-y-5">
-      <Link href="/professor/atividades" className="inline-flex items-center gap-1 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta">
-        <ChevronLeft className="size-4" /> Atividades
-      </Link>
+      <VoltarAtividades />
       <Vazio
         icone={<SearchX />}
         titulo="Atividade não encontrada"
         descricao="Ela pode ter sido excluída ou o link está incorreto."
-        acao={
-          <LinkBotao href="/professor/atividades" className="h-8 px-3 text-[13px]">
-            Ver todas as atividades
-          </LinkBotao>
-        }
+        acao={<LinkBotao href="/professor/atividades">Ver todas as atividades</LinkBotao>}
+      />
+    </div>
+  );
+}
+
+/** Atividade publicada por outro professor: sem entregas, correção, lembrete nem exclusão. */
+function DeOutroProfessor({ atividade: a, dono }: { atividade: Atividade; dono?: string }) {
+  return (
+    <div className="space-y-5">
+      <VoltarAtividades />
+      <Vazio
+        icone={<LockKeyhole />}
+        titulo={dono ? `Atividade de ${dono}` : "Atividade de outro professor"}
+        descricao={`${a.disciplina} · ${a.turma}. Só quem a publicou vê as entregas, corrige, lembra a turma ou exclui.`}
+        acao={<LinkBotao href="/professor/atividades">Voltar às atividades</LinkBotao>}
       />
     </div>
   );

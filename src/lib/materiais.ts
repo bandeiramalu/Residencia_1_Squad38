@@ -159,11 +159,15 @@ export async function baixarAnexoDe(anexo: Anexo, contexto: ContextoAnexo = {}) 
 
 /** "PDF", "Imagem", "Documento"… para o rótulo do anexo. */
 export function tipoDoAnexo(anexo: Pick<Anexo, "nome" | "mime">) {
+  // A extensão manda (o `mime` vem do remetente): só ela libera a prévia embutida (iframe de PDF, <img>).
+  const ext = /\.([a-z0-9]+)$/i.exec(anexo.nome)?.[1].toLowerCase();
+  if (ext === "pdf") return "PDF";
+  if (ext && ["png", "jpg", "jpeg", "webp", "heic"].includes(ext)) return "Imagem";
+  if (ext) return ext.length <= 4 ? ext.toUpperCase() : "Arquivo";
   const m = anexo.mime ?? "";
-  if (m === "application/pdf" || (!m && /\.pdf$/i.test(anexo.nome))) return "PDF";
-  if (m.startsWith("image/")) return "Imagem";
-  const ext = anexo.nome.split(".").pop()?.toUpperCase();
-  return ext && ext.length <= 4 ? ext : "Arquivo";
+  if (m === "application/pdf") return "PDF";
+  if (m.startsWith("image/") && m !== "image/svg+xml") return "Imagem";
+  return "Arquivo";
 }
 
 /** Resumo exibido: "PDF · 3 págs. · 212 KB" (páginas só quando conhecidas). */

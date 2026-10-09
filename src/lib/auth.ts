@@ -6,12 +6,17 @@
  * Modo http (NEXT_PUBLIC_API_URL definido): `entrar()` chama POST /auth/login e guarda o token.
  *
  * A sessão fica no sessionStorage: cada aba/janela tem o seu login (dá para abrir uma aba como
- * aluna e outra como professor) e recarregar mantém. O papel também vai num cookie `cepi_papel`
- * (lido pelo `src/proxy.ts`). Em produção o backend emite um cookie httpOnly assinado (JWT).
+ * aluna e outra como professor) e recarregar mantém. Não há cookie de papel nem `proxy.ts`: a guarda de
+ * rotas roda no cliente (`src/lib/guarda.ts`) e a autorização de verdade é do backend (JWT; refresh token
+ * em cookie httpOnly assinado).
+ *
+ * Este módulo NÃO importa `@/api/sync` (formaria ciclo). Quem precisa reagir à sessão escuta eventos da
+ * janela: `cepi:sessao-iniciada` (`detail: { usuarioId, papel }`, no login e em `entrarComoDemo`) e
+ * `cepi:sessao-encerrada` (`detail: { usuarioId }`, em `sair()`) — a fila de sincronização (`store/store.ts`
+ * e `api/sync.ts`) assina os dois.
  */
 import { useSyncExternalStore } from "react";
-import { MODO_API, api } from "@/api/client";
-import { limparFila } from "@/api/sync";
+import { CHAVE_SESSAO, MODO_API, api, definirTokenEmMemoria } from "@/api/client";
 
 export type PapelSessao = "aluno" | "professor";
 
@@ -46,7 +51,7 @@ export const CONTAS_DEMO: Record<PapelSessao, { email: string; senha: string; ma
 
 export const HOME_DO_PAPEL: Record<PapelSessao, string> = { aluno: "/feed", professor: "/professor" };
 
-const CHAVE = "cepi-sessao";
+const CHAVE = CHAVE_SESSAO;
 /** Cookie antigo (guarda por middleware): só é apagado, nunca mais gravado. */
 const COOKIE_ANTIGO = "cepi_papel";
 const CHAVE_SENHAS = "cepi-senhas";
@@ -79,8 +84,14 @@ function ler(): Sessao | null {
   return sessao;
 }
 
+function avisar(tipo: "cepi:sessao-iniciada" | "cepi:sessao-encerrada", detalhe: { usuarioId: string; papel?: PapelSessao }) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(tipo, { detail: detalhe }));
+}
+
 function gravar(nova: Sessao | null) {
   sessao = nova;
+  definirTokenEmMemoria(nova?.token);
   try {
     if (nova) sessionStorage.setItem(CHAVE, JSON.stringify(nova));
     else sessionStorage.removeItem(CHAVE);
@@ -93,11 +104,17 @@ function gravar(nova: Sessao | null) {
 
 export class ErroLogin extends Error {}
 
+/** Grava a sessão e avisa a janela (`cepi:sessao-iniciada`): a fila de sincronização passa a ser do usuário que entrou. */
+function abrirSessao(nova: Sessao) {
+  gravar(nova);
+  avisar("cepi:sessao-iniciada", { usuarioId: nova.usuarioId, papel: nova.papel });
+}
+
 /** Valida as credenciais e abre a sessão. Devolve a rota inicial do papel. */
 export async function entrar(email: string, senha: string, papel: PapelSessao): Promise<string> {
   if (MODO_API === "http") {
     const r = await api<{ token: string; usuario: { id: string; nome: string; papel: PapelSessao } }>("POST", "/auth/login", { email, senha });
-    gravar({ papel: r.usuario.papel, usuarioId: r.usuario.id, nome: r.usuario.nome, email, token: r.token, entrouEm: Date.now() });
+    abrirSessao({ papel: r.usuario.papel, usuarioId: r.usuario.id, nome: r.usuario.nome, email, token: r.token, entrouEm: Date.now() });
     return HOME_DO_PAPEL[r.usuario.papel];
   }
 
@@ -106,7 +123,7 @@ export async function entrar(email: string, senha: string, papel: PapelSessao): 
   if (email.trim().toLowerCase() !== conta.email || !okSenha) {
     throw new ErroLogin("E-mail ou senha incorretos.");
   }
-  gravar({ papel, usuarioId: conta.usuarioId, nome: conta.nome, email: conta.email, token: "demo", entrouEm: Date.now() });
+  abrirSessao({ papel, usuarioId: conta.usuarioId, nome: conta.nome, email: conta.email, token: "demo", entrouEm: Date.now() });
   return HOME_DO_PAPEL[papel];
 }
 
@@ -190,13 +207,20 @@ export async function redefinirSenha(papel: PapelSessao, novaSenha: string) {
 /** Entrada direta pelos atalhos de conta de teste. */
 export function entrarComoDemo(papel: PapelSessao) {
   const conta = CONTAS_DEMO[papel];
-  gravar({ papel, usuarioId: conta.usuarioId, nome: conta.nome, email: conta.email, token: "demo", entrouEm: Date.now() });
+  abrirSessao({ papel, usuarioId: conta.usuarioId, nome: conta.nome, email: conta.email, token: "demo", entrouEm: Date.now() });
   return HOME_DO_PAPEL[papel];
 }
 
+/**
+ * Encerra a sessão desta aba. No modo http revoga o refresh token (`POST /auth/sair`) sem travar a saída:
+ * o pedido sai com o token ainda gravado e um erro dele é ignorado. Avisa a janela (`cepi:sessao-encerrada`)
+ * para a fila apagar só os pedidos DESTE usuário — a de outra conta, em outra aba, fica intacta.
+ */
 export function sair() {
-  limparFila();
+  const atual = ler();
+  if (MODO_API === "http" && atual && atual.token !== "demo") void api("POST", "/auth/sair").catch(() => undefined);
   gravar(null);
+  if (atual) avisar("cepi:sessao-encerrada", { usuarioId: atual.usuarioId });
 }
 
 /** Leitura fora do React (ações, cliente da API). */

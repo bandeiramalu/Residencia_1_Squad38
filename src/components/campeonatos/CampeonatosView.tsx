@@ -18,7 +18,7 @@ import { partidaDoAluno, participa, totalRodadas } from "@/lib/campeonatos";
 import { useSeletor } from "@/store/store";
 import type { Campeonato, MetricaCampeonato, Pessoa, StatusCampeonato, Usuario } from "@/store/types";
 import { CartaoCampeonato } from "./CartaoCampeonato";
-import { faseLiberada, ICONE_METRICA, LINK_PRIMARIO, pedirJogo, situacaoDaAluna } from "./comum";
+import { faseLiberada, ICONE_METRICA, LINK_PRIMARIO, pedirJogo, situacaoDaAluna, useDesempate } from "./comum";
 
 const CriarCampeonatoSheet = dynamic(() => import("./CriarCampeonatoSheet").then((m) => m.CriarCampeonatoSheet), { ssr: false });
 
@@ -40,6 +40,7 @@ export function CampeonatosView() {
   const campeonatos = useSeletor((e) => e.campeonatos);
   const usuario = useSeletor((e) => e.usuario);
   const pessoas = useSeletor((e) => e.pessoas);
+  const nivelDe = useDesempate();
   const [aba, setAba] = useState<Aba>("andamento");
   const [criando, setCriando] = useState(false);
 
@@ -59,7 +60,7 @@ export function CampeonatosView() {
   const rotulo = (texto: string, a: Aba) => (
     <>
       {texto}
-      <span className="tabular-nums opacity-60">{contagem(a)}</span>
+      <span className="font-normal tabular-nums">{contagem(a)}</span>
     </>
   );
   const abas = [
@@ -111,7 +112,7 @@ export function CampeonatosView() {
                 <ul className="grid gap-3 sm:grid-cols-2">
                   {lista.map((c, i) => (
                     <motion.li key={c.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18, ease: [0.2, 0, 0, 1], delay: Math.min(i, 6) * 0.03 }}>
-                      <CartaoCampeonato c={c} pessoas={pessoas} turma={professor ? undefined : usuario.turma} situacao={professor ? null : situacaoDaAluna(c, usuario.id, usuario.turma)} />
+                      <CartaoCampeonato c={c} pessoas={pessoas} turma={professor ? undefined : usuario.turma} situacao={professor ? null : situacaoDaAluna(c, usuario.id, usuario.turma, nivelDe)} />
                     </motion.li>
                   ))}
                 </ul>

@@ -4,9 +4,10 @@ import { ArrowRight, ChevronDown, Eye, EyeOff, GraduationCap, IdCard, Lock, Mail
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { PularParaConteudo, ID_CONTEUDO } from "@/components/shell/PularParaConteudo";
 import { BotaoTema } from "@/components/shell/TemaToggle";
 import { Button } from "@/components/ui/Button";
-import { Campo, Entrada } from "@/components/ui/Campo";
+import { Campo, Entrada, idErroDe } from "@/components/ui/Campo";
 import { Segmentado } from "@/components/ui/Segmentado";
 import { ESCOLA } from "@/data/escola";
 import { CONTAS_DEMO, ErroLogin, confirmarMatricula, entrar, entrarComoDemo, redefinirSenha, type PapelSessao } from "@/lib/auth";
@@ -76,6 +77,7 @@ export function LoginView() {
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <PularParaConteudo />
       <header className="flex h-14 items-center justify-between border-b border-borda bg-superficie px-4 sm:px-6">
         <div className="flex items-center gap-2.5">
           <Image src="/cepi-logo.png" alt={ESCOLA.nome} width={32} height={32} className="size-8 rounded-lg bg-white object-contain ring-1 ring-borda" priority />
@@ -84,7 +86,7 @@ export function LoginView() {
         <BotaoTema />
       </header>
 
-      <main className="flex flex-1 items-start justify-center px-4 py-10 sm:items-center sm:py-16">
+      <main id={ID_CONTEUDO} tabIndex={-1} className="flex flex-1 items-start justify-center px-4 py-10 outline-none sm:items-center sm:py-16">
         <div className="w-full max-w-[400px]">
           <div className="rounded-2xl border border-borda bg-superficie p-6 sm:p-8">
             <h1 className="text-xl font-semibold tracking-tight text-tinta">
@@ -123,12 +125,14 @@ export function LoginView() {
                       onChange={(e) => setSenha(e.target.value)}
                       className="pr-10"
                       required
+                      aria-invalid={erro ? true : undefined}
+                      aria-describedby={erro ? idErroDe("senha") : undefined}
                     />
                     <button
                       type="button"
                       onClick={() => setVerSenha((v) => !v)}
                       aria-label={verSenha ? "Esconder senha" : "Mostrar senha"}
-                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-texto-2 hover:bg-superficie-2 hover:text-tinta"
+                      className="absolute right-1 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-md text-texto-2 hover:bg-superficie-2 hover:text-tinta alvo-toque"
                     >
                       {verSenha ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                     </button>
@@ -143,7 +147,7 @@ export function LoginView() {
                     setErro(null);
                     setEtapa("matricula");
                   }}
-                  className="block w-full text-center text-[13px] font-medium text-texto-2 underline-offset-4 hover:text-tinta hover:underline"
+                  className="block w-full text-center text-[13px] font-medium text-texto-2 underline-offset-4 hover:text-tinta hover:underline toque:py-3"
                 >
                   Esqueci a senha
                 </button>
@@ -166,12 +170,21 @@ export function LoginView() {
                   <Entrada id="rec-email" type="email" autoComplete="username" icone={<Mail />} value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </Campo>
                 <Campo rotulo="Matrícula" htmlFor="rec-matricula" erro={erro} dica={papel === "aluno" ? "Está na sua carteirinha escolar." : "Registro funcional na secretaria."}>
-                  <Entrada id="rec-matricula" icone={<IdCard />} value={matricula} onChange={(e) => setMatricula(e.target.value)} autoComplete="off" required />
+                  <Entrada
+                    id="rec-matricula"
+                    icone={<IdCard />}
+                    value={matricula}
+                    onChange={(e) => setMatricula(e.target.value)}
+                    autoComplete="off"
+                    required
+                    aria-invalid={erro ? true : undefined}
+                    aria-describedby={erro ? idErroDe("rec-matricula") : undefined}
+                  />
                 </Campo>
                 <Button type="submit" tamanho="lg" bloco>
                   Confirmar <ArrowRight />
                 </Button>
-                <button type="button" onClick={voltarAoLogin} className="block w-full text-center text-[13px] font-medium text-texto-2 hover:text-tinta">
+                <button type="button" onClick={voltarAoLogin} className="block w-full text-center text-[13px] font-medium text-texto-2 hover:text-tinta toque:py-3">
                   Voltar ao login
                 </button>
               </form>
@@ -180,12 +193,22 @@ export function LoginView() {
             {etapa === "nova" && (
               <form onSubmit={salvarNovaSenha} className="mt-6 space-y-4" noValidate>
                 <Campo rotulo="Nova senha" htmlFor="nova-senha" erro={erro}>
-                  <Entrada id="nova-senha" type="password" autoComplete="new-password" icone={<Lock />} value={novaSenha} onChange={(e) => setNovaSenha(e.target.value)} required />
+                  <Entrada
+                    id="nova-senha"
+                    type="password"
+                    autoComplete="new-password"
+                    icone={<Lock />}
+                    value={novaSenha}
+                    onChange={(e) => setNovaSenha(e.target.value)}
+                    required
+                    aria-invalid={erro ? true : undefined}
+                    aria-describedby={erro ? idErroDe("nova-senha") : undefined}
+                  />
                 </Campo>
                 <Button type="submit" tamanho="lg" bloco>
                   Salvar nova senha
                 </Button>
-                <button type="button" onClick={voltarAoLogin} className="block w-full text-center text-[13px] font-medium text-texto-2 hover:text-tinta">
+                <button type="button" onClick={voltarAoLogin} className="block w-full text-center text-[13px] font-medium text-texto-2 hover:text-tinta toque:py-3">
                   Cancelar
                 </button>
               </form>
@@ -205,7 +228,7 @@ export function LoginView() {
               type="button"
               onClick={() => setContasAbertas((v) => !v)}
               aria-expanded={contasAbertas}
-              className="mx-auto flex items-center gap-1 text-[12.5px] text-texto-2 underline-offset-4 hover:text-tinta hover:underline"
+              className="mx-auto flex items-center gap-1 text-[12.5px] text-texto-2 underline-offset-4 hover:text-tinta hover:underline toque:py-3"
             >
               Usar conta de teste <ChevronDown className={`size-3.5 transition-transform ${contasAbertas ? "rotate-180" : ""}`} />
             </button>

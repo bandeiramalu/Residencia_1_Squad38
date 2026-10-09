@@ -6,6 +6,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { DisciplinaIcon } from "@/components/ui/DisciplinaIcon";
 import { TEMAS_SALA } from "@/data/salas";
 import { useAgora } from "@/hooks/useAgora";
+import { useSessao } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { faseDaSala, formatarRelogio, inicioDoDia } from "@/lib/estudos";
 import { contagemRegressiva } from "@/lib/tempo";
@@ -169,7 +170,7 @@ export function FaseAoVivo({ sala, className }: { sala: SalaEstudo; className?: 
     <span className={cn("inline-flex items-center gap-1.5 text-[12px] font-medium tabular-nums text-texto-2", className)}>
       <span className={cn("size-1.5 shrink-0 rounded-full", pausa ? "bg-ambar" : "animate-pulso bg-verde")} aria-hidden />
       <span>
-        <span className={pausa ? "text-ambar" : "text-acento"}>{pausa ? "Pausa" : "Em foco"}</span> · {formatarRelogio(f.restanteMs)}
+        <span className={pausa ? "text-ouro" : "text-acento"}>{pausa ? "Pausa" : "Em foco"}</span> · {formatarRelogio(f.restanteMs)}
       </span>
     </span>
   );
@@ -241,17 +242,22 @@ export function BotaoCopiar({ texto, className, rotulo = "Copiar código" }: { t
   );
 }
 
-/** "Lembrar-me" de uma sala agendada — usa os lembretes do estado (persistem). */
+/**
+ * "Lembrar-me" de uma sala agendada — usa os lembretes do estado (persistem). É um recurso da aluna:
+ * o professor não recebe lembrete de abertura de sala, então o botão não aparece para ele.
+ */
 export function BotaoLembrar({ sala, className }: { sala: SalaEstudo; className?: string }) {
+  const professor = useSessao()?.papel === "professor";
   const chave = `sala:${sala.id}`;
   const ativo = useSeletor((e) => e.lembretes.includes(chave));
+  if (professor) return null;
   return (
     <button
       type="button"
       aria-pressed={ativo}
       onClick={() => alternarLembrete(chave, `“${sala.nome}” · avisamos quando a sala abrir.`)}
       className={cn(
-        "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors duration-150 active:scale-[0.98] [&_svg]:size-4",
+        "alvo-toque inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors duration-150 active:scale-[0.98] [&_svg]:size-4",
         ativo ? "border-verde-claro bg-verde-mclaro text-acento" : "border-borda bg-superficie text-tinta hover:bg-superficie-2",
         className,
       )}

@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarClock, Send } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto, Campo } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
@@ -28,10 +28,14 @@ function Formulario({ atividade, onFechar }: { atividade: Atividade; onFechar: (
   const agora = useAgora(60_000);
   const [resposta, setResposta, limparRascunho] = useRascunho(`entrega:${atividade.id}`);
   const [arquivo, setArquivo] = useState<ArquivoSalvo | null>(null);
+  const enviando = useRef(false);
   const atrasada = atividade.prazo < agora;
   const pode = resposta.trim().length > 0 || !!arquivo;
 
   const entregar = () => {
+    // Trava de duplo clique: uma entrega (e uma notificação ao professor) por toque.
+    if (enviando.current || !pode) return;
+    enviando.current = true;
     entregarAtividade(
       atividade.id,
       resposta,
@@ -46,7 +50,7 @@ function Formulario({ atividade, onFechar }: { atividade: Atividade; onFechar: (
       <div className="rounded-xl border border-borda bg-superficie-2 p-3.5">
         <p className="text-[14px] leading-relaxed text-texto">{atividade.descricao}</p>
         <p className="mt-2.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-texto-2">
-          <span className={cn("inline-flex items-center gap-1", atrasada ? "text-alerta" : prazoUrgente(atividade.prazo, agora) && "text-ambar")}>
+          <span className={cn("inline-flex items-center gap-1", atrasada ? "text-alerta" : prazoUrgente(atividade.prazo, agora) && "text-ouro")}>
             <CalendarClock className="size-3.5" aria-hidden />
             {textoPrazo(atividade.prazo, agora, "aluno")}
           </span>

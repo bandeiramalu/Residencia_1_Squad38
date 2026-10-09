@@ -207,8 +207,10 @@ export interface NovoPostCorpo {
   disciplina?: Disciplina;
   texto: string;
   tags: string[];
-  /** Arquivo enviado antes em POST /anexos (materiais). */
+  /** Arquivo enviado antes em POST /anexos (materiais, imagens). */
   anexoId?: string;
+  /** Texto alternativo da imagem enviada (até 200 caracteres; DS §16). */
+  anexoDescricao?: string;
 }
 
 export interface NovaRespostaCorpo {
@@ -221,8 +223,12 @@ export interface CurtidaDTO {
   curtidas: number;
 }
 
-/** Denúncia (US05). O motivo é um de `MOTIVOS_DENUNCIA`; a categoria/prioridade é da triagem no servidor. */
-export type DenunciaCorpo = Pick<Denuncia, "motivo" | "descricao" | "evidencia">;
+/**
+ * Denúncia (US05). O motivo é um de `MOTIVOS_DENUNCIA`; a categoria/prioridade é da triagem no servidor.
+ * `semTriagem: true` = a triagem do cliente estava indisponível (tela 73/P04): vale o motivo informado, prioridade média;
+ * o servidor guarda em `denuncias.triagem_indisponivel` e roda a sua própria triagem quando puder.
+ */
+export type DenunciaCorpo = Pick<Denuncia, "motivo" | "descricao" | "evidencia" | "semTriagem">;
 
 export type DenunciaRecebidaDTO = Pick<Denuncia, "categoriaIA" | "prioridade"> & { protocolo: string };
 
@@ -246,10 +252,31 @@ export interface AnexoDTO extends Anexo {
   mime: string;
 }
 
+/** `POST /professor/avisos`. `espaco` é o destino: "escola", "9A", "9B" ou "8A" (o servidor confere que o professor leciona na turma). */
 export interface AvisoCorpo {
   id: string;
   texto: string;
   espaco: EspacoId;
+  /** Disciplina do professor, mostrada no card do aviso (sem ela o servidor usa a do cadastro dele). */
+  disciplina?: Disciplina;
+  /** Arquivo/imagem enviado antes em POST /anexos. */
+  anexoId?: string;
+  /** Hashtags do aviso (até 10). */
+  tags?: string[];
+  /** Texto alternativo da imagem anexada (até 200 caracteres; DS §16). */
+  anexoDescricao?: string;
+}
+
+/** `POST /posts/{id}/contestacao`: o autor de uma publicação retida pede revisão ("Isso foi um engano?"). Uma vez por publicação. */
+export interface ContestacaoCorpo {
+  /** Até 300 caracteres. */
+  texto?: string;
+}
+
+/** `POST /professor/respostas/{respostaId}/util`: o professor reconhece a resposta de um aluno. */
+export interface UtilProfessorCorpo {
+  /** Dúvida a que a resposta pertence. */
+  postId: string;
 }
 
 export interface QueryMensagens {
@@ -582,10 +609,20 @@ export interface ItemModeracaoDTO {
   criadoEm: number;
 }
 
+/** `GET /moderacao/salas/mensagens`: mensagem de chat de sala retida pela triagem (US06), aguardando decisão. */
+export interface MensagemSalaRetidaDTO {
+  salaId: string;
+  mensagem: MensagemSala;
+  /** Motivo da triagem. */
+  motivo: string;
+}
+
 export interface DecisaoCorpo {
   decisao: DecisaoModeracao;
   /** Motivo da decisão. Obrigatório quando "removido": vai para a auditoria, para o histórico e para o autor. */
   observacao?: string;
+  /** De onde veio: "fila" (tela Moderação, padrão) ou "feed" (o professor removeu a publicação de um aluno pelo feed). */
+  origem?: "fila" | "feed";
 }
 
 /** Linha do histórico de moderação (derivada da auditoria das decisões; posts e mensagens de sala). */
@@ -601,6 +638,10 @@ export interface RegistroModeracaoDTO {
   autorId: string;
   /** Texto do conteúdo (o removido sai do feed, o histórico continua legível). */
   texto: string;
+  /** Onde a decisão foi tomada: fila de moderação ou feed (ausente = fila). */
+  origem?: "fila" | "feed";
+  /** Sala de origem, quando `tipo` é "mensagem_sala". */
+  salaId?: string;
 }
 
 export interface ValidacaoRelatoCorpo {
@@ -631,7 +672,7 @@ export interface LembretesAgendadosCorpo {
   itens: { eventoId: string; disparoEm: number }[];
 }
 
-/** `POST /professor/lembretes`: avisa alunos que estão sem estudar. O servidor aplica a trava de 12 h por aluno. */
+/** `POST /professor/lembretes`: avisa alunos que estão sem estudar. O servidor aplica a trava de 6 h por aluno. */
 export interface LembrarAlunosCorpo {
   alunoIds: string[];
   /** Instante em que o professor decidiu (auditoria). */

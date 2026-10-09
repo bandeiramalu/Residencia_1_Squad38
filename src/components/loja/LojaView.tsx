@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Abas } from "@/components/feed/Abas";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { TituloPagina, TituloSecao } from "@/components/ui/Blocos";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ABAS_LOJA, ITENS, itemPorId, type AbaLoja, type ItemLoja } from "@/data/loja";
 import { fmt, plural } from "@/lib/format";
@@ -43,7 +44,7 @@ export function LojaView() {
         <p className="mt-1 text-[12.5px] text-texto-2">{compras.length ? plural(compras.length, "troca feita", "trocas feitas") : "Nenhuma troca ainda"} · XP não é gasto na Loja</p>
       </section>
 
-      <div className="space-y-4">
+      <div id="itens-loja" className="scroll-mt-20 space-y-4">
         <Abas grupo="aba-loja" rotulo="Categorias da loja" opcoes={ABAS_LOJA.map((a) => ({ id: a.id, rotulo: a.nome }))} valor={aba} onChange={setAba} />
 
         {aba === "escola" && (
@@ -69,7 +70,7 @@ export function LojaView() {
                   item={item}
                   nome={usuario.nome}
                   pontos={usuario.pontos}
-                  adquirido={compras.some((c) => c.itemId === item.id)}
+                  adquirido={item.slot !== "voucher" && compras.some((c) => c.itemId === item.id)}
                   equipado={usuario.equipados.includes(item.id)}
                   onAbrir={() => setCheckout({ item, aberto: true })}
                 />
@@ -83,7 +84,16 @@ export function LojaView() {
         <TituloSecao extra={compras.length ? `${fmt(gasto)} pontos usados` : undefined}>Histórico de trocas</TituloSecao>
         <Card semPadding className="overflow-hidden">
           {compras.length === 0 ? (
-            <p className="px-4 py-6 text-center text-[13.5px] text-texto-2">Você ainda não fez nenhuma troca.</p>
+            <div className="px-4 py-8 text-center">
+              <span className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-superficie-2 text-texto-2">
+                <ShoppingBag className="size-5" aria-hidden />
+              </span>
+              <p className="text-[14px] font-medium text-tinta">Você ainda não fez nenhuma troca</p>
+              <p className="mx-auto mt-1 max-w-xs text-[13px] text-texto-2">Suas trocas e os códigos de retirada aparecem aqui.</p>
+              <Button variante="secundario" tamanho="sm" className="mt-3" onClick={() => document.getElementById("itens-loja")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+                Ver itens da loja
+              </Button>
+            </div>
           ) : (
             <ul className="divide-y divide-borda">
               <AnimatePresence initial={false}>
@@ -132,7 +142,7 @@ export function LojaView() {
                           onClick={() => baixarComprovante(c, item, usuario.nome, usuario.pontos)}
                           aria-label={`Baixar comprovante (PDF) de ${item?.nome ?? "troca"}`}
                           title="Baixar comprovante (PDF)"
-                          className="relative grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta active:scale-95"
+                          className="alvo-toque grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta active:scale-95"
                         >
                           <Download className="size-4" />
                         </button>

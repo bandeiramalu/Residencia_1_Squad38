@@ -31,26 +31,179 @@ export interface PdfGerado {
 
 /* ───────────── Codificação (WinAnsi) ───────────── */
 
+/** Caracteres fora do Latin-1 que a codificação WinAnsi (Windows-1252) tem em 0x80–0x9F. */
 const WIN_ANSI: Record<string, number> = {
-  "—": 0x97,
-  "–": 0x96,
-  "“": 0x93,
-  "”": 0x94,
+  "€": 0x80,
+  "‚": 0x82,
+  "ƒ": 0x83,
+  "„": 0x84,
+  "…": 0x85,
+  "†": 0x86,
+  "‡": 0x87,
+  "ˆ": 0x88,
+  "‰": 0x89,
+  "Š": 0x8a,
+  "‹": 0x8b,
+  "Œ": 0x8c,
+  "Ž": 0x8e,
   "‘": 0x91,
   "’": 0x92,
+  "“": 0x93,
+  "”": 0x94,
   "•": 0x95,
-  "…": 0x85,
-  "€": 0x80,
+  "–": 0x96,
+  "—": 0x97,
+  "˜": 0x98,
+  "™": 0x99,
+  "š": 0x9a,
+  "›": 0x9b,
+  "œ": 0x9c,
+  "ž": 0x9e,
+  "Ÿ": 0x9f,
 };
 
 const SUBSCRITOS: Record<string, string> = { "₀": "0", "₁": "1", "₂": "2", "₃": "3", "₄": "4", "₅": "5", "₆": "6", "₇": "7", "₈": "8", "₉": "9" };
-const SUBSTITUICOES: Record<string, string> = { "−": "-", "→": "->", "≤": "<=", "≥": ">=", "≠": "!=", "≈": "~", " ": " ", "\t": " " };
 
+/**
+ * Caracteres comuns que a fonte do PDF (Helvetica/WinAnsi) não tem, trocados pelo equivalente legível:
+ * espaços especiais, aspas, hífens e travessões, setas, marcadores, símbolos de matemática e letras gregas.
+ * O que não está aqui e também não existe em Windows-1252 (emoji, ideogramas, caixas…) é REMOVIDO — nunca vira "?".
+ */
+const TRANSLITERACAO: Record<string, string> = {
+  // aspas e apóstrofos
+  "ʼ": "'",
+  "‛": "'",
+  "′": "'",
+  "‟": '"',
+  "″": '"',
+  "〝": '"',
+  "〞": '"',
+  "❝": '"',
+  "❞": '"',
+  "❛": "'",
+  "❜": "'",
+  // hífens, travessões, reticências
+  "‐": "-",
+  "‑": "-",
+  "‒": "-",
+  "―": "-",
+  "−": "-",
+  "﹣": "-",
+  "－": "-",
+  "⋯": "...",
+  "‥": "..",
+  // setas
+  "←": "<-",
+  "→": "->",
+  "↔": "<->",
+  "⇐": "<=",
+  "⇒": "=>",
+  "⇔": "<=>",
+  "⟵": "<-",
+  "⟶": "->",
+  "⟹": "=>",
+  "➔": "->",
+  "➜": "->",
+  "➞": "->",
+  "➡": "->",
+  "⬅": "<-",
+  "↗": "->",
+  "↘": "->",
+  "↪": "->",
+  "↳": "->",
+  "↑": "^",
+  "⬆": "^",
+  "↓": "v",
+  "⬇": "v",
+  // marcadores
+  "◦": "•",
+  "▪": "•",
+  "▫": "•",
+  "■": "•",
+  "□": "•",
+  "●": "•",
+  "○": "•",
+  "◆": "•",
+  "◇": "•",
+  "‣": "•",
+  "∙": "•",
+  "⋅": "•",
+  "⁃": "•",
+  "▶": "•",
+  "►": "•",
+  "➤": "•",
+  "★": "*",
+  "☆": "*",
+  // matemática
+  "≤": "<=",
+  "≥": ">=",
+  "≠": "!=",
+  "≈": "~",
+  "∼": "~",
+  "≅": "~",
+  "∞": "infinito",
+  "√": "raiz ",
+  "∑": "soma",
+  "∆": "Delta",
+  "⁰": "^0",
+  "⁴": "^4",
+  "⁵": "^5",
+  "⁶": "^6",
+  "⁷": "^7",
+  "⁸": "^8",
+  "⁹": "^9",
+  "⁺": "^+",
+  "⁻": "^-",
+  "ⁿ": "^n",
+  "⅓": "1/3",
+  "⅔": "2/3",
+  // letras gregas
+  "Δ": "Delta",
+  "Σ": "Sigma",
+  "Ω": "ohm",
+  "α": "alfa",
+  "β": "beta",
+  "γ": "gama",
+  "δ": "delta",
+  "ε": "epsilon",
+  "θ": "teta",
+  "λ": "lambda",
+  "μ": "mu",
+  "π": "pi",
+  "σ": "sigma",
+  "φ": "fi",
+  "ω": "omega",
+};
+
+/** Tabulação e espaços especiais (nbsp, en/em space, fino, ideográfico…) viram um espaço comum. */
+const ESPACOS_ESPECIAIS = /[^\S\n ]/g;
+
+const REGEX_TRANSLITERACAO = new RegExp(Object.keys(TRANSLITERACAO).join("|"), "gu");
+
+/** O caractere existe na fonte do PDF: ASCII imprimível, Latin-1 (menos controles) ou os de `WIN_ANSI`. */
+function codificavel(ch: string) {
+  if (ch === "\n") return true;
+  const code = ch.codePointAt(0) ?? 0;
+  if (code >= 0xa0 && code <= 0xff) return true;
+  if (code >= 0x20 && code <= 0x7e) return true;
+  return ch in WIN_ANSI;
+}
+
+/** Prepara o texto para a fonte do PDF: transliteração dos comuns e remoção do resto (idempotente). */
 function limpar(texto: string) {
-  return texto
+  const trocado = texto
     .normalize("NFC")
+    .replace(ESPACOS_ESPECIAIS, " ")
     .replace(/[₀-₉]/g, (c) => SUBSCRITOS[c])
-    .replace(/[−→≤≥≠≈ \t]/g, (c) => SUBSTITUICOES[c]);
+    .replace(REGEX_TRANSLITERACAO, (c) => TRANSLITERACAO[c]);
+  let saida = "";
+  let removeu = false;
+  for (const ch of trocado) {
+    if (codificavel(ch)) saida += ch;
+    else removeu = true;
+  }
+  // Emoji removido entre dois espaços não pode deixar um vão duplo.
+  return removeu ? saida.replace(/ {2,}/g, " ") : saida;
 }
 
 /** Texto -> string de bytes Latin-1/WinAnsi (cada caractere = 1 byte). */

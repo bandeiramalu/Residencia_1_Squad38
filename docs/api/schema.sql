@@ -184,7 +184,9 @@ CREATE TRIGGER lancamentos_imutaveis BEFORE UPDATE OR DELETE ON lancamentos FOR 
 -- ───────────── Espaços e feed ─────────────
 
 CREATE TABLE espacos (
-  id        text PRIMARY KEY,                     -- "escola", "9A", "robotica", "bilingue" (EspacoId do front)
+  -- "escola", "9A", "9B", "8A", "robotica", "bilingue" (EspacoId do front). 9B e 8A (tipo 'turma') existem para o
+  -- professor publicar para a turma; a aluna lê o espaço da própria turma, "escola" e os clubes de que participa.
+  id        text PRIMARY KEY,
   nome      text NOT NULL,
   descricao text NOT NULL DEFAULT '',
   tipo      tipo_espaco NOT NULL,
@@ -203,9 +205,18 @@ CREATE TABLE anexos (
   id            text PRIMARY KEY,
   dono_id       text NOT NULL REFERENCES pessoas (id),
   nome          text NOT NULL CHECK (length(nome) BETWEEN 1 AND 200),
-  mime          text NOT NULL CHECK (mime IN ('application/pdf', 'image/png', 'image/jpeg', 'image/webp')),
+  -- Lista permitida (extensões .pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx). O MIME é o
+  -- CONFERIDO pelo servidor (magic bytes), nunca o enviado pelo cliente; .html/.svg/.exe e afins são recusados (415).
+  -- Ao servir: `X-Content-Type-Options: nosniff` e `Content-Disposition: attachment` para tudo que não for PDF ou imagem.
+  mime          text NOT NULL CHECK (mime IN (
+                  'application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'image/heic', 'text/plain',
+                  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                  'application/vnd.oasis.opendocument.text',
+                  'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+                  'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')),
   tamanho_bytes integer NOT NULL CHECK (tamanho_bytes BETWEEN 1 AND 10485760),   -- até 10 MB
   paginas       smallint CHECK (paginas > 0),
+  descricao     text CHECK (length(descricao) <= 200),                           -- texto alternativo da imagem (acessibilidade)
   chave_storage text NOT NULL UNIQUE,                                           -- caminho no S3/MinIO
   criado_em     timestamptz NOT NULL DEFAULT now()
 );
@@ -222,9 +233,14 @@ CREATE TABLE posts (
   -- US06: sinalizado pela triagem automática, invisível para os outros até a decisão humana.
   em_revisao     boolean NOT NULL DEFAULT false,
   motivo_triagem text,
+  -- "Isso foi um engano?" (POST /posts/{id}/contestacao): o autor de um post retido contesta, uma vez. Não muda o
+  -- status: a decisão continua humana (moderacoes). Aparece na fila da coordenação junto com o post.
+  contestado_em    timestamptz,
+  contestacao_texto text CHECK (length(contestacao_texto) <= 300),
   criado_em      timestamptz NOT NULL DEFAULT now(),
   removido_em    timestamptz,
-  CHECK (tipo <> 'material' OR anexo_id IS NOT NULL)          -- material sempre tem arquivo
+  CHECK (tipo <> 'material' OR anexo_id IS NOT NULL),         -- material sempre tem arquivo
+  CHECK (contestacao_texto IS NULL OR contestado_em IS NOT NULL)
 );
 CREATE INDEX posts_feed ON posts (espaco_id, criado_em DESC) WHERE removido_em IS NULL AND NOT em_revisao;
 CREATE INDEX posts_autor ON posts (autor_id, criado_em DESC);
@@ -236,12 +252,14 @@ CREATE TABLE respostas (
   autor_id  text NOT NULL REFERENCES pessoas (id),
   texto     text NOT NULL CHECK (length(texto) BETWEEN 1 AND 3000),
   oficial   boolean NOT NULL DEFAULT false,         -- resposta de professor numa dúvida (fixada, US03)
-  util      boolean NOT NULL DEFAULT false,         -- marcada pelo autor da dúvida
+  util      boolean NOT NULL DEFAULT false,         -- marcada útil pelo autor da dúvida OU por um professor (POST /professor/respostas/{respostaId}/util)
   criado_em timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX respostas_post ON respostas (post_id, criado_em);
 
--- "N pessoas acharam útil" (contador `uteis` do front).
+-- "N pessoas acharam útil" (contador `uteis` do front). O professor que reconhece a resposta de um aluno entra aqui
+-- também; o crédito (+25 pontos e +25 XP) é um único lançamento `resposta_util:{respostaId}` — o índice único do
+-- extrato impede o pagamento duplo, qualquer que seja quem marcou primeiro.
 CREATE TABLE respostas_uteis (
   resposta_id text NOT NULL REFERENCES respostas (id) ON DELETE CASCADE,
   pessoa_id   text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
@@ -280,6 +298,9 @@ CREATE TABLE denuncias (
   descricao      text NOT NULL DEFAULT '' CHECK (length(descricao) <= 1000),
   evidencia      boolean NOT NULL DEFAULT false,
   categoria_ia   text NOT NULL,
+  -- O cliente não conseguiu triar (IA indisponível, tela 73/P04): vale o motivo informado e prioridade média até o
+  -- servidor triar de novo.
+  triagem_indisponivel boolean NOT NULL DEFAULT false,
   prioridade     prioridade NOT NULL,
   confianca      numeric(3, 2) CHECK (confianca BETWEEN 0 AND 1),
   protocolo      text NOT NULL UNIQUE,
@@ -295,6 +316,8 @@ CREATE TABLE moderacoes (
   post_id      text REFERENCES posts (id) ON DELETE CASCADE,
   mensagem_id  text REFERENCES sala_mensagens (id) ON DELETE CASCADE,   -- mensagem de chat de sala retida pela triagem
   decisao      decisao_moderacao NOT NULL,
+  -- Onde a decisão foi tomada: tela Moderação ('fila') ou o professor removendo a publicação de um aluno pelo próprio feed ('feed').
+  origem       text NOT NULL DEFAULT 'fila' CHECK (origem IN ('fila', 'feed')),
   moderador_id text NOT NULL REFERENCES pessoas (id),     -- NUNCA nulo: não existe decisão automática
   observacao   text CHECK (length(observacao) <= 1000),   -- motivo; obrigatório quando decisao = 'removido'
   criado_em    timestamptz NOT NULL DEFAULT now(),
@@ -545,7 +568,8 @@ CREATE TABLE lembretes (
 );
 CREATE INDEX lembretes_a_disparar ON lembretes (disparo_em) WHERE disparo_em IS NOT NULL AND disparado_em IS NULL;
 
--- "Lembrar alunos" (POST /professor/lembretes): histórico e TRAVA — no máximo 1 aviso a cada 12 h por aluno.
+-- "Lembrar alunos" (POST /professor/lembretes e POST /atividades/{id}/lembretes): histórico e TRAVA — no máximo 1 aviso
+-- a cada 6 h por aluno (o lembrete de uma atividade tem trava própria por aluno e atividade: coluna `atividade_id`).
 CREATE TABLE lembretes_professor (
   id           bigserial PRIMARY KEY,
   professor_id text NOT NULL REFERENCES pessoas (id),
@@ -749,6 +773,10 @@ CREATE TABLE atividades (
 );
 CREATE INDEX atividades_turma ON atividades (turma_id, prazo) WHERE excluida_em IS NULL;
 CREATE INDEX atividades_professor ON atividades (professor_id, criada_em DESC);
+
+-- Lembrete de uma atividade (POST /atividades/{id}/lembretes): NULL = lembrete de estudos; a trava de 6 h vale por aluno + atividade.
+ALTER TABLE lembretes_professor ADD COLUMN atividade_id text REFERENCES atividades (id) ON DELETE CASCADE;
+CREATE INDEX lembretes_professor_trava_atividade ON lembretes_professor (atividade_id, aluno_id, enviado_em DESC) WHERE atividade_id IS NOT NULL;
 
 CREATE TABLE entregas (
   atividade_id  text NOT NULL REFERENCES atividades (id) ON DELETE CASCADE,

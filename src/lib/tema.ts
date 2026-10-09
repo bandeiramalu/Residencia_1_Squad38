@@ -7,8 +7,7 @@ import { useSyncExternalStore } from "react";
 export type PreferenciaTema = "claro" | "escuro" | "sistema";
 export type Tema = "claro" | "escuro";
 
-import { CHAVE_TEMA as CHAVE } from "./tema-script";
-const COR_BARRA: Record<Tema, string> = { claro: "#ffffff", escuro: "#0f1623" };
+import { CHAVE_TEMA as CHAVE, COR_BARRA } from "./tema-script";
 
 const ouvintes = new Set<() => void>();
 
@@ -26,12 +25,17 @@ function resolver(p: PreferenciaTema): Tema {
   return matchMedia("(prefers-color-scheme: dark)").matches ? "escuro" : "claro";
 }
 
+/** Acerta todos os `<meta name="theme-color">` (o Next gera um por `media`) para a cor do tema. */
+function pintarBarra(tema: Tema) {
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute("content", COR_BARRA[tema]));
+}
+
 function aplicar(tema: Tema) {
   const html = document.documentElement;
   // Desliga as transições de cor por um quadro: a troca fica instantânea e limpa.
   html.classList.add("sem-transicao");
   html.dataset.tema = tema;
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", COR_BARRA[tema]);
+  pintarBarra(tema);
   requestAnimationFrame(() => requestAnimationFrame(() => html.classList.remove("sem-transicao")));
 }
 
@@ -56,6 +60,33 @@ function assinar(o: () => void) {
   mq.addEventListener("change", aoMudarSistema);
   return () => {
     ouvintes.delete(o);
+    mq.removeEventListener("change", aoMudarSistema);
+  };
+}
+
+/**
+ * Mantém este documento no mesmo tema das outras abas e do sistema, mesmo sem nenhum seletor de tema na tela.
+ * Também acerta a cor da barra do navegador na carga a frio (o `<meta>` do Next pode chegar depois do script do tema).
+ * Use uma vez, no AppShell; devolve a função que desfaz.
+ */
+export function sincronizarTema(): () => void {
+  pintarBarra(document.documentElement.dataset.tema === "escuro" ? "escuro" : "claro");
+  const aoArmazenar = (e: StorageEvent) => {
+    if (e.key !== CHAVE && e.key !== null) return;
+    aplicar(resolver(lerPreferencia()));
+    ouvintes.forEach((o) => o());
+  };
+  const mq = matchMedia("(prefers-color-scheme: dark)");
+  const aoMudarSistema = () => {
+    if (lerPreferencia() === "sistema") {
+      aplicar(resolver("sistema"));
+      ouvintes.forEach((o) => o());
+    }
+  };
+  window.addEventListener("storage", aoArmazenar);
+  mq.addEventListener("change", aoMudarSistema);
+  return () => {
+    window.removeEventListener("storage", aoArmazenar);
     mq.removeEventListener("change", aoMudarSistema);
   };
 }

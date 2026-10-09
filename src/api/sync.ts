@@ -6,16 +6,19 @@
  *      ou calculada pelo servidor (pontos, XP, medalhas, notificações NUNCA saem do cliente);
  *   2. a requisição entra na FILA DE SAÍDA (outbox) salva no localStorage: sobrevive a recarregar a página
  *      e a ficar sem internet;
- *   3. a fila envia em ordem, com o header `Idempotency-Key`. Rede/5xx → reenvio com espera exponencial
- *      (e na hora em que a conexão volta). Outros 4xx → descartada, registrada em "rejeitadas" e avisada
- *      pelo evento `cepi:sync-rejeitada` (a tela pode mostrar um toast).
+ *   3. a fila envia em ordem, com o header `Idempotency-Key`. Rede/5xx → reenvio com espera exponencial de
+ *      1 s, 2 s, 4 s… até 5 min (mais até 20 % de variação), também na hora em que a conexão volta; erro 5xx
+ *      NUNCA descarta o pedido — só a validade de 7 dias. Outros 4xx → descartada, registrada em "rejeitadas"
+ *      e avisada pelo evento `cepi:sync-rejeitada` (a tela pode mostrar um toast).
  *
  * A tela já mudou antes (atualização otimista); o servidor confirma depois. No modo local nada disso roda
- * e nada aqui lança erro para o app. Explicação completa: docs/BACKEND.md.
+ * e nada aqui lança erro para o app. Duelos e desafios ficam locais até a integração com o servidor (ver as
+ * regras `atualizarCampeonato` e `concluirDesafio`). Explicação completa: docs/BACKEND.md.
  */
 import { lerSessao, type PapelSessao } from "@/lib/auth";
 import { lerArquivo } from "@/lib/arquivos";
 import type { Acao } from "@/store/reducer";
+import { curtiu, salvou } from "@/store/seletores";
 import { obterEstado } from "@/store/store";
 import type { Anexo, AppState, Campeonato } from "@/store/types";
 import { ErroApi, MODO_API, api } from "./client";
@@ -72,8 +75,14 @@ function hoje() {
 /** Anexa ao pedido o arquivo real (se houver) para o upload prévio da fila. */
 const comArquivo = (req: Requisicao, anexo?: Anexo): Requisicao => (anexo?.arquivoId ? { ...req, arquivo: { arquivoId: anexo.arquivoId, nome: anexo.nome } } : req);
 
-/** Atribuições automáticas da correção (acoes/atividades.ts): o servidor já credita em PUT …/correcao. */
-const PREFIXO_CORRECAO = "Correção:";
+/** Reconhecer a resposta de um aluno como útil: o professor usa o endpoint dele; o autor da dúvida, o do feed. O crédito é do servidor. */
+function intencaoUtil({ postId, respostaId }: { postId: string; respostaId: string }, { papel }: Contexto): Requisicao {
+  const pedido =
+    papel === "professor"
+      ? preparar(E.professor.marcarUtil, { params: { respostaId }, corpo: { postId } })
+      : preparar(E.feed.marcarUtil, { params: { id: postId, respostaId } });
+  return criar(pedido, `util:${respostaId}`);
+}
 
 function salvarTimer(estado: AppState) {
   const timer = estado.estudos.timer;
@@ -85,7 +94,8 @@ function salvarTimer(estado: AppState) {
  * Deduzimos a intenção e mandamos só ela, sempre de forma idempotente:
  * - aluno durante as inscrições → "quero estar inscrito" (PUT) ou "não quero" (DELETE);
  * - organizador → iniciar/encerrar (o servidor ignora se o campeonato já estiver nesse status);
- * - placar e chaveamento: o servidor calcula nos endpoints de duelo/rodada (chamados direto pela tela).
+ * - placar e chaveamento: duelo e rodada ainda são jogados e pontuados localmente; o servidor passa a calculá-los
+ *   quando as telas usarem os endpoints de duelo/rodada (pendência do modo integrado, ver docs/BACKEND.md).
  */
 function intencaoCampeonato(c: Campeonato, { eu, papel }: Contexto): Requisicao | null {
   const params = { id: c.id };
@@ -135,44 +145,73 @@ const REGRAS: Regras = {
   /* ── Só visual/local ── */
   selecionarEspaco: () => null,
   virarCarta: () => null,
+  /**
+   * A virada do dia é calculada pelo servidor (fuso America/Maceio, congeladores, missões do dia): o cliente só
+   * mantém a tela coerente enquanto está sem resposta dele.
+   */
+  virarDia: () => null,
+  /** Limpa o selo "aguardando envio": o post já subiu (ou vai subir) pela regra `publicar`, que continua na fila. */
+  confirmarEnvio: () => null,
 
   /* ── Efeitos locais de ações que já sobem por outra regra, ou que chegam por tempo real ── */
-  /** A recompensa pela resposta útil é do servidor (marcarUtil). */
-  respostaAjudou: () => null,
-  /** Variante de tela da decisão do relato; a decisão sobe em `decidirRelato`. */
-  validarRelato: () => null,
   /** A presença da sala chega por `sala.presenca`. */
   membrosSala: () => null,
+  /** Variante de tela da decisão do relato; a decisão sobe em `decidirRelato`. */
+  validarRelato: () => null,
   /** `moderarPost` + `registrarModeracao` são disparados juntos: só o segundo sobe (ver abaixo). */
   moderarPost: () => null,
 
   /* ── Feed ── */
-  curtir: ({ postId }, { estado }) => {
+  /**
+   * Curtir e salvar são por pessoa. Como a aluna e o professor compartilham o estado local, só sobe o gesto de quem
+   * está logado nesta aba (`por`; sem ele, a aluna). O estado desejado vem de `curtiu`/`salvou` com a pessoa logada.
+   */
+  curtir: ({ postId, por }, { estado, eu }) => {
+    if ((por ?? estado.usuario.id) !== eu) return null;
     const post = estado.posts.find((p) => p.id === postId);
     if (!post) return null;
     const params = { id: postId };
-    return desejado(post.curtido ? preparar(E.feed.curtir, { params }) : preparar(E.feed.descurtir, { params }), `curtida:${postId}`);
+    return desejado(curtiu(post, eu) ? preparar(E.feed.curtir, { params }) : preparar(E.feed.descurtir, { params }), `curtida:${postId}`);
   },
-  salvar: ({ postId }, { estado }) => {
+  salvar: ({ postId, por }, { estado, eu }) => {
+    if ((por ?? estado.usuario.id) !== eu) return null;
     const post = estado.posts.find((p) => p.id === postId);
     if (!post) return null;
     const params = { id: postId };
-    return desejado(post.salvo ? preparar(E.feed.salvar, { params }) : preparar(E.feed.removerSalvo, { params }), `salvo:${postId}`);
+    return desejado(salvou(post, eu) ? preparar(E.feed.salvar, { params }) : preparar(E.feed.removerSalvo, { params }), `salvo:${postId}`);
   },
   publicar: ({ post }, { eu }) => {
     if (post.autorId !== eu) return null;
     const { id, tipo, espaco, texto } = post;
-    if (tipo === "aviso") return criar(preparar(E.professor.publicarAviso, { corpo: { id, texto, espaco } }), `post:${id}`);
-    return comArquivo(criar(preparar(E.feed.publicar, { corpo: { id, tipo, espaco, texto, disciplina: post.disciplina, tags: post.tags } }), `post:${id}`), post.anexo);
+    // Mensagem de chat retida pela triagem nunca vira post do feed: sobe como mensagem da sala (o servidor retém e
+    // a decisão da moderação usa o endpoint da mensagem da sala — ver `registrarModeracao`).
+    if (post.origemSala) {
+      const { salaId, mensagem } = post.origemSala;
+      return criar(preparar(E.salas.enviarMensagem, { params: { id: salaId }, corpo: { id, texto: mensagem, tipo: "mensagem" } }), `sala-msg:${id}`);
+    }
+    if (tipo === "aviso") {
+      const corpo = { id, texto, espaco, disciplina: post.disciplina, tags: post.tags.length ? post.tags : undefined, anexoDescricao: post.anexo?.descricao };
+      return comArquivo(criar(preparar(E.professor.publicarAviso, { corpo }), `post:${id}`), post.anexo);
+    }
+    const corpo = { id, tipo, espaco, texto, disciplina: post.disciplina, tags: post.tags, anexoDescricao: post.anexo?.descricao };
+    return comArquivo(criar(preparar(E.feed.publicar, { corpo }), `post:${id}`), post.anexo);
   },
   responder: ({ postId, resposta }, { eu }) =>
     resposta.autorId === eu
       ? criar(preparar(E.feed.responder, { params: { id: postId }, corpo: { id: resposta.id, texto: resposta.texto } }), `resposta:${resposta.id}`)
       : null,
-  marcarUtil: ({ postId, respostaId }) => criar(preparar(E.feed.marcarUtil, { params: { id: postId, respostaId } }), `util:${respostaId}`),
+  marcarUtil: (acao, ctx) => intencaoUtil(acao, ctx),
+  /** Mesmo pedido de `marcarUtil` (a ação só difere por contar a resposta útil da aluna); a recompensa é do servidor. */
+  respostaAjudou: (acao, ctx) => intencaoUtil(acao, ctx),
   denunciar: ({ postId, denuncia: d }) =>
-    criar(preparar(E.feed.denunciar, { params: { id: postId }, corpo: { motivo: d.motivo, descricao: d.descricao, evidencia: d.evidencia } }), `denuncia:${postId}:${d.criadoEm}`),
-  materialAberto: ({ postId }) => criar(preparar(E.feed.abrirMaterial, { params: { id: postId } }), `abertura:${postId}`),
+    criar(
+      preparar(E.feed.denunciar, { params: { id: postId }, corpo: { motivo: d.motivo, descricao: d.descricao, evidencia: d.evidencia, ...(d.semTriagem ? { semTriagem: true } : {}) } }),
+      `denuncia:${postId}:${d.criadoEm}`,
+    ),
+  /** O autor de uma publicação retida pede revisão (tela 75); o servidor aceita uma contestação por publicação. */
+  contestar: ({ postId, contestacao }) => criar(preparar(E.feed.contestar, { params: { id: postId }, corpo: { texto: contestacao.texto } }), `contestacao:${postId}`),
+  /** Só a aluna abre material para missão; o professor abrindo/baixando não registra nada. */
+  materialAberto: ({ postId }, { papel }) => (papel === "aluno" ? criar(preparar(E.feed.abrirMaterial, { params: { id: postId } }), `abertura:${postId}`) : null),
 
   /* ── Missões, sequência, prática e ouvidoria ── */
   missaoProgresso: ({ id, delta }) => evento(preparar(E.missoes.progredir, { params: { id }, corpo: { delta } })),
@@ -182,8 +221,12 @@ const REGRAS: Regras = {
   recomecarSequencia: () => evento(preparar(E.missoes.recomecarSequencia)),
   responderCarta: ({ acertou }) => evento(preparar(E.missoes.responderCarta, { corpo: { acertou } })),
   reiniciarPratica: () => evento(preparar(E.missoes.reiniciarPratica)),
-  /** Cartas próprias e início de rodada; a caixa de Leitner é atualizada pelo servidor em `responderCarta`. */
+  /**
+   * Cartas próprias e início de rodada; a caixa de Leitner é atualizada pelo servidor em `responderCarta`.
+   * `premiada` (a recompensa do dia já foi dada) é controle local: o servidor decide a recompensa sozinho.
+   */
   flashcards: ({ op }) => {
+    if (op.tipo === "premiada") return null;
     if (op.tipo === "iniciar") return evento(preparar(E.missoes.iniciarRodada, { corpo: { escolha: op.escolha, ids: op.ids } }));
     if (op.tipo === "salvar") {
       const { id, disciplina, pergunta, resposta } = op.carta;
@@ -191,7 +234,11 @@ const REGRAS: Regras = {
     }
     return desejado(preparar(E.missoes.apagarCarta, { params: { id: op.id } }), `carta:${op.id}`);
   },
-  /** O servidor corrige o desafio: a tela chama `E.desafios.abrir/responder` direto (o gabarito não fica no cliente). */
+  /**
+   * O desafio é corrigido e premiado localmente (o gabarito está no cliente) e nada sobe por aqui. No modo integrado o
+   * servidor corrige em `E.desafios.abrir/responder` (o gabarito deixa o cliente) — a tela ainda não usa esses
+   * endpoints, então a integração do desafio é pendência documentada em docs/BACKEND.md.
+   */
   concluirDesafio: () => null,
   enviarRelato: ({ relato: r }) => criar(preparar(E.relatos.enviar, { corpo: { id: r.id, categoria: r.categoria, texto: r.texto } }), `relato:${r.id}`),
 
@@ -305,18 +352,37 @@ const REGRAS: Regras = {
   removerAtividade: ({ id }) => criar(preparar(E.atividades.excluir, { params: { id } }), `excluir-atividade:${id}`),
 
   /* ── Professor e moderação ── */
+  /**
+   * Só o "Dar pontos" do professor sobe. Correção de atividade e resposta útil (`origem`) são creditadas pelo servidor
+   * nos próprios endpoints (corrigir a entrega, marcar útil): subir a atribuição também pagaria duas vezes.
+   */
   atribuir: ({ atribuicao: t }, { papel }) => {
-    if (papel !== "professor" || t.motivo.startsWith(PREFIXO_CORRECAO)) return null;
+    if (papel !== "professor" || t.origem === "correcao" || t.origem === "util") return null;
     const corpo = { itens: [{ id: t.id, alunoId: t.alunoId }], pontos: t.pontos, xp: t.xp, motivo: t.motivo };
     return criar(preparar(E.professor.atribuir, { corpo }), `atribuicao:${t.id}`);
   },
-  /** A decisão sobe junto com o motivo (`observacao`); o servidor grava a auditoria e o histórico a partir dela. */
-  registrarModeracao: ({ registro: r }) =>
-    desejado(preparar(E.moderacao.decidirPost, { params: { postId: r.postId }, corpo: { decisao: r.decisao, observacao: r.motivo } }), `moderacao:${r.postId}`),
+  /**
+   * A decisão sobe junto com o motivo (`observacao`); o servidor grava a auditoria e o histórico a partir dela.
+   * Mensagem de chat retida (`salaId`) é decidida no endpoint da mensagem da sala, não no do post.
+   */
+  registrarModeracao: ({ registro: r }) => {
+    const corpo = { decisao: r.decisao, observacao: r.motivo, origem: r.origem };
+    const pedido = r.salaId
+      ? preparar(E.moderacao.decidirMensagemSala, { params: { salaId: r.salaId, mensagemId: r.postId }, corpo })
+      : preparar(E.moderacao.decidirPost, { params: { postId: r.postId }, corpo });
+    return desejado(pedido, `moderacao:${r.postId}`);
+  },
   /** Coordenação decide o relato; a recompensa (+30 pontos) é creditada pelo servidor, nunca pelo cliente. */
   decidirRelato: ({ id, aprovado }, { papel }) =>
     papel === "professor" ? desejado(preparar(E.moderacao.validarRelato, { params: { id }, corpo: { status: aprovado ? "validado" : "recusado" } }), `relato-decisao:${id}`) : null,
-  lembrarAlunos: ({ ids, em }) => evento(preparar(E.professor.lembrarAlunos, { corpo: { alunoIds: ids, em } })),
+  /**
+   * `ids` são as chaves da trava de 6 h (ex.: "atividade:ana") e nunca sobem. Lembrete de atividade usa o endpoint da
+   * atividade (o servidor acha os pendentes); o geral leva os ids puros dos alunos.
+   */
+  lembrarAlunos: ({ ids, em, alunoIds, atividadeId }) =>
+    atividadeId
+      ? evento(preparar(E.atividades.lembrarPendentes, { params: { id: atividadeId } }))
+      : evento(preparar(E.professor.lembrarAlunos, { corpo: { alunoIds: alunoIds ?? ids, em } })),
 
   /* ── Notificações ── */
   lerNotificacao: ({ id }) => desejado(preparar(E.notificacoes.ler, { params: { id } }), `lida:${id}`),
@@ -337,7 +403,7 @@ interface ItemFila extends Requisicao {
   acao: Acao["type"];
   criadoEm: number;
   tentativas: number;
-  /** Erros 5xx seguidos: depois de `MAX_FALHAS_SERVIDOR` o pedido é descartado (não trava a fila para sempre). */
+  /** Erros 5xx seguidos (só informativo: erro do servidor nunca descarta o pedido, só os 7 dias de validade). */
   falhasServidor: number;
   /** Não tentar antes deste instante (espera exponencial). */
   proximaEm: number;
@@ -349,7 +415,6 @@ const CHAVE_FILA = "cepi-api-fila";
 const CHAVE_REJEITADAS = "cepi-api-rejeitadas";
 const MAX_FILA = 500;
 const MAX_REJEITADAS = 50;
-const MAX_FALHAS_SERVIDOR = 8;
 const VALIDADE_MS = 7 * 24 * 60 * 60 * 1000;
 const TEMPO_LIMITE_MS = 15_000;
 const UPLOAD_LIMITE_MS = 60_000;
@@ -359,6 +424,7 @@ const ESPERA_MAX_MS = 5 * 60 * 1000;
 let memoria: ItemFila[] = [];
 let soMemoria = false;
 let pendentes = 0;
+let pendentesPorUsuario = new Map<string, number>();
 let enviando = false;
 let ligado = false;
 let despertador: ReturnType<typeof setTimeout> | undefined;
@@ -376,6 +442,8 @@ function lerFila(): ItemFila[] {
 
 function contar(fila: ItemFila[]) {
   pendentes = fila.length;
+  pendentesPorUsuario = new Map();
+  for (const item of fila) pendentesPorUsuario.set(item.usuarioId, (pendentesPorUsuario.get(item.usuarioId) ?? 0) + 1);
   ouvintes.forEach((o) => o());
 }
 
@@ -401,7 +469,7 @@ function avisar(nome: string, detalhe: unknown) {
 
 /** Guarda as últimas recusas para depuração — SEM o corpo (pode ter mensagens pessoais: LGPD). */
 function rejeitar(item: ItemFila, status: number, codigo: string, mensagem: string) {
-  const registro = { acao: item.acao, metodo: item.metodo, caminho: item.caminho, chave: item.chave, status, codigo, mensagem, em: Date.now() };
+  const registro = { acao: item.acao, usuarioId: item.usuarioId, metodo: item.metodo, caminho: item.caminho, chave: item.chave, status, codigo, mensagem, em: Date.now() };
   try {
     const antigas = JSON.parse(localStorage.getItem(CHAVE_REJEITADAS) ?? "[]") as unknown[];
     localStorage.setItem(CHAVE_REJEITADAS, JSON.stringify([registro, ...antigas].slice(0, MAX_REJEITADAS)));
@@ -428,7 +496,8 @@ function remover(chave: string) {
 }
 
 function adiar(item: ItemFila, servidor: boolean) {
-  const espera = Math.min(ESPERA_MAX_MS, 1000 * 2 ** item.tentativas) * (0.5 + Math.random() / 2);
+  // 1 s, 2 s, 4 s… até 5 min (Arquitetura §05), mais até 20 % de variação para os aparelhos não voltarem todos juntos.
+  const espera = Math.min(ESPERA_MAX_MS, 1000 * 2 ** item.tentativas) * (1 + Math.random() * 0.2);
   gravarFila(
     lerFila().map((i) =>
       i.chave === item.chave ? { ...i, tentativas: i.tentativas + 1, falhasServidor: servidor ? i.falhasServidor + 1 : 0, proximaEm: Date.now() + espera } : i,
@@ -461,9 +530,8 @@ async function enviar(item: ItemFila): Promise<Resultado> {
       return { tipo: "tentar", servidor: false };
     }
     if (erro.status === 408 || erro.status === 429) return { tipo: "tentar", servidor: false };
-    if (erro.status >= 500) {
-      if (item.falhasServidor + 1 < MAX_FALHAS_SERVIDOR) return { tipo: "tentar", servidor: true };
-    }
+    // Erro do servidor (deploy, queda): o pedido espera e volta — o que o usuário fez nunca se perde por isso.
+    if (erro.status >= 500) return { tipo: "tentar", servidor: true };
     return { tipo: "rejeitar", status: erro.status, codigo: erro.codigo, mensagem: erro.message };
   } finally {
     clearTimeout(limite);
@@ -492,7 +560,7 @@ async function subirAnexoPendente(item: ItemFila): Promise<Resultado | null> {
   } catch (erro) {
     if (!(erro instanceof ErroApi)) return { tipo: "tentar", servidor: false };
     if (erro.status === 401 || erro.status === 408 || erro.status === 429) return { tipo: "tentar", servidor: false };
-    if (erro.status >= 500 && item.falhasServidor + 1 < MAX_FALHAS_SERVIDOR) return { tipo: "tentar", servidor: true };
+    if (erro.status >= 500) return { tipo: "tentar", servidor: true };
     rejeitar({ ...item, caminho: "/anexos", metodo: "POST" }, erro.status, erro.codigo, `Anexo "${nome}" não subiu: ${erro.message}`);
   } finally {
     clearTimeout(limite);
@@ -559,6 +627,13 @@ function ligar() {
     contar(lerFila());
     acordar(1000);
   });
+  // Entrar na conta: o que ela deixou na fila da última visita volta a sair.
+  window.addEventListener("cepi:sessao-iniciada", () => acordar(0));
+  // Sair da conta: some só o que era dela (a fila é compartilhada com a conta aberta em outra aba).
+  window.addEventListener("cepi:sessao-encerrada", (e) => {
+    const usuarioId = (e as CustomEvent<{ usuarioId?: string } | undefined>).detail?.usuarioId;
+    if (usuarioId) limparFila(usuarioId);
+  });
   contar(lerFila());
   acordar(0);
 }
@@ -587,6 +662,16 @@ export function pendentesSincronizacao() {
   return pendentes;
 }
 
+/** Pedidos de um usuário esperando envio (a fila é compartilhada por todas as contas do navegador). */
+export function pendentesDoUsuario(usuarioId: string) {
+  return pendentesPorUsuario.get(usuarioId) ?? 0;
+}
+
+/** O pedido com esta chave de idempotência ainda está na fila? (ex.: `post:${id}` = a publicação ainda não subiu.) */
+export function naFila(chave: string) {
+  return lerFila().some((i) => i.chave === chave);
+}
+
 export function assinarSincronizacao(ouvinte: () => void) {
   ouvintes.add(ouvinte);
   return () => {
@@ -594,11 +679,21 @@ export function assinarSincronizacao(ouvinte: () => void) {
   };
 }
 
-/** Apaga a fila e as recusas (ex.: ao sair num computador compartilhado — o que não foi enviado se perde). */
-export function limparFila() {
-  gravarFila([]);
+/**
+ * Apaga pedidos da fila e as recusas guardadas. Com `usuarioId`, só os dessa conta (sair de uma conta não pode apagar
+ * o que a outra aba ainda vai enviar); sem ele, tudo. O que não foi enviado se perde.
+ */
+export function limparFila(usuarioId?: string) {
+  gravarFila(usuarioId ? lerFila().filter((i) => i.usuarioId !== usuarioId) : []);
   try {
-    localStorage.removeItem(CHAVE_REJEITADAS);
+    if (!usuarioId) {
+      localStorage.removeItem(CHAVE_REJEITADAS);
+      return;
+    }
+    const antigas = JSON.parse(localStorage.getItem(CHAVE_REJEITADAS) ?? "[]") as { usuarioId?: string }[];
+    const restantes = antigas.filter((r) => r.usuarioId !== usuarioId);
+    if (restantes.length) localStorage.setItem(CHAVE_REJEITADAS, JSON.stringify(restantes));
+    else localStorage.removeItem(CHAVE_REJEITADAS);
   } catch {
     /* nada a limpar */
   }

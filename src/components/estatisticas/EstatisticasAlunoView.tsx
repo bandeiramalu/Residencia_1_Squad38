@@ -1,6 +1,7 @@
 "use client";
 
-import { Download, FileX } from "lucide-react";
+import { BookOpenCheck, Download, FileX, Hourglass, Layers, Sparkles, Swords } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import { diaMes, diaSemanaMes } from "@/components/estudos/formato";
@@ -46,8 +47,19 @@ function Painel({ titulo, destaque, nota, children, className }: { titulo: strin
   );
 }
 
-function Vazio({ children }: { children: ReactNode }) {
-  return <p className="rounded-xl border border-dashed border-borda px-4 py-6 text-center text-[13px] text-texto-2">{children}</p>;
+/** Estado vazio: ícone, frase do que vai aparecer e, quando há como começar, a ação. */
+function Vazio({ children, icone, acao }: { children: ReactNode; icone?: ReactNode; acao?: { rotulo: string; href: string } }) {
+  return (
+    <div className="rounded-xl border border-dashed border-borda px-4 py-6 text-center text-[13px] text-texto-2">
+      {icone && <span className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-superficie-2 text-texto-2 [&_svg]:size-4">{icone}</span>}
+      <p>{children}</p>
+      {acao && (
+        <Link href={acao.href} className="alvo-toque mt-2 inline-block font-medium text-acento hover:underline">
+          {acao.rotulo}
+        </Link>
+      )}
+    </div>
+  );
 }
 
 function Numero({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; detalhe?: string }) {
@@ -154,7 +166,7 @@ export function EstatisticasAlunoView() {
             <select
               value={disciplina ?? ""}
               onChange={(e) => atualizar(periodo.id, (e.target.value || null) as Disciplina | null, ocultas)}
-              className="h-9 rounded-lg border border-borda bg-superficie px-3 text-[13px] text-tinta"
+              className="h-9 rounded-lg border border-borda bg-superficie px-3 text-[13px] text-tinta toque:h-11"
             >
               <option value="">Todas as disciplinas</option>
               {DISCIPLINAS.map((d) => (
@@ -165,7 +177,7 @@ export function EstatisticasAlunoView() {
             </select>
           </label>
           {filtrado && (
-            <button type="button" onClick={() => router.replace("/estatisticas")} className="text-[13px] font-medium text-acento hover:underline active:scale-[0.98]">
+            <button type="button" onClick={() => router.replace("/estatisticas")} className="alvo-toque text-[13px] font-medium text-acento hover:underline active:scale-[0.98]">
               Limpar filtros
             </button>
           )}
@@ -180,7 +192,7 @@ export function EstatisticasAlunoView() {
                   aria-pressed={ativa}
                   onClick={() => alternar(s.id)}
                   className={cn(
-                    "h-8 rounded-full border px-3 text-[13px] font-medium transition-colors duration-150 active:scale-[0.98]",
+                    "h-8 rounded-full border px-3 text-[13px] font-medium transition-colors duration-150 active:scale-[0.98] toque:min-h-11",
                     ativa ? "border-tinta bg-tinta text-superficie" : "border-borda bg-superficie text-texto-2 hover:bg-superficie-2",
                   )}
                 >
@@ -193,10 +205,7 @@ export function EstatisticasAlunoView() {
       </section>
 
       {ocultas.size === SECOES.length && (
-        <Vazio>
-          <FileX className="mx-auto mb-2 size-5" aria-hidden />
-          Todas as seções estão ocultas. Ative alguma acima.
-        </Vazio>
+        <Vazio icone={<FileX />}>Todas as seções estão ocultas. Ative alguma acima.</Vazio>
       )}
 
       {!ocultas.has("resumo") && (
@@ -217,12 +226,14 @@ export function EstatisticasAlunoView() {
         <section aria-label="Foco e estudo">
           <TituloSecao extra={disciplina ?? "todas as disciplinas"}>Foco e estudo</TituloSecao>
           {semEstudo && historico.length === 0 ? (
-            <Vazio>Sem estudo registrado{disciplina ? ` em ${disciplina}` : ""}. Comece um foco na Sala de estudos.</Vazio>
+            <Vazio icone={<Hourglass />} acao={{ rotulo: "Iniciar um foco", href: "/estudos" }}>
+              Sem estudo registrado{disciplina ? ` em ${disciplina}` : ""}. Comece um foco na Sala de estudos.
+            </Vazio>
           ) : (
             <div className="grid gap-4 lg:grid-cols-2">
               <Painel titulo="Tempo por dia" destaque={formatarMinutos(foco)} nota={`${periodo.texto} · média de ${formatarMinutos(Math.round(foco / periodo.dias))} por dia`} className="lg:col-span-2">
                 {semEstudo ? (
-                  <Vazio>Nenhum estudo neste período.</Vazio>
+                  <Vazio icone={<Hourglass />} acao={{ rotulo: "Iniciar um foco", href: "/estudos" }}>Nenhum estudo neste período.</Vazio>
                 ) : (
                   <Barras
                     dados={dias.map((d, i) => ({
@@ -272,7 +283,7 @@ export function EstatisticasAlunoView() {
                   />
                 </>
               ) : (
-                <Vazio>Sem XP neste período.</Vazio>
+                <Vazio icone={<Sparkles />} acao={{ rotulo: "Ver missões", href: "/missoes" }}>Sem XP neste período.</Vazio>
               )}
             </Painel>
             <Painel titulo="Pontos no período" destaque={`+${fmt(ptsPeriodo)} pts`} nota={`${fmt(usuario.pontos)} pontos disponíveis`}>
@@ -284,7 +295,7 @@ export function EstatisticasAlunoView() {
                   rotulo="Pontos ganhos por dia"
                 />
               ) : (
-                <Vazio>Sem pontos neste período.</Vazio>
+                <Vazio icone={<Sparkles />} acao={{ rotulo: "Ver missões", href: "/missoes" }}>Sem pontos neste período.</Vazio>
               )}
             </Painel>
           </div>
@@ -309,7 +320,7 @@ export function EstatisticasAlunoView() {
                   ))}
                 </ul>
               ) : (
-                <Vazio>Nenhuma atividade corrigida neste recorte.</Vazio>
+                <Vazio icone={<BookOpenCheck />} acao={{ rotulo: "Ver atividades", href: "/missoes#atividades" }}>Nenhuma atividade corrigida neste recorte.</Vazio>
               )}
             </Painel>
             <div className="grid gap-4">
@@ -323,7 +334,7 @@ export function EstatisticasAlunoView() {
                     ]}
                   />
                 ) : (
-                  <Vazio>Nenhum duelo encerrado.</Vazio>
+                  <Vazio icone={<Swords />} acao={{ rotulo: "Ver campeonatos", href: "/campeonatos" }}>Nenhum duelo encerrado.</Vazio>
                 )}
               </Painel>
               <Painel titulo="Flashcards" destaque={vistas ? `${Math.round((acertos / vistas) * 100)}%` : "—"} nota={vistas ? `${acertos} acertos em ${vistas} cartas vistas` : undefined}>
@@ -336,7 +347,7 @@ export function EstatisticasAlunoView() {
                     ]}
                   />
                 ) : (
-                  <Vazio>Nenhuma carta revisada ainda.</Vazio>
+                  <Vazio icone={<Layers />} acao={{ rotulo: "Praticar flashcards", href: "/missoes" }}>Nenhuma carta revisada ainda.</Vazio>
                 )}
               </Painel>
             </div>
@@ -356,7 +367,7 @@ export function EstatisticasAlunoView() {
                   rotulo="Missões e atividades concluídas por semana"
                 />
               ) : (
-                <Vazio>Nada concluído nas últimas semanas.</Vazio>
+                <Vazio icone={<Sparkles />} acao={{ rotulo: "Ver missões", href: "/missoes" }}>Nada concluído nas últimas semanas.</Vazio>
               )}
             </Painel>
             <Painel titulo="Medalhas" destaque={`${conquistadas} de ${medalhas.length}`} nota="conquistadas">

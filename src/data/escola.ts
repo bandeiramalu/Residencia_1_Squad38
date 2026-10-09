@@ -27,3 +27,23 @@ export const ESPACOS = [
 ] as const;
 
 export const TURMA_DO_ALUNO = "9º Ano A";
+
+/** Nome de todo espaço de post, inclusive "9B" e "8A" (que não estão em `ESPACOS`, o seletor da aluna). */
+const NOMES_DE_ESPACO: Record<string, string> = {
+  escola: "Toda a escola",
+  "9A": "9º Ano A",
+  "9B": "9º Ano B",
+  "8A": "8º Ano A",
+  robotica: "Clube de Robótica",
+  bilingue: "Bilíngue Cultura Inglesa",
+};
+
+/** "9B" → "9º Ano B". Id desconhecido volta como veio. */
+export function nomeDoEspaco(id: string): string {
+  return NOMES_DE_ESPACO[id] ?? id;
+}
+
+/** Nome curto para frases e toasts: "9º A", "Toda a escola". */
+export function rotuloDoEspaco(id: string): string {
+  return nomeDoEspaco(id).replace("º Ano ", "º ");
+}

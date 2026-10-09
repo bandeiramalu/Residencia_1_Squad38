@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, Lock, LogIn, SendHorizontal, ShieldCheck } from "lucide-react";
+import { ArrowDown, Lock, LogIn, MessageCircle, SendHorizontal, ShieldCheck } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Avatar } from "@/components/ui/Avatar";
@@ -81,7 +81,12 @@ export function ChatSala({ sala, usuarioId, podeEnviar, online, aviso, onEntrar 
         <div ref={lista} onScroll={aoRolar} className="h-full overflow-y-auto overscroll-contain px-3 py-3" role="log" aria-live="polite" aria-relevant="additions">
           {mensagens.length === 0 && (
             <div className="grid h-full place-items-center px-6 text-center">
-              <p className="text-[13px] text-texto-2">{podeEnviar ? "Nenhuma mensagem ainda. Diga oi para a sala." : "Nenhuma mensagem ainda."}</p>
+              <div>
+                <span className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-superficie-2 text-texto-2">
+                  <MessageCircle className="size-4" aria-hidden />
+                </span>
+                <p className="text-[13px] text-texto-2">{podeEnviar ? "Nenhuma mensagem ainda. Diga oi para a sala." : "Nenhuma mensagem ainda."}</p>
+              </div>
             </div>
           )}
           <AnimatePresence initial={false}>
@@ -125,7 +130,7 @@ export function ChatSala({ sala, usuarioId, podeEnviar, online, aviso, onEntrar 
                   type="button"
                   onClick={() => reagirSala(sala.id, r)}
                   aria-label={`Reagir com ${r}`}
-                  className="grid size-8 place-items-center rounded-lg text-[16px] transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-90"
+                  className="grid size-8 place-items-center rounded-lg text-[16px] transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-90 alvo-toque"
                 >
                   {r}
                 </button>
@@ -139,13 +144,13 @@ export function ChatSala({ sala, usuarioId, podeEnviar, online, aviso, onEntrar 
                 placeholder="Mensagem para a sala"
                 aria-label="Mensagem para a sala"
                 autoComplete="off"
-                className="h-10 min-w-0 flex-1 rounded-full border border-borda bg-superficie-2 px-4 text-[14px] text-tinta outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-texto-2/70 focus:border-verde focus:bg-superficie focus:ring-3 focus:ring-verde/15"
+                className="h-10 min-w-0 flex-1 rounded-full border border-borda bg-superficie-2 px-4 text-[14px] text-tinta outline-none transition-[border-color,box-shadow,background-color] duration-150 placeholder:text-texto-2 focus:border-verde focus:bg-superficie focus:ring-3 focus:ring-verde/15"
               />
               <button
                 type="submit"
                 disabled={!texto.trim()}
                 aria-label="Enviar mensagem"
-                className="grid size-10 shrink-0 place-items-center rounded-full bg-verde text-white transition-[background-color,opacity,transform] duration-150 hover:bg-verde-2 active:scale-95 disabled:opacity-40"
+                className="grid size-10 shrink-0 place-items-center rounded-full bg-acao text-white transition-[background-color,opacity,transform] duration-150 hover:bg-acao-2 active:scale-95 disabled:opacity-40"
               >
                 <SendHorizontal className="size-[18px]" aria-hidden />
               </button>
@@ -211,7 +216,7 @@ function ItemMensagem({ m, meu, nome, autor, agrupada }: { m: MensagemSala; meu:
   if (m.tipo === "sistema") {
     return (
       <p className="px-4 text-center text-[12px] text-texto-2">
-        {m.texto} <span className="tabular-nums text-texto-2/70">· {hora}</span>
+        {m.texto} <span className="tabular-nums">· {hora}</span>
       </p>
     );
   }
@@ -243,13 +248,13 @@ function ItemMensagem({ m, meu, nome, autor, agrupada }: { m: MensagemSala; meu:
         <div
           className={cn(
             "rounded-[18px] px-3.5 py-2 text-[14px] leading-snug [overflow-wrap:anywhere]",
-            meu ? "bg-verde text-white" : "bg-superficie-2 text-texto ring-1 ring-inset ring-borda",
+            meu ? "bg-acao text-white" : "bg-superficie-2 text-texto ring-1 ring-inset ring-borda",
             // Cantos "colados" dentro do grupo, como nos mensageiros.
             agrupada && (meu ? "rounded-tr-md" : "rounded-tl-md"),
           )}
         >
           {m.texto}
-          <span className={cn("ml-2 inline-block translate-y-px text-[11px] tabular-nums", meu ? "text-white/75" : "text-texto-2")}>{hora}</span>
+          <span className={cn("ml-2 inline-block translate-y-px text-[11px] tabular-nums", meu ? "text-white" : "text-texto-2")}>{hora}</span>
         </div>
       </div>
     </div>

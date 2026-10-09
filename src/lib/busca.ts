@@ -251,6 +251,34 @@ export function buscarSemelhantes(consulta: string, posts: Post[], opcoes?: { li
     .slice(0, limite);
 }
 
+export interface ResultadoPalavras extends ResultadoBusca {
+  /** Quantas palavras da busca aparecem no texto ou nas tags. */
+  casadas: number;
+  /** Quantas palavras a busca tem (as que contam). */
+  total: number;
+}
+
+/**
+ * Plano B da busca por significado (tela 74): só palavras. Conta as palavras da consulta (≥ 3 letras,
+ * sem acento nem caixa, fora as comuns como "para" e "como") que aparecem no texto ou nas tags;
+ * ordena por quantas casaram e, no empate, pelo mais recente.
+ */
+export function buscarPorPalavras(consulta: string, posts: Post[], opcoes?: { limite?: number }): ResultadoPalavras[] {
+  const palavras = [...new Set(normalizar(consulta).split(/[^a-z0-9]+/).filter((p) => p.length >= 3 && !STOPWORDS.has(p)))];
+  if (!palavras.length) return [];
+  const { limite = 8 } = opcoes ?? {};
+  return posts
+    .filter((p) => !p.emRevisao)
+    .map((post) => {
+      const alvo = normalizar(`${post.texto} ${post.tags.join(" ")}`);
+      const casadas = palavras.filter((p) => alvo.includes(p)).length;
+      return { post, casadas, total: palavras.length, score: casadas / palavras.length };
+    })
+    .filter((r) => r.casadas > 0)
+    .sort((a, b) => b.casadas - a.casadas || b.post.criadoEm - a.post.criadoEm)
+    .slice(0, limite);
+}
+
 /** Sugere disciplina e tags a partir do texto (US02 — Recomendação). */
 export function sugerirCategorias(texto: string) {
   const conceitos = [...conceitosDe(tokenizar(texto)).entries()].sort((a, b) => b[1] - a[1]);

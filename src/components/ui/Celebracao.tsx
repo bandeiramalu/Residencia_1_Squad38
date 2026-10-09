@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, m as motion } from "motion/react";
+import { AnimatePresence, m as motion, useReducedMotion } from "motion/react";
 import { useUI } from "@/store/ui";
 
 const CORES = ["#16a34a", "#22c55e", "#f59e0b", "#3b82f6"];
@@ -19,9 +19,11 @@ const PARTICULAS = Array.from({ length: 18 }, (_, i) => {
   };
 });
 
-/** Pequena explosão de confete para conquistas (compra, medalha, nível). */
+/** Pequena explosão de confete para conquistas (compra, medalha, nível). Com "reduzir movimento" não há confete. */
 export function Celebracao() {
   const { celebracao } = useUI();
+  const reduzir = useReducedMotion();
+  if (reduzir) return null;
   return (
     <div className="pointer-events-none fixed inset-0 z-[70] grid place-items-center overflow-hidden" aria-hidden>
       <AnimatePresence>

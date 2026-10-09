@@ -4,8 +4,11 @@ import { BellRing, Check, Minus, Plus } from "lucide-react";
 import { m as motion } from "motion/react";
 import Link from "next/link";
 import { Fragment, useSyncExternalStore, type ReactNode } from "react";
+import { aoTeclarNasAbas } from "@/components/ui/abas";
+import { Avatar } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { PROFESSOR_ID, TURMAS_DO_PROFESSOR } from "@/data/professor";
 import { useSessao } from "@/lib/auth";
 import { cn } from "@/lib/cn";
@@ -89,7 +92,10 @@ export function AoVivo({ className }: { className?: string }) {
   );
 }
 
-/** Caixa de seleção (com estado "misto" para o selecionar-todos). */
+/**
+ * Caixa de seleção (com estado "misto" para o selecionar-todos). Visual de 16 px; no celular a área de toque
+ * chega a 44 × 44 px (margem negativa de 12 px: cabe no vão de 12 px entre os itens da linha, sem cobrir o vizinho).
+ */
 export function Caixa({ marcada, mista, onChange, rotulo, className }: { marcada: boolean; mista?: boolean; onChange: () => void; rotulo: string; className?: string }) {
   return (
     <button
@@ -101,13 +107,16 @@ export function Caixa({ marcada, mista, onChange, rotulo, className }: { marcada
         e.stopPropagation();
         onChange();
       }}
-      className={cn(
-        "grid size-4 shrink-0 place-items-center rounded-[5px] border transition-[background-color,border-color] duration-150",
-        marcada || mista ? "border-verde bg-verde text-white" : "border-texto-2/45 bg-superficie hover:border-texto-2",
-        className,
-      )}
+      className={cn("group/caixa grid size-4 shrink-0 place-items-center toque:-m-3 toque:size-11", className)}
     >
-      {mista ? <Minus className="size-3" strokeWidth={3} /> : marcada ? <Check className="size-3" strokeWidth={3} /> : null}
+      <span
+        className={cn(
+          "grid size-4 place-items-center rounded-[5px] border transition-[background-color,border-color] duration-150",
+          marcada || mista ? "border-acao bg-acao text-white" : "border-texto-2 bg-superficie group-hover/caixa:border-tinta",
+        )}
+      >
+        {mista ? <Minus className="size-3" strokeWidth={3} /> : marcada ? <Check className="size-3" strokeWidth={3} /> : null}
+      </span>
     </button>
   );
 }
@@ -136,7 +145,7 @@ export function Stepper({
 }) {
   const limitar = (v: number) => Math.max(min, Math.min(max, v));
   const botao =
-    "grid size-9 shrink-0 place-items-center rounded-lg border border-borda bg-superficie text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-95 disabled:opacity-40";
+    "grid size-9 shrink-0 place-items-center rounded-lg border border-borda bg-superficie text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-95 disabled:opacity-40 toque:size-11";
   return (
     <div className="rounded-xl border border-borda bg-superficie p-3">
       <div className="flex items-center gap-2">
@@ -163,7 +172,7 @@ export function Stepper({
               onClick={() => onChange(limitar(a))}
               aria-pressed={valor === a}
               className={cn(
-                "h-7 min-w-0 flex-1 rounded-md text-[12px] font-medium tabular-nums transition-colors duration-150",
+                "h-7 min-w-0 flex-1 rounded-md text-[12px] font-medium tabular-nums transition-colors duration-150 toque:h-11",
                 valor === a ? "bg-tinta text-superficie" : "bg-superficie-2 text-texto-2 hover:text-tinta",
               )}
             >
@@ -187,7 +196,7 @@ export interface ItemFaixa {
   tom?: "alerta" | "ambar" | "acento";
 }
 
-const TOM_VALOR = { alerta: "text-alerta", ambar: "text-ambar", acento: "text-acento" } as const;
+const TOM_VALOR = { alerta: "text-alerta", ambar: "text-ouro", acento: "text-acento" } as const;
 
 /**
  * Um card só, com as métricas em colunas separadas por divisórias (padrão de painel administrativo).
@@ -218,10 +227,10 @@ export function FaixaNumeros({
           >
             <dt className="flex items-center gap-1.5 text-[13px] text-texto-2 [&_svg]:size-3.5 [&_svg]:shrink-0">
               {it.icone}
-              <span className="truncate">{it.rotulo}</span>
+              <span className="min-w-0 leading-tight">{it.rotulo}</span>
             </dt>
             <dd className={cn("mt-1 text-2xl font-semibold leading-tight tracking-tight tabular-nums", it.tom ? TOM_VALOR[it.tom] : "text-tinta")}>{it.valor}</dd>
-            {it.detalhe && <dd className="mt-0.5 truncate text-[12px] text-texto-2">{it.detalhe}</dd>}
+            {it.detalhe && <dd className="mt-0.5 text-[12px] leading-snug text-texto-2">{it.detalhe}</dd>}
           </div>
         ))}
       </dl>
@@ -255,7 +264,7 @@ export function Abas<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="tablist" aria-label={rotulo} className={cn("sem-scrollbar flex gap-4 overflow-x-auto border-b border-borda px-4 sm:gap-6", className)}>
+    <div role="tablist" aria-label={rotulo} onKeyDown={aoTeclarNasAbas} className={cn("sem-scrollbar flex gap-4 overflow-x-auto border-b border-borda px-4 sm:gap-6", className)}>
       {abas.map((a) => {
         const ativa = a.id === valor;
         return (
@@ -264,6 +273,7 @@ export function Abas<T extends string>({
             type="button"
             role="tab"
             aria-selected={ativa}
+            tabIndex={ativa ? 0 : -1}
             aria-label={a.aria && (a.contador !== undefined ? `${a.aria}, ${a.contador}` : a.aria)}
             onClick={() => onChange(a.id)}
             className={cn(
@@ -295,13 +305,52 @@ export function Abas<T extends string>({
 /* ───────────── Link com cara de botão secundário ───────────── */
 
 export const CLASSE_BOTAO_SECUNDARIO =
-  "inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg border border-borda bg-superficie px-4 text-sm font-medium text-tinta transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-4 [&_svg]:shrink-0";
+  "alvo-toque inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg border border-borda bg-superficie px-4 text-sm font-medium text-tinta transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-4 [&_svg]:shrink-0 toque:min-w-11";
 
 export function LinkBotao({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
   return (
     <Link href={href} className={cn(CLASSE_BOTAO_SECUNDARIO, className)}>
       {children}
     </Link>
+  );
+}
+
+/** Estado vazio dentro de um card/lista: ícone + frase + ação para começar (padrão W79). */
+export function VazioLista({ icone, titulo, descricao, acao }: { icone: ReactNode; titulo: string; descricao?: string; acao?: ReactNode }) {
+  return (
+    <div className="px-6 py-8 text-center">
+      <div className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-superficie-2 text-texto-2 [&_svg]:size-5">{icone}</div>
+      <p className="text-sm font-medium text-tinta">{titulo}</p>
+      {descricao && <p className="mx-auto mt-1 max-w-xs text-[13px] text-texto-2">{descricao}</p>}
+      {acao && <div className="mt-4 flex justify-center">{acao}</div>}
+    </div>
+  );
+}
+
+/** Avatar + nome (+ linha de apoio) como UM só link para o perfil; no celular o alvo de toque tem 44 px de altura. */
+export function PessoaLink({
+  id,
+  nome,
+  iniciais,
+  apoio,
+  tamanho = "sm",
+  className,
+}: {
+  id: string;
+  nome: string;
+  iniciais?: string;
+  apoio?: ReactNode;
+  tamanho?: "xs" | "sm" | "md" | "lg";
+  className?: string;
+}) {
+  return (
+    <LinkPessoa id={id} rotulo={`Perfil de ${nome}`} className={cn("flex min-h-11 min-w-0 items-center gap-3", className)}>
+      <Avatar nome={nome} iniciais={iniciais} tamanho={tamanho} />
+      <span className="min-w-0">
+        <span className="block truncate text-[14px] font-medium text-tinta">{nome}</span>
+        {apoio && <span className="block truncate text-[12px] text-texto-2">{apoio}</span>}
+      </span>
+    </LinkPessoa>
   );
 }
 
@@ -331,6 +380,7 @@ export function BotaoLembrar({ alunoId, nome, rotuloCurto, tamanho = "sm" }: { a
     <Button
       variante="secundario"
       tamanho={tamanho}
+      className={tamanho === "sm" ? "toque:h-11" : undefined}
       disabled={bloqueado}
       onClick={() => lembrarAlunos([alunoId])}
       aria-label={bloqueado ? `${nome} foi lembrado ${tempoRelativo(ultimo ?? 0, agora)}` : `Lembrar ${nome}`}

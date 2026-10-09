@@ -2,10 +2,8 @@
 
 import { ArrowRight, CheckCheck, Minus, Paperclip, Plus, Send } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { fmtNota, lerResposta, recompensaDaNota } from "@/components/atividades/comum";
-import { Avatar } from "@/components/ui/Avatar";
-import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { abrirAnexoDe, baixarAnexo, baixarAnexoDe } from "@/lib/materiais";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto } from "@/components/ui/Campo";
@@ -19,6 +17,7 @@ import { tempoRelativo } from "@/lib/tempo";
 import { corrigirEntrega, corrigirTodas } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 import type { Atividade } from "@/store/types";
+import { PessoaLink } from "./comum";
 
 export const FRASES_FEEDBACK = [
   "Muito bem! Raciocínio claro e organizado.",
@@ -29,11 +28,11 @@ export const FRASES_FEEDBACK = [
 ];
 
 function corDaNota(nota: number) {
-  return nota >= 7 ? "text-acento" : nota >= 5 ? "text-ambar" : "text-alerta";
+  return nota >= 7 ? "text-acento" : nota >= 5 ? "text-ouro" : "text-alerta";
 }
 
 const BOTAO_AJUSTE =
-  "grid size-9 shrink-0 place-items-center rounded-lg border border-borda bg-superficie text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-95 disabled:opacity-40";
+  "grid size-9 shrink-0 place-items-center rounded-lg border border-borda bg-superficie text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-95 disabled:opacity-40 toque:size-11";
 
 /** Nota de 0 a 10 (passo 0,5): número, − / +, trilho deslizante e atalhos. */
 export function NotaPicker({ nota, onChange }: { nota: number; onChange: (n: number) => void }) {
@@ -73,7 +72,7 @@ export function NotaPicker({ nota, onChange }: { nota: number; onChange: (n: num
         value={nota}
         onChange={(e) => ajustar(Number(e.target.value))}
         aria-label="Nota"
-        className="mt-3 h-2 w-full cursor-pointer accent-verde"
+        className="mt-3 h-2 w-full cursor-pointer accent-verde toque:mt-1 toque:h-11"
       />
       <div className="mt-2.5 flex gap-1.5">
         {[5, 6, 7, 8, 9, 10].map((n) => (
@@ -83,7 +82,7 @@ export function NotaPicker({ nota, onChange }: { nota: number; onChange: (n: num
             onClick={() => ajustar(n)}
             aria-pressed={nota === n}
             className={cn(
-              "h-8 min-w-0 flex-1 rounded-md text-[13px] font-medium tabular-nums transition-colors duration-150",
+              "h-8 min-w-0 flex-1 rounded-md text-[13px] font-medium tabular-nums transition-colors duration-150 toque:h-11",
               nota === n ? "bg-tinta text-superficie" : "bg-superficie-2 text-texto-2 hover:text-tinta",
             )}
           >
@@ -108,7 +107,7 @@ function Feedback({ texto, onChange }: { texto: string; onChange: (t: string) =>
             aria-pressed={texto === f}
             onClick={() => onChange(texto === f ? "" : f)}
             className={cn(
-              "rounded-full px-3 py-1.5 text-left text-[12.5px] leading-snug transition-colors duration-150 active:scale-[0.98]",
+              "rounded-full px-3 py-1.5 text-left text-[12.5px] leading-snug transition-colors duration-150 active:scale-[0.98] toque:min-h-11",
               texto === f ? "bg-tinta text-superficie" : "bg-superficie text-texto ring-1 ring-inset ring-borda hover:bg-superficie-2",
             )}
           >
@@ -182,8 +181,12 @@ function FormCorrecao({
   const { texto, anexo } = lerResposta(entrega?.resposta);
   const proximo = fila.find((id) => id !== alunoId);
   const atrasada = !!entrega?.entregueEm && entrega.entregueEm > atividade.prazo;
+  // Trava de duplo clique: sem ela, o 2º toque durante a animação de saída corrigiria a entrega (e creditaria) duas vezes.
+  const enviando = useRef(false);
 
   const enviar = (seguir: boolean) => {
+    if (enviando.current) return;
+    enviando.current = true;
     corrigirEntrega(atividade.id, alunoId, nota, feedback);
     limparFeedback();
     if (seguir && proximo) onProxima(proximo);
@@ -192,22 +195,18 @@ function FormCorrecao({
 
   return (
     <div className="space-y-5">
-      <div className="flex items-start gap-3">
-        <LinkPessoa id={alunoId} rotulo={`Perfil de ${nome}`} className="shrink-0">
-          <Avatar nome={nome} iniciais={aluno?.iniciais} tamanho="md" />
-        </LinkPessoa>
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-2 text-[14px] font-medium text-tinta">
-            <LinkPessoa id={alunoId} className="hover:underline">
-              {nome}
-            </LinkPessoa>
-          </p>
-          <p className="text-[12px] text-texto-2">
+      <PessoaLink
+        id={alunoId}
+        nome={nome}
+        iniciais={aluno?.iniciais}
+        tamanho="md"
+        apoio={
+          <>
             {entrega?.entregueEm ? `Entregou ${tempoRelativo(entrega.entregueEm, agora)}` : "Entrega registrada"}
             {atrasada ? <span className="text-alerta"> · com atraso</span> : " · no prazo"}
-          </p>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       <div className="rounded-xl border border-borda bg-superficie-2 p-3.5">
         <p className="text-[12px] font-medium text-texto-2">Resposta do aluno</p>
@@ -216,17 +215,17 @@ function FormCorrecao({
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             {entrega?.anexo?.previa && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={entrega.anexo.previa} alt="" className="size-14 rounded-lg object-cover ring-1 ring-inset ring-borda" />
+              <img src={entrega.anexo.previa} alt={entrega.anexo.descricao ?? `Prévia da imagem enviada por ${nome}`} className="size-14 rounded-lg object-cover ring-1 ring-inset ring-borda" />
             )}
             <span className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-borda bg-superficie py-1 pl-2.5 pr-1 text-[12px] text-tinta">
               <Paperclip className="size-3.5 shrink-0 text-texto-2" />
               <span className="truncate">{entrega?.anexo?.nome ?? anexo}</span>
               {entrega?.anexo ? (
                 <>
-                  <button type="button" onClick={() => void abrirAnexoDe(entrega.anexo!, { titulo: atividade.titulo })} className="rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95">
+                  <button type="button" onClick={() => void abrirAnexoDe(entrega.anexo!, { titulo: atividade.titulo })} className="alvo-toque rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95">
                     Abrir
                   </button>
-                  <button type="button" onClick={() => void baixarAnexoDe(entrega.anexo!, { titulo: atividade.titulo })} className="rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95">
+                  <button type="button" onClick={() => void baixarAnexoDe(entrega.anexo!, { titulo: atividade.titulo })} className="alvo-toque rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95">
                     Baixar
                   </button>
                 </>
@@ -234,7 +233,7 @@ function FormCorrecao({
                 <button
                   type="button"
                   onClick={() => baixarAnexo(anexo!, { titulo: atividade.titulo, autor: nome, disciplina: atividade.disciplina, texto })}
-                  className="rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95"
+                  className="alvo-toque rounded px-2 py-1 font-medium text-acento transition-colors hover:bg-superficie-2 active:scale-95"
                 >
                   Baixar
                 </button>
@@ -276,8 +275,11 @@ function FormTodas({ atividade, onFechar }: { atividade: Atividade; onFechar: ()
   const [feedback, setFeedback, limparFeedback] = useRascunho(`correcao-todas:${atividade.id}`);
   const qtd = atividade.entregas.filter((e) => e.status === "entregue").length;
   const { pontos, xp } = recompensaDaNota(atividade, nota);
+  const aplicando = useRef(false);
 
   const aplicar = () => {
+    if (aplicando.current) return;
+    aplicando.current = true;
     corrigirTodas(atividade.id, nota, feedback);
     limparFeedback();
     onFechar();

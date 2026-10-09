@@ -78,7 +78,7 @@ export function RankingFoco({ agora, resumo, className }: { agora: number; resum
       <TituloSecao
         className="mb-1"
         extra={
-          <Link href="/ranking" className="rounded font-medium text-acento hover:underline">
+          <Link href="/ranking" className="alvo-toque rounded font-medium text-acento hover:underline">
             Ver tudo
           </Link>
         }

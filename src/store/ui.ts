@@ -1,6 +1,6 @@
 /**
  * Estado de interface que NÃO é salvo: notificações (toasts), comemorações,
- * a publicação que o feed deve destacar.
+ * a publicação que o feed deve destacar e os avanços que não foram salvos (tela 76).
  */
 import { useSyncExternalStore } from "react";
 import type { TipoNotificacao } from "./types";
@@ -27,13 +27,21 @@ export interface Toast {
   href?: string;
 }
 
-interface EstadoUI {
+/** Avanço que não foi salvo (simulação "salvar"): quanto faltou registrar e quando foi a tentativa. */
+export interface FalhaProgresso {
+  quantidade: number;
+  em: number;
+}
+
+export interface EstadoUI {
   toasts: Toast[];
   celebracao: number;
   focoPost: string | null;
+  /** Progresso de missão que não foi salvo, por chave (id da missão ou "coletiva"): a tela oferece "Tentar novamente". */
+  falhasProgresso: Record<string, FalhaProgresso>;
 }
 
-const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null };
+const inicial: EstadoUI = { toasts: [], celebracao: 0, focoPost: null, falhasProgresso: {} };
 let ui: EstadoUI = inicial;
 const ouvintes = new Set<() => void>();
 let proximoId = 1;
@@ -41,10 +49,6 @@ let proximoId = 1;
 function atualizar(parcial: Partial<EstadoUI>) {
   ui = { ...ui, ...parcial };
   ouvintes.forEach((o) => o());
-}
-
-export function lerUI() {
-  return ui;
 }
 
 export function toast(t: Omit<Toast, "id">, duracao = 3400) {
@@ -64,6 +68,34 @@ export function celebrar() {
 
 export function focarPost(id: string | null) {
   atualizar({ focoPost: id });
+}
+
+/** Falha de salvamento ainda pendente de `chave` (id da missão ou "coletiva"). */
+export function falhaDeProgresso(chave: string): FalhaProgresso | undefined {
+  return ui.falhasProgresso[chave];
+}
+
+/** Guarda (ou soma, se já havia) um avanço que não foi salvo. */
+export function registrarFalhaProgresso(chave: string, quantidade: number) {
+  const atual = ui.falhasProgresso[chave];
+  atualizar({ falhasProgresso: { ...ui.falhasProgresso, [chave]: { quantidade: (atual?.quantidade ?? 0) + quantidade, em: Date.now() } } });
+}
+
+/** Marca nova tentativa sem somar de novo (a quantidade pendente é a mesma). */
+export function renovarFalhaProgresso(chave: string) {
+  const atual = ui.falhasProgresso[chave];
+  if (atual) atualizar({ falhasProgresso: { ...ui.falhasProgresso, [chave]: { ...atual, em: Date.now() } } });
+}
+
+export function limparFalhaProgresso(chave?: string) {
+  if (chave === undefined) {
+    if (Object.keys(ui.falhasProgresso).length) atualizar({ falhasProgresso: {} });
+    return;
+  }
+  if (!(chave in ui.falhasProgresso)) return;
+  const restantes = { ...ui.falhasProgresso };
+  delete restantes[chave];
+  atualizar({ falhasProgresso: restantes });
 }
 
 export function useUI() {

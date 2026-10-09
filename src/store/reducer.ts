@@ -2,6 +2,7 @@ import type { Disciplina } from "@/data/escola";
 import type { Flashcard } from "@/data/missoes";
 import { FLASHCARDS } from "@/data/missoes";
 import { itemPorId } from "@/data/loja";
+import { somarDias } from "@/lib/tempo";
 import type {
   AppState,
   Atividade,
@@ -23,8 +24,10 @@ import type {
   Relato,
   Resposta,
   SalaEstudo,
+  Sequencia,
   SessaoEstudo,
   StatusDia,
+  StatusEntrega,
   TimerAtivo,
 } from "./types";
 
@@ -39,18 +42,26 @@ export interface DadosPerfil {
 
 /** Operações dos flashcards (rodada, cartas próprias). A repetição espaçada é aplicada em "responderCarta". */
 export type OpFlashcards =
-  | { tipo: "iniciar"; ids: string[]; escolha: "Todas" | "Erradas" | Disciplina }
+  | { tipo: "iniciar"; ids: string[]; escolha: "Todas" | "Erradas" | Disciplina; vencidas?: string[] }
   | { tipo: "salvar"; carta: Flashcard }
-  | { tipo: "apagar"; id: string };
+  | { tipo: "apagar"; id: string }
+  /** A recompensa desta escolha já foi dada no dia `dia` (início do dia): `flash.premiadas[escolha] = dia`. */
+  | { tipo: "premiada"; escolha: string; dia: number };
 
 /** Dias até a carta voltar a vencer, por caixa de Leitner. */
 export const INTERVALO_CAIXA_DIAS: Record<number, number> = { 1: 0, 2: 1, 3: 3, 4: 7, 5: 15 };
 
 export type Acao =
   | { type: "premiar"; pontos: number; xp: number; disciplina?: Disciplina }
-  | { type: "curtir"; postId: string }
-  | { type: "salvar"; postId: string }
+  /** `por` = quem curte (padrão: a aluna, `usuario.id`). Mantém `curtido` = `curtidoPor.includes(usuario.id)`. */
+  | { type: "curtir"; postId: string; por?: string }
+  | { type: "salvar"; postId: string; por?: string }
+  /** Ignora post com id já existente. */
   | { type: "publicar"; post: Post }
+  /** Limpa `aguardandoEnvio` dos posts `ids` (a conexão voltou e o envio foi feito). */
+  | { type: "confirmarEnvio"; ids: string[] }
+  /** O autor contesta a retenção de um post `emRevisao` (uma vez só). */
+  | { type: "contestar"; postId: string; contestacao: { em: number; texto?: string } }
   | { type: "responder"; postId: string; resposta: Resposta }
   | { type: "marcarUtil"; postId: string; respostaId: string }
   | { type: "respostaAjudou"; postId: string; respostaId: string; quantidade: number }
@@ -58,6 +69,8 @@ export type Acao =
   | { type: "missaoProgresso"; id: string; delta: number }
   | { type: "materialAberto"; postId: string }
   | { type: "registrarEstudo" }
+  /** Virada do dia: `dia` = `inicioDoDia(agora)`, `diaSemana` 0 = segunda. Pura: cada dia pulado consome congelador ou quebra a sequência. */
+  | { type: "virarDia"; dia: number; diaSemana: number }
   | { type: "simularAusencia" }
   | { type: "recuperarSequencia"; custo: number }
   | { type: "recomecarSequencia" }
@@ -104,7 +117,8 @@ export type Acao =
   | { type: "removerCampeonato"; id: string }
   /* Atividades */
   | { type: "criarAtividade"; atividade: Atividade }
-  | { type: "atualizarEntrega"; atividadeId: string; alunoId: string; dados: Partial<Entrega> }
+  /** Com `esperado`, só aplica se o status atual da entrega estiver na lista (trava contra duplo envio e corrida entre abas). */
+  | { type: "atualizarEntrega"; atividadeId: string; alunoId: string; dados: Partial<Entrega>; esperado?: StatusEntrega[] }
   | { type: "removerAtividade"; id: string }
   /* Professor */
   | { type: "atribuir"; atribuicao: Atribuicao }
@@ -112,15 +126,13 @@ export type Acao =
   | { type: "registrarModeracao"; registro: RegistroModeracao }
   | { type: "decidirRelato"; id: string; aprovado: boolean; em: number; por: string }
   | { type: "entregarCompra"; id: string; em: number }
-  | { type: "lembrarAlunos"; ids: string[]; em: number }
+  /** `ids` = chaves da trava de 6 h (`lembradoEm`); `alunoIds`/`atividadeId` = o que sobe à API. */
+  | { type: "lembrarAlunos"; ids: string[]; em: number; alunoIds?: string[]; atividadeId?: string }
   | { type: "notificarVarios"; notificacoes: Notificacao[] }
   /* Notificações */
   | { type: "notificar"; notificacao: Notificacao }
   | { type: "lerNotificacao"; id: string }
   | { type: "lerTodasNotificacoes"; para: string };
-
-/** Limite de cartas exibidas numa rodada de prática (inclui as revistas). */
-export const MAX_CARTAS_RODADA = FLASHCARDS.length + 3;
 
 /** Notificações guardadas por destinatário: as 120 mais recentes de cada pessoa; as não lidas nunca saem. */
 export const MAX_NOTIFICACOES_POR_PESSOA = 120;
@@ -169,14 +181,40 @@ export function reducer(estado: AppState, acao: Acao): AppState {
       };
     }
 
-    case "curtir":
-      return mapPost(estado, acao.postId, (p) => ({ ...p, curtido: !p.curtido, curtidas: p.curtidas + (p.curtido ? -1 : 1) }));
+    case "curtir": {
+      const por = acao.por ?? estado.usuario.id;
+      return mapPost(estado, acao.postId, (p) => {
+        // Estado legado (sem `curtidoPor`): o `curtido` antigo era da aluna.
+        const base = p.curtidoPor ?? (p.curtido ? [estado.usuario.id] : []);
+        const tinha = base.includes(por);
+        const curtidoPor = tinha ? base.filter((id) => id !== por) : [...base, por];
+        return { ...p, curtidoPor, curtidas: Math.max(0, p.curtidas + (tinha ? -1 : 1)), curtido: curtidoPor.includes(estado.usuario.id) };
+      });
+    }
 
-    case "salvar":
-      return mapPost(estado, acao.postId, (p) => ({ ...p, salvo: !p.salvo }));
+    case "salvar": {
+      const por = acao.por ?? estado.usuario.id;
+      return mapPost(estado, acao.postId, (p) => {
+        const base = p.salvoPor ?? (p.salvo ? [estado.usuario.id] : []);
+        const salvoPor = base.includes(por) ? base.filter((id) => id !== por) : [...base, por];
+        return { ...p, salvoPor, salvo: salvoPor.includes(estado.usuario.id) };
+      });
+    }
 
     case "publicar":
-      return { ...estado, posts: [acao.post, ...estado.posts] };
+      // Id repetido (duplo clique, ação reaplicada): o primeiro vale, o resto é ignorado.
+      return estado.posts.some((p) => p.id === acao.post.id) ? estado : { ...estado, posts: [acao.post, ...estado.posts] };
+
+    case "confirmarEnvio": {
+      if (!estado.posts.some((p) => p.aguardandoEnvio && acao.ids.includes(p.id))) return estado;
+      return { ...estado, posts: estado.posts.map((p) => (p.aguardandoEnvio && acao.ids.includes(p.id) ? { ...p, aguardandoEnvio: undefined } : p)) };
+    }
+
+    case "contestar": {
+      const post = estado.posts.find((p) => p.id === acao.postId);
+      if (!post || !post.emRevisao || post.contestacao) return estado;
+      return mapPost(estado, acao.postId, (p) => ({ ...p, contestacao: acao.contestacao }));
+    }
 
     case "responder":
       return mapPost(estado, acao.postId, (p) => ({ ...p, respostas: [...p.respostas, acao.resposta] }));
@@ -220,41 +258,51 @@ export function reducer(estado: AppState, acao: Acao): AppState {
       };
     }
 
+    case "virarDia": {
+      const ref = estado.diaRef;
+      if (ref !== undefined && acao.dia <= ref) return estado;
+      const s = estado.sequencia;
+      // Estado salvo antes da virada do dia: não dá para saber o que aconteceu desde então.
+      // Só marca o dia de hoje (e alinha o dia da semana), sem punir.
+      if (ref === undefined) return { ...estado, diaRef: acao.dia, sequencia: alinharSemana(s, acao.diaSemana) };
+
+      const dias = Math.max(1, Math.round((acao.dia - ref) / DIA_MS));
+      // O dia `ref` só conta como perdido se não foi estudado; os dias entre `ref` e hoje foram todos perdidos.
+      const passos = Math.min(dias, 400);
+      let seq = s;
+      let anterior = ref;
+      for (let i = 1; i <= passos; i++) {
+        const dia = i === dias ? acao.dia : somarDias(ref, i);
+        seq = passarUmDia(seq, mesDe(dia) !== mesDe(anterior));
+        anterior = dia;
+      }
+      // Ausência longa demais para simular dia a dia: a sequência já quebrou; só falta o congelador do mês.
+      if (passos < dias && mesDe(acao.dia) !== mesDe(anterior)) seq = { ...seq, congeladores: seq.congeladoresMax };
+      return {
+        ...estado,
+        diaRef: acao.dia,
+        sequencia: alinharSemana(seq, acao.diaSemana),
+        // Missões diárias e desafios do dia recomeçam; XP da semana e Maratona (coletiva) não: a liga fecha no servidor.
+        missoes: estado.missoes.map((m) => (m.tipo === "diaria" ? { ...m, progresso: 0, concluida: false } : m)),
+        desafiosConcluidos: [],
+      };
+    }
+
     case "simularAusencia": {
       const s = estado.sequencia;
       if (s.quebrada) return estado;
-      let semana: StatusDia[] = [...s.semana];
-      let hoje = s.hoje;
-      const avancarDia = () => {
-        hoje += 1;
-        if (hoje > 6) {
-          semana = Array(7).fill("futuro");
-          hoje = 0;
-        }
-        semana[hoje] = "pendente";
-      };
-      // Se hoje já foi estudado, o dia perdido é o seguinte.
-      if (s.estudouHoje) avancarDia();
-      const usaCongelador = s.congeladores > 0;
-      semana[hoje] = usaCongelador ? "congelado" : "perdido";
-      avancarDia();
-      return {
-        ...estado,
-        sequencia: {
-          ...s,
-          semana,
-          hoje,
-          estudouHoje: false,
-          congeladores: usaCongelador ? s.congeladores - 1 : 0,
-          diasSemCongelador: usaCongelador ? 0 : s.diasSemCongelador,
-          quebrada: !usaCongelador,
-        },
-      };
+      // Se hoje já foi estudado, o dia perdido é o seguinte: passa hoje e o dia perdido.
+      let seq = passarUmDia(s, false);
+      if (s.estudouHoje) seq = passarUmDia(seq, false);
+      // Os dias simulados contam como passados: `diaRef` anda junto, senão a virada real do dia puniria o mesmo dia de novo.
+      const diaRef = estado.diaRef === undefined ? undefined : somarDias(estado.diaRef, s.estudouHoje ? 2 : 1);
+      return { ...estado, sequencia: seq, diaRef };
     }
 
     case "recuperarSequencia": {
       const s = estado.sequencia;
       if (!s.quebrada || estado.usuario.pontos < acao.custo) return estado;
+      // O dia perdido pode ter ficado na semana anterior (a semana nova recomeça sem marcas): sem ele, só desfaz a quebra.
       const ultimoPerdido = s.semana.lastIndexOf("perdido");
       const semana = s.semana.map((d, i) => (i === ultimoPerdido ? ("congelado" as StatusDia) : d));
       return {
@@ -298,7 +346,8 @@ export function reducer(estado: AppState, acao: Acao): AppState {
           virada: false,
           acertos: p.acertos + (acao.acertou ? 1 : 0),
           vistas,
-          fim: fila.length === 0 || vistas >= (p.ids?.length ?? FLASHCARDS.length) + 3,
+          // Acabou quando não há mais carta na fila ou quando já viu cada carta duas vezes (teto das repetições).
+          fim: fila.length === 0 || vistas >= 2 * (p.ids?.length ?? FLASHCARDS.length),
         },
       };
     }
@@ -310,15 +359,19 @@ export function reducer(estado: AppState, acao: Acao): AppState {
       const op = acao.op;
       const base = estado.flash ?? { minhas: [], caixas: {}, erradas: [] };
       if (op.tipo === "iniciar") {
-        return { ...estado, pratica: { fila: op.ids.map((_, i) => i), ids: op.ids, escolha: op.escolha, virada: false, acertos: 0, vistas: 0, fim: op.ids.length === 0 } };
+        return {
+          ...estado,
+          pratica: { fila: op.ids.map((_, i) => i), ids: op.ids, escolha: op.escolha, virada: false, acertos: 0, vistas: 0, fim: op.ids.length === 0, vencidas: op.vencidas },
+        };
       }
+      if (op.tipo === "premiada") return { ...estado, flash: { ...base, premiadas: { ...(base.premiadas ?? {}), [op.escolha]: op.dia } } };
       if (op.tipo === "salvar") {
         const existe = base.minhas.some((c) => c.id === op.carta.id);
         const minhas = existe ? base.minhas.map((c) => (c.id === op.carta.id ? op.carta : c)) : [op.carta, ...base.minhas];
         return { ...estado, flash: { ...base, minhas } };
       }
       const caixas = Object.fromEntries(Object.entries(base.caixas).filter(([id]) => id !== op.id));
-      return { ...estado, flash: { minhas: base.minhas.filter((c) => c.id !== op.id), caixas, erradas: base.erradas.filter((x) => x !== op.id) } };
+      return { ...estado, flash: { ...base, minhas: base.minhas.filter((c) => c.id !== op.id), caixas, erradas: base.erradas.filter((x) => x !== op.id) } };
     }
 
     case "contribuirColetiva": {
@@ -340,7 +393,10 @@ export function reducer(estado: AppState, acao: Acao): AppState {
 
     case "comprar": {
       const u = estado.usuario;
-      if (u.pontos < acao.compra.custo || estado.compras.some((c) => c.itemId === acao.compra.itemId)) return estado;
+      if (u.pontos < acao.compra.custo || estado.compras.some((c) => c.id === acao.compra.id)) return estado;
+      // Itens de avatar e perfil são únicos; vouchers (recompensas físicas) podem ser trocados de novo.
+      const unico = itemPorId(acao.compra.itemId)?.slot !== "voucher";
+      if (unico && estado.compras.some((c) => c.itemId === acao.compra.itemId)) return estado;
       return { ...estado, usuario: { ...u, pontos: u.pontos - acao.compra.custo }, compras: [acao.compra, ...estado.compras] };
     }
 
@@ -519,7 +575,12 @@ export function reducer(estado: AppState, acao: Acao): AppState {
     case "criarAtividade":
       return { ...estado, atividades: [acao.atividade, ...estado.atividades] };
 
-    case "atualizarEntrega":
+    case "atualizarEntrega": {
+      if (acao.esperado) {
+        // Trava: só aplica a partir de um dos status esperados (o 2º clique ou a outra aba encontra o status já mudado).
+        const atual = estado.atividades.find((a) => a.id === acao.atividadeId)?.entregas.find((e) => e.alunoId === acao.alunoId);
+        if (!atual || !acao.esperado.includes(atual.status)) return estado;
+      }
       return {
         ...estado,
         atividades: estado.atividades.map((a) =>
@@ -528,6 +589,7 @@ export function reducer(estado: AppState, acao: Acao): AppState {
             : { ...a, entregas: a.entregas.map((e) => (e.alunoId === acao.alunoId ? { ...e, ...acao.dados } : e)) },
         ),
       };
+    }
 
     case "removerAtividade":
       return { ...estado, atividades: estado.atividades.filter((a) => a.id !== acao.id) };
@@ -611,4 +673,58 @@ function mapTimer(estado: AppState, fn: (t: TimerAtivo) => TimerAtivo): AppState
 
 function mapSala(estado: AppState, salaId: string, fn: (s: SalaEstudo) => SalaEstudo): AppState {
   return { ...estado, salas: estado.salas.map((s) => (s.id === salaId ? fn(s) : s)) };
+}
+
+/* ───────────── Sequência: virada do dia ───────────── */
+
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+function mesDe(ts: number) {
+  const d = new Date(ts);
+  return d.getFullYear() * 12 + d.getMonth();
+}
+
+/**
+ * Fecha o dia `s.hoje` e abre o seguinte (domingo -> segunda recomeça a semana).
+ * Dia sem estudo: gasta um congelador (`congelado`) ou, sem congelador, quebra a sequência (`perdido`);
+ * já quebrada, o dia só fica `perdido`. `novoMes`: os congeladores voltam ao máximo no dia aberto.
+ */
+function passarUmDia(s: Sequencia, novoMes: boolean): Sequencia {
+  const semana = [...s.semana];
+  let { congeladores, diasSemCongelador, quebrada } = s;
+  if (!s.estudouHoje) {
+    if (quebrada) {
+      semana[s.hoje] = "perdido";
+    } else if (congeladores > 0) {
+      semana[s.hoje] = "congelado";
+      congeladores -= 1;
+      diasSemCongelador = 0;
+    } else {
+      semana[s.hoje] = "perdido";
+      quebrada = true;
+    }
+  }
+  if (novoMes) congeladores = s.congeladoresMax;
+  let hoje = s.hoje + 1;
+  if (hoje > 6) {
+    semana.fill("futuro");
+    hoje = 0;
+  }
+  semana[hoje] = "pendente";
+  return { ...s, semana, hoje, estudouHoje: false, congeladores, diasSemCongelador, quebrada };
+}
+
+/**
+ * Garante que `hoje` seja o dia da semana real (estados antigos podem estar presos em outro dia):
+ * dias anteriores mantêm o status que tinham (os sem registro seguem a sequência), hoje fica pendente ou estudado.
+ */
+function alinharSemana(s: Sequencia, diaSemana: number): Sequencia {
+  if (s.hoje === diaSemana) return s;
+  const semana = Array.from({ length: 7 }, (_, i): StatusDia => {
+    if (i === diaSemana) return s.estudouHoje ? "estudou" : "pendente";
+    if (i > diaSemana) return "futuro";
+    const antes = s.semana[i];
+    return antes === "estudou" || antes === "congelado" || antes === "perdido" ? antes : s.quebrada ? "perdido" : "estudou";
+  });
+  return { ...s, semana, hoje: diaSemana };
 }

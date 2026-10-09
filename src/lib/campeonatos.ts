@@ -4,6 +4,7 @@
  */
 import { hashTexto, mulberry32 } from "@/lib/aleatorio";
 import type { Disciplina } from "@/data/escola";
+import { alunosDaTurma } from "@/data/turmas";
 import type { AppState, Campeonato, Partida, Pessoa } from "@/store/types";
 
 export function totalRodadas(c: Campeonato) {
@@ -53,16 +54,18 @@ export function gerarChave(participantes: string[]): Partida[] {
 /**
  * Registra o placar de uma partida, define o vencedor e o leva para a próxima rodada.
  * Empate no placar: vence quem o chamador indicar em `desempate` (menor tempo total de resposta; padrão: lado A).
+ * Com `decisivo`, `desempate` é o vencedor qualquer que seja o placar (abandono do duelo conta como derrota).
  */
-export function registrarResultado(c: Campeonato, partidaId: string, placarA: number, placarB: number, desempate?: string): Campeonato {
+export function registrarResultado(c: Campeonato, partidaId: string, placarA: number, placarB: number, desempate?: string, decisivo = false): Campeonato {
   const partida = c.partidas.find((p) => p.id === partidaId);
   if (!partida || partida.status === "encerrada") return c;
-  const vencedor = placarA > placarB ? partida.a : placarB > placarA ? partida.b : (desempate ?? partida.a);
+  const vencedor = decisivo && desempate ? desempate : placarA > placarB ? partida.a : placarB > placarA ? partida.b : (desempate ?? partida.a);
   const doRound = c.partidas.filter((p) => p.rodada === partida.rodada);
   const indice = doRound.findIndex((p) => p.id === partidaId);
   const proxima = c.partidas.filter((p) => p.rodada === partida.rodada + 1)[Math.floor(indice / 2)];
 
-  let partidas = c.partidas.map((p) => (p.id === partidaId ? { ...p, placarA, placarB, vencedor: vencedor ?? undefined, status: "encerrada" as const } : p));
+  // O duelo acabou (ou foi abandonado): a marca "em curso" sai da partida.
+  let partidas = c.partidas.map((p) => (p.id === partidaId ? { ...p, placarA, placarB, vencedor: vencedor ?? undefined, status: "encerrada" as const, emCurso: undefined } : p));
   if (proxima && vencedor) {
     partidas = partidas.map((p) => {
       if (p.id !== proxima.id) return p;
@@ -205,15 +208,45 @@ export interface LinhaClassificacao {
   posicao: number;
 }
 
-export function classificacao(c: Campeonato): LinhaClassificacao[] {
-  return c.participantes
-    .map((id) => ({ id, pontos: c.placar[id] ?? 0 }))
-    .sort((a, b) => b.pontos - a.pontos)
-    .map((l, i) => ({ ...l, posicao: i + 1 }));
+/** "AAAA-MM-DD" no fuso local — o dia em que a aluna jogou a rodada de pontos corridos. */
+export function diaLocal(ts: number) {
+  const d = new Date(ts);
+  const dois = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())}`;
 }
 
-export function lider(c: Campeonato) {
-  return classificacao(c)[0]?.id;
+/** Pontos corridos: cada aluna joga uma rodada de quiz por dia (evita "farm" de XP). */
+export function jogouRodadaHoje(c: Campeonato, alunoId: string, agora: number) {
+  return c.rodadasJogadas?.[alunoId] === diaLocal(agora);
+}
+
+/** XP usado para desempatar: o da aluna (nível real) ou, no interclasses, a soma dos alunos da turma. */
+function xpParaDesempate(c: Campeonato, id: string, nivelDe?: NivelDe) {
+  if (c.formato === "interclasses") return alunosDaTurma(id).reduce((soma, a) => soma + a.xp, 0);
+  return nivelDe ? nivelDe(id).xp : 0;
+}
+
+/**
+ * Tabela do campeonato: mais pontos primeiro; empate desempata por maior XP (`nivelDe`) e, persistindo,
+ * pela ordem de inscrição. Sem `nivelDe`, só a ordem de inscrição.
+ */
+export function classificacao(c: Campeonato, nivelDe?: NivelDe): LinhaClassificacao[] {
+  return c.participantes
+    .map((id, ordem) => ({ id, pontos: c.placar[id] ?? 0, ordem, xp: xpParaDesempate(c, id, nivelDe) }))
+    .sort((a, b) => b.pontos - a.pontos || b.xp - a.xp || a.ordem - b.ordem)
+    .map(({ id, pontos }, i) => ({ id, pontos, posicao: i + 1 }));
+}
+
+/** Líder da tabela — ninguém quando o 1º tem 0 ponto (campeonato zerado não tem campeão). */
+export function lider(c: Campeonato, nivelDe?: NivelDe) {
+  const primeiro = classificacao(c, nivelDe)[0];
+  return primeiro && primeiro.pontos > 0 ? primeiro.id : undefined;
+}
+
+/** Os dois primeiros têm os mesmos pontos: o título saiu do desempate por maior XP. */
+export function empateNoTopo(c: Campeonato) {
+  const [a, b] = [...c.participantes].map((id) => c.placar[id] ?? 0).sort((x, y) => y - x);
+  return a !== undefined && b !== undefined && a > 0 && a === b;
 }
 
 /** Nome exibível: aluno (pelo cadastro) ou turma (interclasses). */

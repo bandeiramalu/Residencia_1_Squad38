@@ -41,6 +41,7 @@ import type {
   CartaPropriaCorpo,
   CompraCorpo,
   CompraDTO,
+  ContestacaoCorpo,
   ContribuicaoColetivaCorpo,
   CorrecaoCorpo,
   CorrecaoEmLoteDTO,
@@ -66,6 +67,7 @@ import type {
   LoginResposta,
   MedalhaDTO,
   MensagemSalaCorpo,
+  MensagemSalaRetidaDTO,
   MetaDiariaCorpo,
   MissoesDTO,
   NovaAtividadeCorpo,
@@ -110,6 +112,7 @@ import type {
   TicketTempoRealDTO,
   TurmaDTO,
   UsuarioSessaoDTO,
+  UtilProfessorCorpo,
   ValidacaoRelatoCorpo,
 } from "./dto";
 
@@ -214,7 +217,8 @@ export const ENDPOINTS = {
     salvos: def<undefined, Pagina<Post>, QueryPagina>()("GET", "/me/salvos", "logado", "Publicações salvas."),
     abrirMaterial: def()("POST", "/posts/{id}/aberturas", "aluno", "Registra que o material foi aberto (conta para missões; 1 por dia)."),
     denunciar: def<DenunciaCorpo, DenunciaRecebidaDTO>()("POST", "/posts/{id}/denuncias", "logado", "Denúncia (US05). A IA só classifica e prioriza; quem decide é humano."),
-    enviarAnexo: def<FormData, AnexoDTO>()("POST", "/anexos", "logado", "Upload multipart (campo `arquivo`, PDF/imagem até 10 MB). Use o id em posts e entregas."),
+    contestar: def<ContestacaoCorpo>()("POST", "/posts/{id}/contestacao", "logado", "Só o autor de publicação retida; uma vez; vai para a fila da coordenação."),
+    enviarAnexo: def<FormData, AnexoDTO>()("POST", "/anexos", "logado", "Upload multipart (campo `arquivo`, até 10 MB): PDF, imagem ou documento da lista permitida (.pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx). Use o id em posts, avisos e entregas."),
     obterAnexo: def<undefined, AnexoDTO>()("GET", "/anexos/{id}", "logado", "Metadados + URL assinada e temporária para download."),
   },
 
@@ -303,7 +307,7 @@ export const ENDPOINTS = {
     entregar: def<EntregaCorpo, Entrega>()("POST", "/atividades/{id}/entrega", "aluno", "Entrega (ou reenvia antes da correção). Notifica o professor."),
     corrigir: def<CorrecaoCorpo, Entrega>()("PUT", "/atividades/{id}/entregas/{alunoId}/correcao", "professor", "Nota 0–10; pontos e XP proporcionais à nota calculados no servidor."),
     corrigirTodas: def<CorrecaoCorpo, CorrecaoEmLoteDTO>()("POST", "/atividades/{id}/correcoes", "professor", "Mesma nota para todas as entregas ainda não corrigidas."),
-    lembrarPendentes: def<undefined, LembreteEnviadoDTO>()("POST", "/atividades/{id}/lembretes", "professor", "Notifica quem não entregou (no máximo 1 vez a cada 12 h)."),
+    lembrarPendentes: def<undefined, LembreteEnviadoDTO>()("POST", "/atividades/{id}/lembretes", "professor", "Notifica quem não entregou (no máximo 1 vez a cada 6 h)."),
   },
 
   professor: {
@@ -313,13 +317,15 @@ export const ENDPOINTS = {
     atribuir: def<AtribuicaoCorpo, Atribuicao[]>()("POST", "/professor/atribuicoes", "professor", "Dá pontos/XP com motivo. Só a alunos das suas turmas, com limites por lançamento."),
     atribuicoes: def<undefined, Pagina<Atribuicao>, QueryAtribuicoes>()("GET", "/professor/atribuicoes", "professor", "Histórico auditável das atribuições."),
     publicarAviso: def<AvisoCorpo, Post>()("POST", "/professor/avisos", "professor", "Aviso oficial no feed da turma ou da escola."),
-    lembrarAlunos: def<LembrarAlunosCorpo, LembreteEnviadoDTO>()("POST", "/professor/lembretes", "professor", "Notifica alunos sem estudar. Trava de 12 h por aluno no servidor; devolve quantos foram avisados."),
+    marcarUtil: def<UtilProfessorCorpo>()("POST", "/professor/respostas/{respostaId}/util", "professor", "Professor reconhece a resposta de um aluno: marca útil e credita +25 pontos e +25 XP uma vez."),
+    lembrarAlunos: def<LembrarAlunosCorpo, LembreteEnviadoDTO>()("POST", "/professor/lembretes", "professor", "Notifica alunos sem estudar. Trava de 6 h por aluno no servidor; devolve quantos foram avisados."),
     estatisticas: def<undefined, EstatisticasProfessorDTO, QueryEstatisticas>()("GET", "/professor/estatisticas", "professor", "Agregados da turma no período (engajamento, foco, desempenho, risco…); base da tela e do relatório."),
   },
 
   moderacao: {
     fila: def<undefined, ItemModeracaoDTO[]>()("GET", "/moderacao/posts", "professor", "Publicações sinalizadas pela triagem ou denunciadas, por prioridade."),
     decidirPost: def<DecisaoCorpo>()("PUT", "/moderacao/posts/{postId}", "professor", "Decisão humana (aprovar/remover). `observacao` = motivo (obrigatório ao remover); fica na auditoria e no histórico."),
+    mensagensSala: def<undefined, MensagemSalaRetidaDTO[]>()("GET", "/moderacao/salas/mensagens", "professor", "Mensagens de chat de sala retidas pela triagem (US06), ainda sem decisão."),
     decidirMensagemSala: def<DecisaoCorpo>()("PUT", "/moderacao/salas/{salaId}/mensagens/{mensagemId}", "professor", "Decisão sobre mensagem de chat de sala retida pela triagem (mesmas regras do post)."),
     historico: def<undefined, Pagina<RegistroModeracaoDTO>, QueryPagina>()("GET", "/moderacao/historico", "professor", "Histórico das decisões (posts e chat de sala), mais novas primeiro."),
     relatos: def<undefined, Relato[]>()("GET", "/moderacao/relatos", "coordenacao", "Relatos da ouvidoria para análise."),

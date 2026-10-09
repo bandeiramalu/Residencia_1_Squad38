@@ -8,6 +8,7 @@ import { fmt } from "@/lib/format";
 import { useSeletor } from "@/store/store";
 import { DesafiosCard } from "./DesafiosCard";
 import { Flashcards } from "./Flashcards";
+import { ID_FLASHCARDS } from "./irParaFlashcards";
 import { MissaoColetivaCard } from "./MissaoColetivaCard";
 import { MissaoItem } from "./MissaoItem";
 import { RelatoCard } from "./RelatoCard";
@@ -71,8 +72,8 @@ export function MissoesView() {
   const atividades = <AtividadesAluno />;
 
   const pratica = (
-    <section className="min-w-0">
-      <TituloSecao extra="+10 pontos · +15 XP por rodada">Flashcards</TituloSecao>
+    <section id={ID_FLASHCARDS} tabIndex={-1} className="min-w-0 scroll-mt-20 outline-none">
+      <TituloSecao extra="+10 pontos · +15 XP ao dia">Flashcards</TituloSecao>
       <Flashcards />
     </section>
   );

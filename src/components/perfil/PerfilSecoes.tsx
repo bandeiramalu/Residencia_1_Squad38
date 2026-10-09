@@ -34,7 +34,7 @@ export function LinhaAcao({
       <ChevronRight className="size-4 shrink-0 text-texto-2 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden />
     </>
   );
-  const classe = "group flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-superficie-2 sm:px-4";
+  const classe = "group flex min-h-11 w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-superficie-2 sm:px-4";
   return href ? (
     <Link href={href} className={classe}>
       {conteudo}

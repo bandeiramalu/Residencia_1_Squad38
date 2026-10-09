@@ -49,7 +49,7 @@ export function SalaView({ id }: { id: string }) {
           acao={
             <Link
               href="/estudos/salas"
-              className="inline-flex h-9 items-center gap-2 rounded-lg bg-verde px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-verde-2"
+              className="alvo-toque inline-flex h-9 items-center gap-2 rounded-lg bg-acao px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-acao-2"
             >
               <Users className="size-4" aria-hidden />
               Ver salas abertas
@@ -139,7 +139,7 @@ function VoltarParaSalas() {
   return (
     <Link
       href="/estudos/salas"
-      className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg pl-1.5 pr-2.5 text-[13px] font-medium text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta"
+      className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-lg pl-1.5 pr-2.5 text-[13px] font-medium text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta alvo-toque"
     >
       <ArrowLeft className="size-4" aria-hidden />
       Salas
@@ -241,9 +241,10 @@ function CabecalhoSala({ sala, nomeCriador, iniciaisCriador, professor, dentro, 
             <LinkPessoa id={sala.criadorId} rotulo={`Perfil de ${nomeCriador}`} className="flex rounded-full">
               <Avatar nome={nomeCriador} iniciais={iniciaisCriador} tamanho="xs" />
             </LinkPessoa>
-            <span className="truncate">
-              Criada por{" "}
-              <LinkPessoa id={sala.criadorId} className="font-medium text-tinta hover:underline">
+            {/* O link é quem corta com reticências: um pai com `truncate` recortaria a área de toque de 44 px. */}
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="shrink-0">Criada por</span>
+              <LinkPessoa id={sala.criadorId} className="min-w-0 truncate font-medium text-tinta hover:underline">
                 {nomeCriador}
               </LinkPessoa>
             </span>
@@ -273,14 +274,14 @@ function CabecalhoSala({ sala, nomeCriador, iniciaisCriador, professor, dentro, 
         {liberada && (
           <BotaoConvidar
             sala={sala}
-            className={cn("inline-flex h-8 items-center gap-2 rounded-lg border border-borda bg-superficie px-2.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-3.5", !(sala.privada && sala.codigo) && "ml-auto")}
+            className={cn("inline-flex h-8 items-center gap-2 rounded-lg border border-borda bg-superficie px-2.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-3.5 alvo-toque", !(sala.privada && sala.codigo) && "ml-auto")}
           />
         )}
         {sala.privada && sala.codigo && liberada && (
           <BotaoCopiar
             texto={sala.codigo}
             rotulo="Copiar código de convite"
-            className="ml-auto inline-flex h-8 items-center gap-2 rounded-lg border border-borda bg-superficie px-2.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-3.5"
+            className="ml-auto inline-flex h-8 items-center gap-2 rounded-lg border border-borda bg-superficie px-2.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2 active:scale-[0.98] [&_svg]:size-3.5 alvo-toque"
           />
         )}
       </div>

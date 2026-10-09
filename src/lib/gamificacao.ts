@@ -1,5 +1,6 @@
 import { DISCIPLINAS, type Disciplina } from "@/data/escola";
 import { MEDALHAS, type MedalhaDef } from "@/data/medalhas";
+import { FLASHCARDS } from "@/data/missoes";
 import { ALUNOS_RANKING, LIGA_DO_USUARIO, USUARIO_RANKING, ZONA, type LigaId } from "@/data/ranking";
 import { USUARIO_INICIAL } from "@/data/usuario";
 import type { AppState, Usuario } from "@/store/types";
@@ -117,11 +118,18 @@ export function posicaoNaLiga(usuario: Usuario) {
 
 /* ───────────── Medalhas ───────────── */
 
+/** Flashcards de Química (do banco e próprios) já "dominados": na caixa 3 ou acima da repetição espaçada. */
+export function quimicaDominada(estado: AppState) {
+  const flash = estado.flash;
+  if (!flash) return 0;
+  return [...FLASHCARDS, ...flash.minhas].filter((c) => c.disciplina === "Química" && (flash.caixas[c.id]?.caixa ?? 0) >= 3).length;
+}
+
 export function progressoMedalha(def: MedalhaDef, estado: AppState) {
   const u = estado.usuario;
   const valores: Record<string, number> = {
     colaborador: u.respostasUteis,
-    "mestre-quimica": 20,
+    "mestre-quimica": quimicaDominada(estado),
     constante: estado.sequencia.dias,
     "sem-congelador": estado.sequencia.diasSemCongelador,
     mentor: u.respostasUteis,
@@ -129,7 +137,9 @@ export function progressoMedalha(def: MedalhaDef, estado: AppState) {
     "voz-da-escola": u.relatosValidados,
     "topo-da-liga": posicaoNaLiga(u) === 1 ? 1 : 0,
   };
-  const atual = Math.min(def.meta, valores[def.id] ?? 0);
+  // Medalha já conquistada continua completa, mesmo que o número de agora seja menor (ex.: carta apagada).
+  const conquistada = estado.medalhas.some((m) => m.id === def.id && m.desbloqueadaEm);
+  const atual = conquistada ? def.meta : Math.min(def.meta, valores[def.id] ?? 0);
   const pct = (atual / def.meta) * 100;
   const texto = def.id === "topo-da-liga" ? `${posicaoNaLiga(u)}º lugar na liga` : `${atual}/${def.meta}`;
   return { atual, pct, texto, completa: atual >= def.meta };

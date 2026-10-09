@@ -1,5 +1,6 @@
 "use client";
 
+import { Users } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import { Avatar } from "@/components/ui/Avatar";
 import { LinkPessoa } from "@/components/ui/LinkPessoa";
@@ -112,15 +113,18 @@ export function PresencaSala({ sala, professor, dentro }: { sala: SalaEstudo; pr
       </AnimatePresence>
 
       {membros.length === 0 ? (
-        <p className="rounded-xl bg-superficie-2 px-4 py-6 text-center text-[13px] text-texto-2">
-          {!aberta
-            ? "A presença aparece quando a sala abrir."
-            : professor
-              ? "Nenhum aluno entrou ainda."
-              : dentro
-                ? "Por enquanto é só você por aqui."
-                : "Ninguém por aqui ainda."}
-        </p>
+        <div className="rounded-xl bg-superficie-2 px-4 py-6 text-center text-[13px] text-texto-2">
+          <Users className="mx-auto mb-2 size-5" aria-hidden />
+          <p>
+            {!aberta
+              ? "A presença aparece quando a sala abrir."
+              : professor
+                ? "Nenhum aluno entrou ainda."
+                : dentro
+                  ? "Por enquanto é só você por aqui."
+                  : "Ninguém por aqui ainda. Entre e comece o foco para chamar a turma."}
+          </p>
+        </div>
       ) : (
         <ul className="relative grid grid-cols-4 gap-x-2 gap-y-4 min-[400px]:grid-cols-5 sm:grid-cols-6">
           {/* Na abertura da tela os avatares entram em cascata curta; depois, só quem chega ou sai anima. */}

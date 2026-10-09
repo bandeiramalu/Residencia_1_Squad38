@@ -11,7 +11,7 @@ export interface MedalhaDef {
 /** Medalhas do Perfil. Só existem por conquista — nunca aparecem na Loja. */
 export const MEDALHAS: MedalhaDef[] = [
   { id: "colaborador", nome: "Colaborador", criterio: "Ter 10 respostas marcadas como úteis", icone: "users", meta: 10 },
-  { id: "mestre-quimica", nome: "Mestre de Química", criterio: "Dominar 20 flashcards de Química", icone: "flask", meta: 20 },
+  { id: "mestre-quimica", nome: "Mestre de Química", criterio: "Dominar 20 flashcards de Química (cartas na caixa 3 ou acima)", icone: "flask", meta: 20 },
   { id: "constante", nome: "Constante", criterio: "Estudar 30 dias seguidos", icone: "flame", meta: 30 },
   { id: "sem-congelador", nome: "Sem Congelador", criterio: "20 dias seguidos sem usar congelador", icone: "shield", meta: 20 },
   { id: "mentor", nome: "Mentor", criterio: "Ter 50 respostas marcadas como úteis", icone: "lightbulb", meta: 50 },

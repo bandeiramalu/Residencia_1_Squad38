@@ -3,6 +3,7 @@
 import { m as motion } from "motion/react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { abaNoTab, aoTeclarNasAbas } from "@/components/ui/abas";
 
 interface Opcao<T extends string> {
   id: T;
@@ -23,10 +24,12 @@ interface Props<T extends string> {
 
 /** Abas com sublinhado (padrão de rede social). Rola na horizontal quando não cabem. */
 export function Abas<T extends string>({ opcoes, valor, onChange, grupo, rotulo, esticar, className }: Props<T>) {
+  const noTab = abaNoTab(opcoes.map((o) => o.id), valor);
   return (
     <div
       role="tablist"
       aria-label={rotulo}
+      onKeyDown={aoTeclarNasAbas}
       className={cn("sem-scrollbar flex overflow-x-auto shadow-[inset_0_-1px_0_var(--color-borda)]", className)}
     >
       {opcoes.map((op) => {
@@ -37,9 +40,10 @@ export function Abas<T extends string>({ opcoes, valor, onChange, grupo, rotulo,
             type="button"
             role="tab"
             aria-selected={ativo}
+            tabIndex={op.id === noTab ? 0 : -1}
             onClick={() => onChange(op.id)}
             className={cn(
-              "relative shrink-0 whitespace-nowrap rounded-t-md px-3 py-3 text-[14px] font-medium outline-offset-[-2px] transition-colors duration-150",
+              "relative min-h-11 shrink-0 whitespace-nowrap rounded-t-md px-3 py-3 text-[14px] font-medium outline-offset-[-2px] transition-colors duration-150",
               esticar && "flex-1",
               ativo ? "text-tinta" : "text-texto-2 hover:bg-superficie-2 hover:text-tinta",
             )}

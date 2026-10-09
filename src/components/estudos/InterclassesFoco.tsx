@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TituloSecao } from "@/components/ui/Blocos";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/cn";
+import { useDesempate } from "@/components/campeonatos/comum";
 import { classificacao } from "@/lib/campeonatos";
 import { formatarMinutos } from "@/lib/estudos";
 import { contagemRegressiva } from "@/lib/tempo";
@@ -24,9 +25,10 @@ const MOLA = { type: "spring", stiffness: 500, damping: 45 } as const;
 export function InterclassesFoco({ agora, className }: { agora: number; className?: string }) {
   const camp = useSeletor((e) => e.campeonatos.find((c) => c.id === ID));
   const turma = useSeletor((e) => e.usuario.turma);
+  const nivelDe = useDesempate(camp?.disciplina);
   if (!camp || !camp.participantes.includes(turma)) return null;
 
-  const tabela = classificacao(camp);
+  const tabela = classificacao(camp, nivelDe);
   const indice = tabela.findIndex((l) => l.id === turma);
   const minha = tabela[indice];
   const acima = indice > 0 ? tabela[indice - 1] : undefined;
@@ -109,7 +111,7 @@ export function InterclassesFoco({ agora, className }: { agora: number; classNam
           {prazo}
           {camp.premio.pontos > 0 && ` · ${camp.premio.pontos} pts por aluno`}
         </span>
-        <Link href={`/campeonatos/${ID}`} className="group inline-flex shrink-0 items-center gap-1 rounded text-[13px] font-medium text-acento hover:underline">
+        <Link href={`/campeonatos/${ID}`} className="group alvo-toque inline-flex shrink-0 items-center gap-1 rounded text-[13px] font-medium text-acento hover:underline">
           Ver campeonato
           <ArrowRight className="size-3.5 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden />
         </Link>

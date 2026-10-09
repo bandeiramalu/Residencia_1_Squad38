@@ -9,7 +9,7 @@ import { useAgora } from "@/hooks/useAgora";
 import { cn } from "@/lib/cn";
 import { baixarIcs, type EventoIcs } from "@/lib/exportar";
 import { inicioDoDia, NOMES_DIAS, somarDias } from "@/lib/tempo";
-import { ANTECEDENCIA_LEMBRETE_MIN, alternarLembreteEvento } from "@/store/acoes/aluno";
+import { ANTECEDENCIAS_LEMBRETE_MIN, alternarLembreteEvento, rotuloAntecedencia } from "@/store/acoes/aluno";
 import { useSeletor } from "@/store/store";
 
 /** Ponto colorido por tipo (grade, legenda e lista usam a mesma leitura). */
@@ -22,7 +22,8 @@ const paraIcs = (e: EventoBase & { inicio: number }): EventoIcs => ({
   inicio: e.inicio,
   local: e.local,
   descricao: `${ROTULO_EVENTO[e.tipo]}${e.disciplina ? ` de ${e.disciplina}` : ""} · Portal do Aluno CEPI`,
-  lembreteMin: ANTECEDENCIA_LEMBRETE_MIN,
+  // Mesmos avisos do app: 72 h, 24 h e 2 h antes (um alarme por item no .ics).
+  lembretesMin: [...ANTECEDENCIAS_LEMBRETE_MIN],
 });
 
 /**
@@ -41,6 +42,7 @@ export function CalendarioSheet({ aberto, onFechar }: { aberto: boolean; onFecha
 function Conteudo() {
   const agora = useAgora(60_000);
   const lembretes = useSeletor((e) => e.lembretes);
+  const agendados = useSeletor((e) => e.lembretesAgendados);
   const hoje = inicioDoDia(agora);
   const [selecionado, setSelecionado] = useState<number | null>(null);
   /** 0 = mês atual; os eventos da semana podem cair no mês seguinte. */
@@ -93,7 +95,7 @@ function Conteudo() {
                 <button
                   type="button"
                   onClick={() => trocarMes(-deslocamentoMes)}
-                  className="mr-1 h-8 rounded-lg border border-borda px-2.5 text-[12.5px] font-medium text-tinta transition-colors hover:bg-superficie-2"
+                  className="alvo-toque mr-1 h-8 rounded-lg border border-borda px-2.5 text-[12.5px] font-medium text-tinta transition-colors hover:bg-superficie-2"
                 >
                   Hoje
                 </button>
@@ -102,7 +104,7 @@ function Conteudo() {
                 type="button"
                 onClick={() => trocarMes(-1)}
                 aria-label="Mês anterior"
-                className="grid size-8 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95"
+                className="alvo-toque grid size-8 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95"
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -110,14 +112,14 @@ function Conteudo() {
                 type="button"
                 onClick={() => trocarMes(1)}
                 aria-label="Próximo mês"
-                className="grid size-8 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95"
+                className="alvo-toque grid size-8 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95"
               >
                 <ChevronRight className="size-4" />
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-7 gap-1 text-center">
+          <div className="grid grid-cols-7 gap-1 text-center toque:gap-0.5">
             {NOMES_DIAS.map((d) => (
               <span key={d} className="pb-1 text-[11.5px] text-texto-2">
                 {d.slice(0, 3)}
@@ -142,7 +144,7 @@ function Conteudo() {
                       : ehHoje
                         ? "font-semibold text-acento ring-1 ring-inset ring-verde"
                         : dia < hoje
-                          ? "text-texto-2/50 hover:bg-superficie-2"
+                          ? "text-texto-2 hover:bg-superficie-2"
                           : "text-texto hover:bg-superficie-2",
                   )}
                 >
@@ -177,14 +179,14 @@ function Conteudo() {
             </h3>
             <div className="flex items-center gap-3">
               {selecionado && (
-                <button type="button" onClick={() => setSelecionado(null)} className="rounded-md text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta">
+                <button type="button" onClick={() => setSelecionado(null)} className="alvo-toque rounded-md text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta">
                   Ver todos
                 </button>
               )}
               <button
                 type="button"
                 onClick={() => baixarIcs("agenda-portal-do-aluno", eventos.map(paraIcs), "Agenda do Portal do Aluno")}
-                className="inline-flex items-center gap-1 rounded-md text-[13px] font-medium text-acento transition-colors hover:underline"
+                className="alvo-toque inline-flex items-center gap-1 rounded-md text-[13px] font-medium text-acento transition-colors hover:underline"
               >
                 <Download className="size-3.5" /> Exportar agenda (.ics)
               </button>
@@ -200,11 +202,22 @@ function Conteudo() {
                   animate={{ opacity: 1 }}
                   className="px-4 py-8 text-center text-[13.5px] text-texto-2"
                 >
-                  Nenhum compromisso neste dia.
+                  <CalendarClock className="mx-auto mb-2 size-6 text-texto-2" aria-hidden />
+                  <p>Nenhum compromisso neste dia.</p>
+                  {selecionado && (
+                    <button type="button" onClick={() => setSelecionado(null)} className="mt-2 rounded-md text-[13px] font-medium text-acento hover:underline">
+                      Ver todos os compromissos
+                    </button>
+                  )}
                 </motion.li>
               )}
               {lista.map((e) => {
                 const lembrete = lembretes.includes(e.id);
+                // Avisos que ainda vão disparar (72 h, 24 h e 2 h antes; os que já passaram não aparecem).
+                const avisos = (agendados ?? [])
+                  .filter((l) => l.eventoId === e.id && !l.disparado && l.antecedenciaMin)
+                  .sort((a, b) => (b.antecedenciaMin ?? 0) - (a.antecedenciaMin ?? 0))
+                  .map((l) => rotuloAntecedencia((l.antecedenciaMin ?? 0) * 60_000));
                 const faltam = Math.round((e.dia - hoje) / DIA);
                 return (
                   <motion.li
@@ -242,10 +255,15 @@ function Conteudo() {
                           </span>
                         )}
                       </p>
+                      {lembrete && avisos.length > 0 && (
+                        <p className="mt-1 inline-flex items-center gap-1 text-[12.5px] text-acento">
+                          <BellRing className="size-3.5" aria-hidden /> Avisos: {avisos.join(", ")} antes
+                        </p>
+                      )}
                       <button
                         type="button"
                         onClick={() => baixarIcs(`evento-${e.id}`, [paraIcs(e)])}
-                        className="mt-1.5 inline-flex items-center gap-1 rounded-md text-[12.5px] font-medium text-acento transition-colors hover:underline"
+                        className="alvo-toque mt-1.5 inline-flex items-center gap-1 rounded-md text-[12.5px] font-medium text-acento transition-colors hover:underline"
                       >
                         <CalendarPlus className="size-3.5" /> Adicionar ao meu calendário
                       </button>
@@ -254,9 +272,9 @@ function Conteudo() {
                       type="button"
                       onClick={() => alternarLembreteEvento({ id: e.id, titulo: e.titulo, inicio: e.inicio })}
                       aria-pressed={lembrete}
-                      aria-label={lembrete ? "Desativar lembrete" : "Ativar lembrete"}
+                      aria-label={lembrete ? "Desativar lembretes (72 h, 24 h e 2 h antes)" : "Ativar lembretes (72 h, 24 h e 2 h antes)"}
                       className={cn(
-                        "grid size-9 shrink-0 place-items-center rounded-full transition-colors duration-150 active:scale-95",
+                        "alvo-toque grid size-9 shrink-0 place-items-center rounded-full transition-colors duration-150 active:scale-95",
                         lembrete ? "bg-verde-claro text-acento" : "text-texto-2 hover:bg-superficie-2 hover:text-tinta",
                       )}
                     >

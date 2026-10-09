@@ -1,30 +1,54 @@
 "use client";
 
-import { BellRing, ChevronRight, Coins, Lock } from "lucide-react";
+import { BellRing, ChevronRight, CircleCheck, Coins, FileText, Lock, Megaphone, ShieldCheck } from "lucide-react";
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Avatar } from "@/components/ui/Avatar";
+import { Button } from "@/components/ui/Button";
 import { DisciplinaIcon } from "@/components/ui/DisciplinaIcon";
 import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { EVENTOS } from "@/data/calendario";
 import { CAPAS_CAMPEONATO, nomeDaRodada } from "@/data/campeonatos";
 import { useAgora } from "@/hooks/useAgora";
+import type { Ator } from "@/hooks/useAtor";
 import { nomeParticipante, participa, partidaDoAluno, totalRodadas } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
-import { faseDaSala } from "@/lib/estudos";
+import { faseDaSala, formatarMinutos, minutosPorDia } from "@/lib/estudos";
 import { fmt, primeiroNome } from "@/lib/format";
 import { inicioDoDia, somarDias } from "@/lib/tempo";
-import { useSeletor } from "@/store/store";
+import { duvidaRespondida, duvidasDasTurmas } from "@/lib/turmas";
+import { useEstado, useSeletor } from "@/store/store";
+import type { TipoNovaPublicacao } from "./NovaPublicacaoSheet";
+import { Quando } from "./Quando";
+
+interface Props {
+  ator: Ator;
+  /** Abre a modal "Nova publicação" já no tipo pedido (atalhos do professor). */
+  onNova: (tipo: TipoNovaPublicacao) => void;
+  /** Destaca a dúvida no feed e abre a caixa de resposta dela. */
+  onResponder: (postId: string) => void;
+}
 
 /**
- * Coluna lateral do Feed em telas largas: atalhos vivos para o resto do portal.
+ * Coluna lateral do Feed em telas largas: atalhos vivos para o resto do portal, por papel.
  * Cada widget lê só a fatia do estado que usa (`useSeletor`), então curtir ou
- * responder no feed não re-renderiza a coluna.
+ * responder no feed não re-renderiza a coluna (a do professor acompanha as dúvidas, por isso lê o estado todo).
  */
-export function FeedLateral() {
+export function FeedLateral({ ator, onNova, onResponder }: Props) {
+  if (ator.professor) {
+    return (
+      <div className="space-y-4">
+        <DuvidasSemResposta onResponder={onResponder} />
+        <AguardandoModeracao />
+        <ProximasEntregas professorId={ator.id} />
+        <AtalhosDoProfessor onNova={onNova} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-4">
       <CampeonatoDestaque />
+      <SuaSemana />
       <EstudandoAgora />
       <ProximasProvas />
     </div>
@@ -83,7 +107,8 @@ function CampeonatoDestaque() {
 
         {partida && rival ? (
           <div className="mt-3 flex items-center gap-2.5 rounded-xl bg-superficie-2 px-3 py-2.5">
-            <span className="flex -space-x-2">
+            {/* No toque os avatares não se sobrepõem (centros a 44 px): empilhados, dividiriam a mesma área de toque. */}
+            <span className="flex -space-x-2 toque:gap-3 toque:space-x-0">
               <LinkPessoa id={eu} rotulo="Seu perfil">
                 <Avatar nome={pessoas[eu]?.nome ?? "Você"} iniciais={pessoas[eu]?.iniciais} tamanho="sm" className="rounded-full ring-2 ring-superficie-2" />
               </LinkPessoa>
@@ -118,7 +143,7 @@ function CampeonatoDestaque() {
             href={`/campeonatos/${camp.id}`}
             className={cn(
               "inline-flex h-8 shrink-0 items-center rounded-lg px-3 text-[13px] font-medium transition-colors duration-150 active:scale-[0.98]",
-              partida ? "bg-verde text-white hover:bg-verde-2" : "border border-borda bg-superficie text-tinta hover:bg-superficie-2",
+              partida ? "bg-acao text-white hover:bg-acao-2" : "border border-borda bg-superficie text-tinta hover:bg-superficie-2",
             )}
           >
             {cta}
@@ -126,6 +151,27 @@ function CampeonatoDestaque() {
         </div>
       </div>
     </section>
+  );
+}
+
+/* ───────────── Sua semana (minutos de estudo dos últimos 7 dias) ───────────── */
+
+function SuaSemana() {
+  const sessoes = useSeletor((e) => e.estudos.sessoes);
+  const meta = useSeletor((e) => e.estudos.metaDiariaMin);
+  const agora = useAgora(60_000);
+  const dias = useMemo(() => minutosPorDia(sessoes, 7, agora), [sessoes, agora]);
+  const total = dias.reduce((soma, d) => soma + d.minutos, 0);
+  const hoje = dias[dias.length - 1]?.minutos ?? 0;
+
+  return (
+    <Widget titulo="Sua semana" link={{ href: "/estatisticas", rotulo: "Ver minhas estatísticas" }}>
+      <p className="text-[26px] font-semibold leading-none tabular-nums tracking-tight text-tinta">{formatarMinutos(total)}</p>
+      <p className="mt-1.5 text-[12.5px] text-texto-2">de estudo nos últimos 7 dias</p>
+      <p className="mt-3 text-[13px] tabular-nums text-texto">
+        Hoje {hoje} de {meta} min da meta
+      </p>
+    </Widget>
   );
 }
 
@@ -217,6 +263,134 @@ function ProximasProvas() {
           );
         })}
       </ul>
+    </Widget>
+  );
+}
+
+/* ───────────── Professor: dúvidas sem resposta oficial ───────────── */
+
+function DuvidasSemResposta({ onResponder }: { onResponder: (postId: string) => void }) {
+  const estado = useEstado();
+  const pendentes = useMemo(() => duvidasDasTurmas(estado).filter((p) => !duvidaRespondida(p) && !p.emRevisao && !p.origemSala), [estado]);
+  // As mais antigas primeiro: são as que esperam há mais tempo.
+  const antigas = [...pendentes].sort((a, b) => a.criadoEm - b.criadoEm).slice(0, 3);
+
+  return (
+    <Widget
+      titulo="Dúvidas sem resposta"
+      extra={pendentes.length > 0 && <span className="text-[12px] tabular-nums text-texto-2">{pendentes.length} no total</span>}
+      link={{ href: "/professor/duvidas", rotulo: "Abrir todas as dúvidas" }}
+    >
+      {antigas.length === 0 ? (
+        <p className="flex items-start gap-2 text-[13px] leading-snug text-texto-2">
+          <CircleCheck className="mt-px size-4 shrink-0 text-acento" aria-hidden />
+          Todas as dúvidas já têm resposta oficial.
+        </p>
+      ) : (
+        <ul className="space-y-3.5">
+          {antigas.map((p) => {
+            const autor = estado.pessoas[p.autorId];
+            return (
+              <li key={p.id} className="flex items-start gap-2.5">
+                <LinkPessoa id={p.autorId} rotulo={autor?.nome} className="shrink-0">
+                  <Avatar nome={autor?.nome ?? "?"} iniciais={autor?.iniciais} tamanho="sm" />
+                </LinkPessoa>
+                <div className="min-w-0 flex-1">
+                  <p className="flex min-w-0 items-center gap-1 text-[12.5px] leading-5 text-texto-2">
+                    <span className="truncate font-medium text-tinta">{autor ? primeiroNome(autor.nome) : "Membro do CEPI"}</span>
+                    {p.disciplina && <span className="shrink-0">· {p.disciplina}</span>}
+                    <span className="shrink-0">·</span>
+                    <Quando ts={p.criadoEm} className="shrink-0" />
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-[13px] leading-snug text-texto">{p.texto}</p>
+                  <Button variante="secundario" tamanho="sm" className="mt-2" onClick={() => onResponder(p.id)}>
+                    Responder
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Widget>
+  );
+}
+
+/* ───────────── Professor: publicações aguardando moderação ───────────── */
+
+function AguardandoModeracao() {
+  const posts = useSeletor((e) => e.posts);
+  const total = posts.filter((p) => p.emRevisao || p.denuncia).length;
+
+  return (
+    <Widget titulo="Aguardando moderação" link={{ href: "/professor/moderacao", rotulo: "Abrir moderação" }}>
+      {total === 0 ? (
+        <p className="flex items-start gap-2 text-[13px] leading-snug text-texto-2">
+          <ShieldCheck className="mt-px size-4 shrink-0 text-acento" aria-hidden />
+          Nenhuma publicação aguardando revisão.
+        </p>
+      ) : (
+        <p className="flex items-baseline gap-2">
+          <span className="text-[26px] font-semibold leading-none tabular-nums tracking-tight text-tinta">{total}</span>
+          <span className="text-[13px] text-texto-2">{total === 1 ? "publicação aguardando revisão" : "publicações aguardando revisão"}</span>
+        </p>
+      )}
+    </Widget>
+  );
+}
+
+/* ───────────── Professor: próximas entregas das atividades dele ───────────── */
+
+function ProximasEntregas({ professorId }: { professorId: string }) {
+  const atividades = useSeletor((e) => e.atividades);
+  const agora = useAgora(60_000);
+  const proximas = atividades
+    .filter((a) => a.professorId === professorId && a.prazo > agora)
+    .sort((a, b) => a.prazo - b.prazo)
+    .slice(0, 3);
+
+  return (
+    <Widget titulo="Próximas entregas" link={{ href: "/professor/atividades", rotulo: "Ver todas as atividades" }}>
+      {proximas.length === 0 ? (
+        <p className="text-[13px] text-texto-2">Nenhuma atividade com prazo aberto.</p>
+      ) : (
+        <ul className="-mx-2">
+          {proximas.map((a) => {
+            const entregaram = a.entregas.filter((e) => e.status !== "pendente").length;
+            const dias = Math.round((inicioDoDia(a.prazo) - inicioDoDia(agora)) / 86_400_000);
+            return (
+              <li key={a.id}>
+                <Link href={`/professor/atividades/${a.id}`} className="block rounded-lg px-2 py-2 transition-colors duration-150 hover:bg-superficie-2">
+                  <span className="line-clamp-2 text-[13.5px] font-medium leading-snug text-tinta">{a.titulo}</span>
+                  <span className="mt-0.5 block text-[12px] text-texto-2">
+                    {a.turma} · {dias <= 0 ? "prazo hoje" : dias === 1 ? "prazo amanhã" : `prazo em ${dias} dias`}
+                  </span>
+                  <span className="block text-[12px] tabular-nums text-texto-2">
+                    {entregaram} de {a.entregas.length} entregaram
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Widget>
+  );
+}
+
+/* ───────────── Professor: atalhos de publicação ───────────── */
+
+function AtalhosDoProfessor({ onNova }: { onNova: (tipo: TipoNovaPublicacao) => void }) {
+  return (
+    <Widget titulo="Publicar para a turma">
+      <div className="flex flex-col gap-2">
+        <Button variante="secundario" className="justify-start" onClick={() => onNova("aviso")}>
+          <Megaphone /> Publicar aviso
+        </Button>
+        <Button variante="secundario" className="justify-start" onClick={() => onNova("material")}>
+          <FileText /> Compartilhar material
+        </Button>
+      </div>
     </Widget>
   );
 }

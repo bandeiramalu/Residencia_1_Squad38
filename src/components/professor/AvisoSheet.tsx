@@ -1,23 +1,24 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto, Campo } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { useRascunho } from "@/components/ui/rascunhos";
 import { Sheet } from "@/components/ui/Sheet";
-import { ESPACOS } from "@/data/escola";
+import { DESTINOS_PROFESSOR, espacoDaTurma } from "@/data/professor";
 import { cn } from "@/lib/cn";
 import { publicarAviso } from "@/store/actions";
 import type { EspacoId } from "@/store/types";
+import { useTurmaProfessor } from "./comum";
 
 const LIMITE = 280;
 
-/** Aviso oficial no feed — aparece fixo como "Aviso" no espaço escolhido. */
+/** Aviso oficial no feed — aparece fixo como "Aviso" no destino escolhido (toda a escola ou uma das turmas do professor). */
 export function AvisoSheet({ aberto, onFechar }: { aberto: boolean; onFechar: () => void }) {
   return (
-    <Sheet aberto={aberto} onFechar={onFechar} titulo="Publicar aviso" subtitulo="Aparece no feed e notifica cada aluno do espaço">
+    <Sheet aberto={aberto} onFechar={onFechar} titulo="Publicar aviso" subtitulo="Aparece no feed e notifica cada aluno do destino">
       <Formulario onFechar={onFechar} />
     </Sheet>
   );
@@ -25,12 +26,21 @@ export function AvisoSheet({ aberto, onFechar }: { aberto: boolean; onFechar: ()
 
 function Formulario({ onFechar }: { onFechar: () => void }) {
   const [texto, setTexto, limparRascunho] = useRascunho("aviso");
-  const [espaco, setEspaco] = useState<EspacoId>("9A");
+  // Começa na turma que o professor está vendo no Painel; ele pode trocar.
+  const turmaDoPainel = useTurmaProfessor();
+  const [destino, setDestino] = useState<EspacoId>(() => espacoDaTurma(turmaDoPainel) ?? "escola");
+  const enviando = useRef(false);
   const valido = texto.trim().length >= 5;
 
   const publicar = () => {
-    if (!valido) return;
-    publicarAviso(texto, espaco);
+    if (!valido || enviando.current) return;
+    enviando.current = true;
+    // A ação decide, avisa (toast) e notifica; `null` = recusado, então o formulário continua aberto.
+    const id = publicarAviso(texto, destino);
+    if (!id) {
+      enviando.current = false;
+      return;
+    }
     limparRascunho();
     onFechar();
   };
@@ -49,27 +59,27 @@ function Formulario({ onFechar }: { onFechar: () => void }) {
 
       <div>
         <p className="mb-2 text-[13px] font-medium text-tinta">Onde publicar</p>
-        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Espaço do aviso">
-          {ESPACOS.map((e) => {
-            const ativo = e.id === espaco;
+        <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Destino do aviso">
+          {DESTINOS_PROFESSOR.map((d) => {
+            const ativo = d.id === destino;
             return (
               <button
-                key={e.id}
+                key={d.id}
                 type="button"
                 role="radio"
                 aria-checked={ativo}
-                onClick={() => setEspaco(e.id)}
+                onClick={() => setDestino(d.id)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[background-color,border-color] duration-150",
+                  "flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-[background-color,border-color] duration-150",
                   ativo ? "border-verde bg-verde-mclaro" : "border-borda bg-superficie hover:bg-superficie-2",
                 )}
               >
-                <span className={cn("grid size-4 shrink-0 place-items-center rounded-full border-2", ativo ? "border-verde" : "border-texto-2/45")}>
-                  {ativo && <span className="size-1.5 rounded-full bg-verde" />}
+                <span className={cn("grid size-4 shrink-0 place-items-center rounded-full border-2", ativo ? "border-acao" : "border-texto-2")}>
+                  {ativo && <span className="size-1.5 rounded-full bg-acao" />}
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate text-[13.5px] font-medium text-tinta">{e.nome}</span>
-                  <span className="block truncate text-[12px] text-texto-2">{e.id === "9A" ? "Turma do 9º Ano A" : e.descricao}</span>
+                  <span className="block truncate text-[13.5px] font-medium text-tinta">{d.nome}</span>
+                  <span className="block truncate text-[12px] text-texto-2">{d.descricao}</span>
                 </span>
               </button>
             );

@@ -146,10 +146,10 @@ function ItemAtividade({
                 <span className="inline-flex min-w-0 items-center gap-2">
                   <Paperclip className="size-3.5 shrink-0" aria-hidden />
                   <span className="max-w-48 truncate text-tinta">{entrega.anexo.nome}</span>
-                  <button type="button" onClick={() => void abrirAnexoDe(entrega.anexo!, contextoDe(a, professor))} className="font-medium text-acento underline-offset-2 hover:underline">
+                  <button type="button" onClick={() => void abrirAnexoDe(entrega.anexo!, contextoDe(a, professor))} className="alvo-toque font-medium text-acento underline-offset-2 hover:underline">
                     Abrir
                   </button>
-                  <button type="button" onClick={() => void baixarAnexoDe(entrega.anexo!, contextoDe(a, professor))} className="font-medium text-acento underline-offset-2 hover:underline">
+                  <button type="button" onClick={() => void baixarAnexoDe(entrega.anexo!, contextoDe(a, professor))} className="alvo-toque font-medium text-acento underline-offset-2 hover:underline">
                     Baixar
                   </button>
                 </span>
@@ -157,7 +157,7 @@ function ItemAtividade({
               <button
                 type="button"
                 onClick={() => abrirAnexo(`entrega-${a.id}.pdf`, { ...contextoDe(a, professor), autor: "Você", texto: lerResposta(entrega.resposta).texto || (entrega.anexo || lerResposta(entrega.resposta).anexo ? "" : `Entrega registrada${entrega.entregueEm ? ` em ${dataCurta(entrega.entregueEm)}` : ""}.`) })}
-                className="inline-flex items-center gap-1 font-medium text-acento underline-offset-2 hover:underline"
+                className="alvo-toque inline-flex items-center gap-1 font-medium text-acento underline-offset-2 hover:underline"
               >
                 <FileText className="size-3.5" aria-hidden /> Ver minha entrega (PDF)
               </button>
@@ -177,7 +177,7 @@ function ItemAtividade({
             <button
               type="button"
               onClick={() => abrirCorrecao(a, entrega, aluna, professor)}
-              className="mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-acento underline-offset-2 hover:underline"
+              className="alvo-toque mt-2 inline-flex items-center gap-1 text-[13px] font-medium text-acento underline-offset-2 hover:underline"
             >
               <FileText className="size-3.5" aria-hidden /> Correção (PDF)
             </button>
@@ -188,7 +188,7 @@ function ItemAtividade({
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
             {pendente && (
               <p className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-texto-2">
-                <span className={cn("inline-flex items-center gap-1", atrasada ? "text-alerta" : urgente && "text-ambar")}>
+                <span className={cn("inline-flex items-center gap-1", atrasada ? "text-alerta" : urgente && "text-ouro")}>
                   <CalendarClock className="size-3.5" aria-hidden />
                   {textoPrazo(a.prazo, agora, "aluno")}
                 </span>

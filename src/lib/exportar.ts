@@ -3,8 +3,21 @@ import { baixarArquivo } from "./pdf";
 
 type Celula = string | number | null | undefined;
 
+/** Número puro ("-5", "+3,5") ou só um sinal ("-" como "sem valor"): não é fórmula, então não precisa de neutralização. */
+const NUMERO_PURO = /^(?:[+-]|[+-]?\d+(?:[.,]\d+)?)$/;
+
+/**
+ * Texto que o Excel/Sheets executaria como fórmula (`=HYPERLINK(...)`, `+cmd|...`, `@SUM(...)`): começa com
+ * `= + - @`, tab ou CR. Recebe `'` na frente, e o conteúdo passa a ser só texto. Células numéricas ficam como estão.
+ */
+function neutralizarFormula(v: Celula) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") return String(v);
+  return /^[=+\-@\t\r]/.test(v) && !NUMERO_PURO.test(v) ? `'${v}` : v;
+}
+
 function celulaCsv(v: Celula) {
-  const s = v === null || v === undefined ? "" : String(v);
+  const s = neutralizarFormula(v);
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -27,8 +40,10 @@ export interface EventoIcs {
   diaInteiro?: boolean;
   local?: string;
   descricao?: string;
-  /** Minutos de antecedência do alarme (ex.: 30). */
+  /** Minutos de antecedência de um alarme (ex.: 30). */
   lembreteMin?: number;
+  /** Vários alarmes, um `VALARM` por item (ex.: `[4320, 1440, 120]` = 72 h, 24 h e 2 h antes). Soma-se a `lembreteMin`. */
+  lembretesMin?: number[];
 }
 
 const doisDig = (n: number) => String(n).padStart(2, "0");
@@ -45,11 +60,37 @@ function textoIcs(s: string) {
   return s.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
 }
 
-/** Linhas de no máximo 75 caracteres, como pede a RFC 5545. */
+/** Bytes de um ponto de código em UTF-8. */
+function bytesUtf8(ponto: number) {
+  return ponto < 0x80 ? 1 : ponto < 0x800 ? 2 : ponto < 0x10000 ? 3 : 4;
+}
+
+/**
+ * Linhas de no máximo 75 octetos UTF-8 (RFC 5545 §3.1); a continuação começa com um espaço, que também conta.
+ * Percorre por pontos de código: nunca parte um caractere de vários bytes nem um par substituto (emoji).
+ */
 function dobrar(linha: string) {
   const partes: string[] = [];
-  for (let i = 0; i < linha.length; i += 74) partes.push((i ? " " : "") + linha.slice(i, i + 74));
+  let atual = "";
+  let bytes = 0;
+  for (const ch of linha) {
+    const n = bytesUtf8(ch.codePointAt(0) ?? 0);
+    if (bytes + n > 75) {
+      partes.push(atual);
+      atual = " ";
+      bytes = 1;
+    }
+    atual += ch;
+    bytes += n;
+  }
+  partes.push(atual);
   return partes.join("\r\n");
+}
+
+/** Alarmes do evento (`lembretesMin` + `lembreteMin`) sem repetição nem valores inválidos. */
+function alarmesDe(e: EventoIcs) {
+  const todos = [...(e.lembretesMin ?? []), ...(e.lembreteMin ? [e.lembreteMin] : [])];
+  return [...new Set(todos.filter((m) => Number.isFinite(m) && m > 0).map((m) => Math.round(m)))];
 }
 
 export function gerarIcs(eventos: EventoIcs[], nomeCalendario = "Portal do Aluno") {
@@ -68,7 +109,7 @@ export function gerarIcs(eventos: EventoIcs[], nomeCalendario = "Portal do Aluno
     linhas.push(`SUMMARY:${textoIcs(e.titulo)}`);
     if (e.local) linhas.push(`LOCATION:${textoIcs(e.local)}`);
     if (e.descricao) linhas.push(`DESCRIPTION:${textoIcs(e.descricao)}`);
-    if (e.lembreteMin) linhas.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${textoIcs(e.titulo)}`, `TRIGGER:-PT${Math.round(e.lembreteMin)}M`, "END:VALARM");
+    for (const min of alarmesDe(e)) linhas.push("BEGIN:VALARM", "ACTION:DISPLAY", `DESCRIPTION:${textoIcs(e.titulo)}`, `TRIGGER:-PT${min}M`, "END:VALARM");
     linhas.push("END:VEVENT");
   }
   linhas.push("END:VCALENDAR");

@@ -1,7 +1,7 @@
 "use client";
 
 import { Send } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto } from "@/components/ui/Campo";
@@ -18,14 +18,25 @@ export interface AlvoPontos {
   iniciais?: string;
 }
 
-export const MOTIVOS_PONTOS = ["Participação em aula", "Ajudou colegas", "Entrega caprichada", "Evolução na semana"] as const;
+export const MOTIVOS_PONTOS = ["Participação em aula", "Ajudou colegas", "Entrega caprichada", "Evolução na semana", "Destaque da semana"] as const;
 
-/** Conteúdo do "Dar pontos/XP" — usado sozinho num Sheet ou dentro da ficha do aluno. */
-export function DarPontosForm({ alunos, onConcluir, onCancelar }: { alunos: AlvoPontos[]; onConcluir: () => void; onCancelar: () => void }) {
+/** Conteúdo do "Dar pontos/XP" — usado sozinho num Sheet ou dentro da ficha do aluno. `motivoInicial` pré-seleciona um dos motivos. */
+export function DarPontosForm({
+  alunos,
+  motivoInicial,
+  onConcluir,
+  onCancelar,
+}: {
+  alunos: AlvoPontos[];
+  motivoInicial?: string;
+  onConcluir: () => void;
+  onCancelar: () => void;
+}) {
   const [pontos, setPontos] = useState(50);
   const [xp, setXp] = useState(0);
-  const [motivo, setMotivo] = useState<string | null>(MOTIVOS_PONTOS[0]);
+  const [motivo, setMotivo] = useState<string | null>(motivoInicial ?? MOTIVOS_PONTOS[0]);
   const [texto, setTexto] = useState("");
+  const enviando = useRef(false);
 
   const um = alunos.length === 1;
   const quem = um ? primeiroNome(alunos[0].nome) : `${alunos.length} alunos`;
@@ -34,7 +45,9 @@ export function DarPontosForm({ alunos, onConcluir, onCancelar }: { alunos: Alvo
   const motivoFinal = [motivo, texto.trim()].filter(Boolean).join(" — ");
 
   const enviar = () => {
-    if (!valido) return;
+    // Trava: o 2º clique de um duplo clique (ou do toque durante a animação de saída) não credita de novo.
+    if (!valido || enviando.current) return;
+    enviando.current = true;
     atribuirPontos(
       alunos.map((a) => a.id),
       pontos,
@@ -91,7 +104,7 @@ export function DarPontosForm({ alunos, onConcluir, onCancelar }: { alunos: Alvo
               aria-pressed={motivo === m}
               onClick={() => setMotivo(motivo === m ? null : m)}
               className={cn(
-                "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors duration-150 active:scale-[0.97]",
+                "rounded-full px-3 py-1.5 text-[13px] font-medium transition-colors duration-150 active:scale-[0.97] toque:min-h-11",
                 motivo === m ? "bg-tinta text-superficie" : "bg-superficie text-texto ring-1 ring-inset ring-borda hover:bg-superficie-2",
               )}
             >
@@ -142,13 +155,24 @@ export function DarPontosForm({ alunos, onConcluir, onCancelar }: { alunos: Alvo
 }
 
 /** Sheet "Dar pontos/XP" para um ou mais alunos. */
-export function DarPontosSheet({ alunos, onFechar, onConcluir }: { alunos: AlvoPontos[] | null; onFechar: () => void; onConcluir?: () => void }) {
+export function DarPontosSheet({
+  alunos,
+  motivoInicial,
+  onFechar,
+  onConcluir,
+}: {
+  alunos: AlvoPontos[] | null;
+  motivoInicial?: string;
+  onFechar: () => void;
+  onConcluir?: () => void;
+}) {
   return (
     <Sheet aberto={!!alunos && alunos.length > 0} onFechar={onFechar} titulo="Dar pontos e XP" subtitulo="Fica registrado no histórico do aluno">
       {alunos && (
         <DarPontosForm
           key={alunos.map((a) => a.id).join()}
           alunos={alunos}
+          motivoInicial={motivoInicial}
           onCancelar={onFechar}
           onConcluir={() => {
             onConcluir?.();

@@ -15,7 +15,11 @@ export interface Pessoa {
   xp?: number;
 }
 
-export type EspacoId = "escola" | "9A" | "robotica" | "bilingue";
+/**
+ * Onde um post vive. A aluna escolhe entre "escola", "9A", "robotica" e "bilingue" (`ESPACOS`);
+ * "9B" e "8A" só existem como destino de post do professor (`DESTINOS_PROFESSOR`).
+ */
+export type EspacoId = "escola" | "9A" | "9B" | "8A" | "robotica" | "bilingue";
 
 export type TipoPost = "publicacao" | "duvida" | "material" | "aviso";
 
@@ -28,6 +32,8 @@ export interface Anexo {
   mime?: string;
   /** Miniatura (dataURL) de imagens. */
   previa?: string;
+  /** Texto alternativo da imagem enviada (até 200 caracteres). */
+  descricao?: string;
 }
 
 export interface Resposta {
@@ -49,6 +55,8 @@ export interface Denuncia {
   categoriaIA: string;
   prioridade: "alta" | "média" | "baixa";
   criadoEm: number;
+  /** A triagem automática estava indisponível: a categoria é o motivo informado e a prioridade é média. */
+  semTriagem?: boolean;
 }
 
 export interface Post {
@@ -61,9 +69,20 @@ export interface Post {
   tags: string[];
   anexo?: Anexo;
   criadoEm: number;
+  /** Contador único (soma das pessoas que curtiram). */
   curtidas: number;
+  /** Atalho de `curtidoPor.includes(usuario.id)`: se a aluna curtiu. Para outra pessoa, use `curtiu()` de `seletores.ts`. */
   curtido: boolean;
+  /** Atalho de `salvoPor.includes(usuario.id)`. Para outra pessoa, use `salvou()` de `seletores.ts`. */
   salvo: boolean;
+  /** Quem curtiu. Ausente = legado: `curtido` é da aluna (`USUARIO_ID`). */
+  curtidoPor?: string[];
+  /** Quem salvou. Ausente = legado: `salvo` é da aluna (`USUARIO_ID`). */
+  salvoPor?: string[];
+  /** Publicado sem conexão: salvo neste aparelho até a conexão voltar (tela 71). */
+  aguardandoEnvio?: boolean;
+  /** O autor contestou a retenção ("Isso foi um engano?", tela 75). Só uma vez. */
+  contestacao?: { em: number; texto?: string };
   respostas: Resposta[];
   /** US06 — sinalizado pela triagem automática e aguardando revisão humana. */
   emRevisao?: boolean;
@@ -129,6 +148,8 @@ export interface EstadoFlashcards {
   minhas: Flashcard[];
   caixas: Record<string, CaixaLeitner>;
   erradas: string[];
+  /** Escolha da rodada ("Química", "Todas", "Erradas") → início do dia em que a recompensa dela já foi dada. */
+  premiadas?: Record<string, number>;
 }
 
 export interface Pratica {
@@ -142,6 +163,8 @@ export interface Pratica {
   acertos: number;
   vistas: number;
   fim: boolean;
+  /** Ids das cartas que estavam vencidas quando a rodada começou (só elas contam para missão e Maratona). */
+  vencidas?: string[];
 }
 
 export type StatusRelato = "em análise" | "validado" | "recusado";
@@ -206,6 +229,8 @@ export interface LembreteAgendado {
   disparoEm: number;
   /** Já virou notificação. */
   disparado?: boolean;
+  /** Antecedência deste aviso em minutos (4320 = 72 h, 1440 = 24 h, 120 = 2 h). */
+  antecedenciaMin?: number;
 }
 
 export type Privacidade = "publico" | "anonimo" | "sombra";
@@ -251,6 +276,8 @@ export interface TimerAtivo {
   /** Intenção do bloco ("Lista 7, itens a–d"). */
   meta?: string;
   salaId?: string;
+  /** Parte do ciclo da sala que já tinha passado quando a aluna entrou (não conta como foco dela). */
+  descontoMs?: number;
   /**
    * Instante em que a aluna saiu da tela com o foco rodando (o timer fica congelado nele,
    * `pausado: true`). Some ao retomar; passou de 5 min fora, o foco é perdido.
@@ -344,6 +371,8 @@ export interface Partida {
   /** Tempo total de resposta de cada lado (ms) — desempata placares iguais. */
   tempoA?: number;
   tempoB?: number;
+  /** Duelo aberto e ainda não finalizado: sair ou recarregar no meio conta com o que já foi respondido. */
+  emCurso?: { alunoId: string; desde: number; respostas: number; acertos: number; tempoMs: number };
 }
 
 export interface Campeonato {
@@ -371,6 +400,8 @@ export interface Campeonato {
   /** Turmas que podem participar (vazio = toda a escola). */
   turmas: string[];
   criadoEm: number;
+  /** Pontos corridos: aluno → dia ("AAAA-MM-DD", local) da última rodada jogada (uma por dia). */
+  rodadasJogadas?: Record<string, string>;
 }
 
 /* ───────────── Atividades do professor ───────────── */
@@ -422,8 +453,12 @@ export interface Atribuicao {
   xp: number;
   motivo: string;
   criadoEm: number;
-  /** Veio da correção de uma atividade (a entrega já guarda pontos/XP: não contar duas vezes nos ganhos). */
-  origem?: "correcao";
+  /**
+   * De onde veio. "correcao": correção de uma atividade (a entrega já guarda pontos/XP: não contar duas vezes nos
+   * ganhos). "util": resposta marcada como útil pelo professor. Nos dois casos o servidor credita no próprio
+   * endpoint, então a atribuição não sobe por `POST /professor/atribuicoes`.
+   */
+  origem?: "correcao" | "util";
 }
 
 export type DecisaoModeracao = "aprovado" | "removido";
@@ -439,6 +474,10 @@ export interface RegistroModeracao {
   autorId: string;
   /** Texto da publicação (a removida sai do feed; o histórico continua legível). */
   texto: string;
+  /** Onde a decisão foi tomada: na fila da Moderação (padrão) ou direto no feed pelo menu da publicação. */
+  origem?: "fila" | "feed";
+  /** Quando o post era uma mensagem de chat retida: a sala (a decisão sobe para o endpoint da mensagem da sala). */
+  salaId?: string;
 }
 
 /* ───────────── Notificações ───────────── */
@@ -505,4 +544,6 @@ export interface AppState {
   historicoModeracao?: RegistroModeracao[];
   /** Último lembrete do professor por aluno (id → timestamp). */
   lembradoEm?: Record<string, number>;
+  /** 00:00 local do dia a que a sequência e as missões diárias se referem (a ação `virarDia` avança). */
+  diaRef?: number;
 }

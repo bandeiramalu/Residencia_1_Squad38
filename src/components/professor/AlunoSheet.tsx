@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronRight, Coins, FileDown, Flame } from "lucide-react";
+import { ArrowLeft, ChevronRight, ClipboardList, Coins, FileDown, Flame } from "lucide-react";
 import Link from "next/link";
 import { ICONE_ATIVIDADE, fmtNota } from "@/components/atividades/comum";
 import { Avatar } from "@/components/ui/Avatar";
@@ -17,7 +17,7 @@ import { fmt, primeiroNome } from "@/lib/format";
 import { tempoRelativo } from "@/lib/tempo";
 import { ultimoAcesso, type AlunoPainel } from "@/lib/turmas";
 import { useEstado, useSeletor } from "@/store/store";
-import { AoVivo, BotaoLembrar, FaixaNumeros, RiscoBadge } from "./comum";
+import { AoVivo, BotaoLembrar, FaixaNumeros, LinkBotao, Metadados, RiscoBadge, VazioLista, useProfessorId } from "./comum";
 import { DarPontosForm } from "./DarPontosSheet";
 import { baixarBoletim } from "./relatorios";
 
@@ -37,7 +37,7 @@ export function AlunoSheet({ aluno, modo, onModo, onFechar }: { aluno: AlunoPain
       {aluno &&
         (pontos ? (
           <div className="space-y-4">
-            <button type="button" onClick={() => onModo("perfil")} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta">
+            <button type="button" onClick={() => onModo("perfil")} className="inline-flex items-center gap-1.5 text-[13px] font-medium text-texto-2 transition-colors hover:text-tinta toque:min-h-11">
               <ArrowLeft className="size-3.5" /> Voltar à ficha de {primeiroNome(aluno.nome)}
             </button>
             <DarPontosForm alunos={[aluno]} onCancelar={() => onModo("perfil")} onConcluir={() => onModo("perfil")} />
@@ -54,6 +54,7 @@ function Ficha({ aluno: a, onDarPontos }: { aluno: AlunoPainel; onDarPontos: () 
   const atividades = useSeletor((e) => e.atividades);
   const atribuicoes = useSeletor((e) => e.atribuicoes);
   const pessoas = useSeletor((e) => e.pessoas);
+  const profId = useProfessorId();
   const estado = useEstado();
 
   const ordenadas = [...DISCIPLINAS].sort((x, y) => a.dominio[y] - a.dominio[x]);
@@ -108,7 +109,7 @@ function Ficha({ aluno: a, onDarPontos }: { aluno: AlunoPainel; onDarPontos: () 
 
       <p className="text-[13px] leading-snug text-texto-2">
         Mais forte em <span className="font-medium text-tinta">{melhor}</span> ({a.dominio[melhor]}%) · precisa de apoio em <span className="font-medium text-tinta">{pior}</span> ({a.dominio[pior]}%).{" "}
-        <Link href={`/professor/estatisticas?aluno=${a.id}`} className="font-medium text-acento hover:underline">
+        <Link href={`/professor/estatisticas?aluno=${a.id}`} className="alvo-toque font-medium text-acento hover:underline">
           Ver estatísticas do aluno
         </Link>
       </p>
@@ -116,33 +117,51 @@ function Ficha({ aluno: a, onDarPontos }: { aluno: AlunoPainel; onDarPontos: () 
       <section>
         <TituloSecao extra={a.pendentes ? `${a.pendentes} ${a.pendentes === 1 ? "pendente" : "pendentes"}` : "Nada pendente"}>Atividades</TituloSecao>
         {daTurma.length === 0 ? (
-          <p className="text-[13px] text-texto-2">Nenhuma atividade publicada para a turma.</p>
+          <div className="overflow-hidden rounded-xl border border-dashed border-borda">
+            <VazioLista
+              icone={<ClipboardList />}
+              titulo="Nenhuma atividade publicada para a turma"
+              descricao="Quando houver atividades, você acompanha aqui o que este aluno entregou."
+              acao={<LinkBotao href="/professor/atividades">Ver atividades</LinkBotao>}
+            />
+          </div>
         ) : (
           <ul className="divide-y divide-borda overflow-hidden rounded-xl border border-borda">
             {daTurma.map(({ at, e }) => {
               const Icone = ICONE_ATIVIDADE[at.tipo];
+              // Atividade de outro professor: só informação (sem link, sem "Para corrigir" — quem corrige é quem a publicou).
+              const minha = at.professorId === profId;
+              const corpo = (
+                <>
+                  <Icone className="size-4 shrink-0 text-texto-2" aria-hidden />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13.5px] font-medium text-tinta">{at.titulo}</span>
+                    <Metadados
+                      className="block truncate text-[12px] text-texto-2"
+                      itens={[at.disciplina, !minha && (pessoas[at.professorId]?.nome ?? "Outro professor"), e?.entregueEm ? `entregou ${tempoRelativo(e.entregueEm, agora)}` : null]}
+                    />
+                  </span>
+                  {e?.status === "corrigida" ? (
+                    <Badge tom="claro" className="tabular-nums">
+                      Nota {fmtNota(e.nota ?? 0)}
+                    </Badge>
+                  ) : e?.status === "entregue" ? (
+                    <Badge tom="neutro">{minha ? "Para corrigir" : "Entregue"}</Badge>
+                  ) : (
+                    <Badge tom="contorno">Pendente</Badge>
+                  )}
+                  {minha && <ChevronRight className="size-4 shrink-0 text-texto-2" aria-hidden />}
+                </>
+              );
               return (
                 <li key={at.id}>
-                  <Link href={`/professor/atividades/${at.id}`} className="flex items-center gap-3 bg-superficie px-3.5 py-2.5 transition-colors duration-150 hover:bg-superficie-2">
-                    <Icone className="size-4 shrink-0 text-texto-2" aria-hidden />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13.5px] font-medium text-tinta">{at.titulo}</span>
-                      <span className="block truncate text-[12px] text-texto-2">
-                        {at.disciplina}
-                        {e?.entregueEm ? ` · entregou ${tempoRelativo(e.entregueEm, agora)}` : ""}
-                      </span>
-                    </span>
-                    {e?.status === "corrigida" ? (
-                      <Badge tom="claro" className="tabular-nums">
-                        Nota {fmtNota(e.nota ?? 0)}
-                      </Badge>
-                    ) : e?.status === "entregue" ? (
-                      <Badge tom="neutro">Para corrigir</Badge>
-                    ) : (
-                      <Badge tom="contorno">Pendente</Badge>
-                    )}
-                    <ChevronRight className="size-4 shrink-0 text-texto-2" />
-                  </Link>
+                  {minha ? (
+                    <Link href={`/professor/atividades/${at.id}`} className="flex min-h-11 items-center gap-3 bg-superficie px-3.5 py-2.5 transition-colors duration-150 hover:bg-superficie-2">
+                      {corpo}
+                    </Link>
+                  ) : (
+                    <div className="flex min-h-11 items-center gap-3 bg-superficie px-3.5 py-2.5">{corpo}</div>
+                  )}
                 </li>
               );
             })}
@@ -153,7 +172,18 @@ function Ficha({ aluno: a, onDarPontos }: { aluno: AlunoPainel; onDarPontos: () 
       <section>
         <TituloSecao>Pontos e XP recebidos</TituloSecao>
         {historico.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-borda px-4 py-3.5 text-[13px] text-texto-2">Nenhum ponto dado ainda.</p>
+          <div className="overflow-hidden rounded-xl border border-dashed border-borda">
+            <VazioLista
+              icone={<Coins />}
+              titulo="Nenhum ponto dado ainda"
+              descricao="Pontos e XP que você der a este aluno ficam registrados aqui."
+              acao={
+                <Button variante="secundario" onClick={onDarPontos}>
+                  <Coins className="text-texto-2" /> Dar pontos a {primeiroNome(a.nome)}
+                </Button>
+              }
+            />
+          </div>
         ) : (
           <ul className="divide-y divide-borda overflow-hidden rounded-xl border border-borda">
             {historico.map((h) => (

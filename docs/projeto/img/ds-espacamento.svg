@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="344" viewBox="0 0 720 344" role="img" aria-labelledby="t d">
+<title id="t">Escala de espaçamento</title>
+<desc id="d">Barras com a largura real de 4, 8, 12, 16, 24 e 32 pixels, com o número equivalente no Tailwind e o uso.</desc>
+<rect x="0.5" y="0.5" width="719" height="343" rx="16" fill="#FFFFFF" stroke="#E2E8F0"/>
+<text x="24" y="38" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="16" font-weight="600" fill="#0F172A" text-anchor="start">Escala de 4 px</text>
+<text x="24" y="60" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11" font-weight="400" fill="#475569" text-anchor="start">px</text>
+<text x="96" y="60" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11" font-weight="400" fill="#475569" text-anchor="start">Barra (escala 2 : 1)</text>
+<text x="260" y="60" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11" font-weight="400" fill="#475569" text-anchor="start">Tailwind</text>
+<text x="360" y="60" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="11" font-weight="400" fill="#475569" text-anchor="start">Uso</text>
+<line x1="24" y1="68" x2="696" y2="68" stroke="#E2E8F0"/>
+<text x="24" y="90" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">4 px</text>
+<rect x="96" y="79" width="8" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="90" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-1  gap-1</text>
+<text x="360" y="90" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Pequenas separações</text>
+<line x1="24" y1="108" x2="696" y2="108" stroke="#E2E8F0"/>
+<text x="24" y="130" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">8 px</text>
+<rect x="96" y="119" width="16" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="130" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-2  gap-2</text>
+<text x="360" y="130" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Elementos próximos</text>
+<line x1="24" y1="148" x2="696" y2="148" stroke="#E2E8F0"/>
+<text x="24" y="170" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">12 px</text>
+<rect x="96" y="159" width="24" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="170" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-3  gap-3</text>
+<text x="360" y="170" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Conteúdo interno</text>
+<line x1="24" y1="188" x2="696" y2="188" stroke="#E2E8F0"/>
+<text x="24" y="210" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">16 px</text>
+<rect x="96" y="199" width="32" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="210" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-4  gap-4</text>
+<text x="360" y="210" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Espaçamento padrão</text>
+<line x1="24" y1="228" x2="696" y2="228" stroke="#E2E8F0"/>
+<text x="24" y="250" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">24 px</text>
+<rect x="96" y="239" width="48" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="250" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-6  gap-6</text>
+<text x="360" y="250" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Separação entre seções</text>
+<line x1="24" y1="268" x2="696" y2="268" stroke="#E2E8F0"/>
+<text x="24" y="290" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="13" font-weight="500" fill="#0F172A" text-anchor="start">32 px</text>
+<rect x="96" y="279" width="64" height="16" rx="2" fill="#16A34A"/>
+<text x="260" y="290" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="12" font-weight="400" fill="#334155" text-anchor="start">p-8  gap-8</text>
+<text x="360" y="290" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="13" font-weight="400" fill="#334155" text-anchor="start">Grandes divisões</text>
+<text x="24" y="328" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="400" fill="#475569" text-anchor="start">Cada pixel real é desenhado com 2 pixels, para a barra de 4 px aparecer.</text>
+</svg>

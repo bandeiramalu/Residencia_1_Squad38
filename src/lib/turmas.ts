@@ -7,7 +7,7 @@
 import { alunosDaTurma, type AlunoTurma } from "@/data/turmas";
 import { TURMAS_DO_PROFESSOR } from "@/data/professor";
 import { ganhosPorDia } from "@/components/estatisticas/calculos";
-import type { AppState, Post, SessaoEstudo } from "@/store/types";
+import type { AppState, Atividade, Atribuicao, Post, SessaoEstudo } from "@/store/types";
 import { minutosPorDia } from "./estudos";
 
 export type Risco = "alto" | "medio" | "baixo";
@@ -89,6 +89,10 @@ export interface ResumoTurma {
   ativosHoje: number;
   mediaMinutosSemana: number;
   mediaDominio: number;
+  /** Estudo por aluno: média de minutos dos últimos 7 dias (mesmo valor de `mediaMinutosSemana`, nome do Painel). */
+  minutosMedios: number;
+  /** Domínio médio da turma, de 0 a 100 (mesmo valor de `mediaDominio`, nome do Painel). */
+  dominioMedio: number;
   emRisco: number;
   xpSemanaTotal: number;
   /** Minutos somados da turma por dia (últimos 7 dias). */
@@ -97,15 +101,51 @@ export interface ResumoTurma {
 
 export function resumoDaTurma(alunos: AlunoPainel[]): ResumoTurma {
   const total = alunos.length || 1;
+  const minutosMedios = Math.round(alunos.reduce((s, a) => s + a.minutosSemana, 0) / total);
+  const dominioMedio = Math.round(alunos.reduce((s, a) => s + a.dominioMedio, 0) / total);
   return {
     total: alunos.length,
     ativosHoje: alunos.filter((a) => a.ultimoAcessoHa < DIA_MIN).length,
-    mediaMinutosSemana: Math.round(alunos.reduce((s, a) => s + a.minutosSemana, 0) / total),
-    mediaDominio: Math.round(alunos.reduce((s, a) => s + a.dominioMedio, 0) / total),
+    mediaMinutosSemana: minutosMedios,
+    mediaDominio: dominioMedio,
+    minutosMedios,
+    dominioMedio,
     emRisco: alunos.filter((a) => a.risco === "alto").length,
     xpSemanaTotal: alunos.reduce((s, a) => s + a.xpSemana, 0),
     minutos7d: Array.from({ length: 7 }, (_, d) => alunos.reduce((s, a) => s + (a.minutos7d[d] ?? 0), 0)),
   };
+}
+
+/** Atividade da turma com entregas aguardando nota. */
+export interface AtividadeParaCorrigir {
+  atividade: Atividade;
+  /** Entregas com status "entregue" (ainda sem nota). */
+  quantidade: number;
+}
+
+/**
+ * Atividades do professor, na turma, com pelo menos uma entrega aguardando nota
+ * (mais entregas primeiro; empate: prazo mais próximo). Atividades de outros professores não entram.
+ */
+export function atividadesParaCorrigir(estado: AppState, professorId: string, turma: string): AtividadeParaCorrigir[] {
+  return estado.atividades
+    .filter((a) => a.professorId === professorId && a.turma === turma)
+    .map((atividade) => ({ atividade, quantidade: atividade.entregas.filter((e) => e.status === "entregue").length }))
+    .filter((x) => x.quantidade > 0)
+    .sort((x, y) => y.quantidade - x.quantidade || x.atividade.prazo - y.atividade.prazo);
+}
+
+/** Os `n` alunos com mais XP na semana (só quem pontuou; empate: ordem alfabética). */
+export function destaquesDaSemana(alunos: AlunoPainel[], n = 3): AlunoPainel[] {
+  return alunos
+    .filter((a) => a.xpSemana > 0)
+    .sort((a, b) => b.xpSemana - a.xpSemana || a.nome.localeCompare(b.nome, "pt-BR"))
+    .slice(0, n);
+}
+
+/** Últimos pontos/XP dados pelo professor (a lista do estado já vem da mais nova para a mais antiga). */
+export function atribuicoesRecentes(estado: AppState, professorId: string, n = 5): Atribuicao[] {
+  return estado.atribuicoes.filter((a) => a.professorId === professorId).slice(0, n);
 }
 
 /** "há 5 min" · "há 3 h" · "há 4 dias" a partir de minutos. */

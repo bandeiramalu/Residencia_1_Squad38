@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, ArrowRight, Download, FileText, Flame, Heart, MessageCircle, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 import { MedalhaIcone } from "@/components/perfil/MedalhaIcone";
@@ -21,7 +22,7 @@ import { useEstado } from "@/store/store";
 import type { Pessoa, Post } from "@/store/types";
 import { focarPost } from "@/store/ui";
 
-const TIPO_POST: Record<Post["tipo"], string> = { duvida: "Pergunta", material: "Material", aviso: "Aviso", publicacao: "Publicação" };
+const TIPO_POST: Record<Post["tipo"], string> = { duvida: "Dúvida", material: "Material", aviso: "Aviso", publicacao: "Publicação" };
 
 function hash(s: string) {
   let h = 0;
@@ -45,7 +46,7 @@ export function PessoaView({ id }: { id: string }) {
     <button
       type="button"
       onClick={() => router.back()}
-      className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta active:scale-[0.98]"
+      className="-ml-2 inline-flex h-9 items-center gap-1.5 rounded-lg px-2 text-[14px] font-medium text-texto-2 transition-colors duration-150 hover:bg-superficie-2 hover:text-tinta active:scale-[0.98] alvo-toque"
     >
       <ArrowLeft className="size-4" aria-hidden /> Voltar
     </button>
@@ -117,7 +118,16 @@ export function PessoaView({ id }: { id: string }) {
         <section>
           <TituloSecao>Publicações recentes</TituloSecao>
           {doAutor.length === 0 ? (
-            <Vazio icone={<MessageCircle />} titulo="Nenhuma publicação ainda" />
+            <Vazio
+              icone={<MessageCircle />}
+              titulo="Nenhuma publicação ainda"
+              descricao="As dúvidas, materiais e avisos desta pessoa aparecem aqui."
+              acao={
+                <Button variante="secundario" tamanho="sm" onClick={() => router.push("/feed")}>
+                  Ir para o feed
+                </Button>
+              }
+            />
           ) : (
             <ul className="divide-y divide-borda overflow-hidden rounded-2xl border border-borda bg-superficie">
               {doAutor.slice(0, 4).map((post) => (
@@ -241,7 +251,15 @@ function ListaPosts({ titulo, vazio, posts, agora, onAbrir, comAnexo }: { titulo
     <section>
       <TituloSecao>{titulo}</TituloSecao>
       {posts.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-borda px-4 py-6 text-center text-[13px] text-texto-2">{vazio}</p>
+        <div className="rounded-2xl border border-dashed border-borda px-4 py-6 text-center">
+          <span className="mx-auto mb-2 grid size-9 place-items-center rounded-full bg-superficie-2 text-texto-2">
+            <MessageCircle className="size-4" aria-hidden />
+          </span>
+          <p className="text-[13px] text-texto-2">{vazio}</p>
+          <Link href="/feed" className="alvo-toque mt-2 inline-block text-[13px] font-medium text-acento hover:underline">
+            Ir para o feed
+          </Link>
+        </div>
       ) : (
         <ul className="divide-y divide-borda overflow-hidden rounded-2xl border border-borda bg-superficie">
           {posts.slice(0, 5).map((post) => (

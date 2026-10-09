@@ -31,6 +31,7 @@ export function PrivacidadeControle({ grupo, id, className }: { grupo: string; i
     <section id={id} aria-label="Visibilidade no ranking" className={cn("scroll-mt-24 rounded-2xl border border-borda bg-superficie p-4", className)}>
       <h3 className="text-[15px] font-semibold text-tinta">Visibilidade no ranking</h3>
       <p className="mt-0.5 text-[13px] text-texto-2">XP, pontos e medalhas continuam valendo em qualquer opção.</p>
+      <p className="mt-1 text-[13px] text-texto-2">Nos campeonatos em que você se inscreve, seu nome aparece para os participantes.</p>
 
       <Segmentado grupo={grupo} rotulo="Visibilidade no ranking" opcoes={OPCOES} valor={nivel} onChange={definirPrivacidade} className="mt-3" />
 

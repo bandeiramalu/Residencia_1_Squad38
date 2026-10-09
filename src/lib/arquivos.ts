@@ -2,6 +2,11 @@
  * Arquivos de verdade, offline: o que o usuário escolhe fica no IndexedDB do navegador
  * (funciona em file:// no Chrome/Edge e é compartilhado entre abas — o professor, em outra
  * janela, abre o arquivo que a aluna enviou). Sem IndexedDB, cai para a memória da aba.
+ *
+ * Segurança: só entram os tipos da lista permitida (`TIPOS`, por extensão); o tipo guardado (MIME) vem
+ * da extensão — nunca do `file.type`, que o remetente controla. Um `.html`/`.svg` aberto numa aba
+ * rodaria scripts na origem do portal, então só PDF, imagem e texto abrem na aba (blob com MIME seguro,
+ * sem `opener`); o resto é baixado. O servidor repete a regra (MIME real, `nosniff`, `attachment`).
  */
 import { useEffect, useState } from "react";
 
@@ -41,7 +46,15 @@ function abrirBanco(): Promise<IDBDatabase | null> {
       req.onupgradeneeded = () => {
         if (!req.result.objectStoreNames.contains(LOJA)) req.result.createObjectStore(LOJA, { keyPath: "id" });
       };
-      req.onsuccess = () => resolve(req.result);
+      req.onsuccess = () => {
+        const banco = req.result;
+        // Outra aba apagando o banco ("Apagar meus dados") não pode ficar bloqueada por esta conexão.
+        banco.onversionchange = () => {
+          banco.close();
+          abertura = null;
+        };
+        resolve(banco);
+      };
       req.onerror = () => resolve(null);
       req.onblocked = () => resolve(null);
     } catch {
@@ -65,9 +78,73 @@ export function formatarTamanho(bytes: number) {
   return `${(bytes / 1048576).toFixed(1).replace(".", ",")} MB`;
 }
 
-/** Mensagem amigável quando o arquivo não pode ser guardado; `undefined` se estiver ok. */
-export function validarArquivo(file: File): string | undefined {
+interface TipoPermitido {
+  mime: string;
+  /** Abre na própria aba do navegador (PDF, imagem e texto); os demais são baixados. */
+  aba: boolean;
+  imagem?: boolean;
+}
+
+/** Lista permitida por extensão (minúscula, sem ponto). Tudo fora dela é recusado. */
+const TIPOS: Record<string, TipoPermitido> = {
+  pdf: { mime: "application/pdf", aba: true },
+  png: { mime: "image/png", aba: true, imagem: true },
+  jpg: { mime: "image/jpeg", aba: true, imagem: true },
+  jpeg: { mime: "image/jpeg", aba: true, imagem: true },
+  webp: { mime: "image/webp", aba: true, imagem: true },
+  heic: { mime: "image/heic", aba: false, imagem: true },
+  txt: { mime: "text/plain", aba: true },
+  doc: { mime: "application/msword", aba: false },
+  docx: { mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", aba: false },
+  odt: { mime: "application/vnd.oasis.opendocument.text", aba: false },
+  ppt: { mime: "application/vnd.ms-powerpoint", aba: false },
+  pptx: { mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", aba: false },
+  xls: { mime: "application/vnd.ms-excel", aba: false },
+  xlsx: { mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", aba: false },
+};
+
+/** Valor do atributo `accept` com toda a lista permitida (campo de anexo sem restrição extra). */
+export const ACEITA_ARQUIVOS = Object.keys(TIPOS)
+  .map((ext) => `.${ext}`)
+  .join(",");
+
+const MIME_NEUTRO = "application/octet-stream";
+
+function extensaoDe(nome: string) {
+  return /\.([a-z0-9]+)$/i.exec(nome.trim())?.[1].toLowerCase();
+}
+
+function tipoDoNome(nome: string): TipoPermitido | undefined {
+  const ext = extensaoDe(nome);
+  return ext ? TIPOS[ext] : undefined;
+}
+
+/** Extensões permitidas dentro do `accept` (".pdf,.png", "image/*", "application/pdf"); sem `accept`, a lista toda. */
+function extensoesAceitas(aceita?: string) {
+  const todas = Object.keys(TIPOS);
+  const fichas = (aceita ?? "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  if (fichas.length === 0) return todas;
+  return todas.filter((ext) => fichas.some((f) => (f.startsWith(".") ? f.slice(1) === ext : f.endsWith("/*") ? TIPOS[ext].mime.startsWith(f.slice(0, -1)) : f === TIPOS[ext].mime)));
+}
+
+const MENSAGEM_TIPO = "Tipo de arquivo não aceito.";
+
+/**
+ * Mensagem amigável quando o arquivo não pode ser guardado; `undefined` se estiver ok.
+ * `aceita` = o mesmo texto do `accept` do campo (vale também para arrastar e soltar, que ignora o `accept`).
+ */
+export function validarArquivo(file: File, aceita?: string): string | undefined {
   if (file.size === 0) return "Esse arquivo está vazio. Escolha outro.";
+  const ext = extensaoDe(file.name);
+  const permitidas = extensoesAceitas(aceita);
+  if (!ext || !permitidas.includes(ext)) {
+    // Campo só de imagem (ex.: foto do caderno): a dica cita os formatos dele; nos demais vale a mensagem padrão.
+    if (permitidas.length > 0 && permitidas.every((e) => TIPOS[e].imagem)) return `${MENSAGEM_TIPO} Envie uma imagem (${permitidas.map((e) => e.toUpperCase()).join(", ")}).`;
+    return `${MENSAGEM_TIPO} Envie PDF, imagem ou documento.`;
+  }
   if (file.size > LIMITE_BYTES) return `O arquivo tem ${formatarTamanho(file.size)} e o limite é ${formatarTamanho(LIMITE_BYTES)}. Escolha um arquivo menor ou comprima o PDF.`;
   return undefined;
 }
@@ -116,16 +193,14 @@ function gerarId() {
   return `arq_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** Tipo (MIME) guardado: sempre o da extensão permitida, nunca o `file.type`. */
 function mimeDe(file: File) {
-  if (file.type) return file.type;
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  const mapa: Record<string, string> = { pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", txt: "text/plain", heic: "image/heic" };
-  return (ext && mapa[ext]) || "application/octet-stream";
+  return tipoDoNome(file.name)?.mime ?? MIME_NEUTRO;
 }
 
 /** Guarda o arquivo no navegador. Lança `Error` com mensagem amigável se não puder. */
-export async function salvarArquivo(file: File): Promise<ArquivoSalvo> {
-  const aviso = validarArquivo(file);
+export async function salvarArquivo(file: File, aceita?: string): Promise<ArquivoSalvo> {
+  const aviso = validarArquivo(file, aceita);
   if (aviso) throw new Error(aviso);
   const mime = mimeDe(file);
   const [paginas, previa] = await Promise.all([
@@ -147,17 +222,29 @@ export async function salvarArquivo(file: File): Promise<ArquivoSalvo> {
   return { id: registro.id, nome: file.name, mime, bytes: file.size, tamanho: formatarTamanho(file.size), paginas, previa };
 }
 
-export async function lerArquivo(id: string): Promise<Blob | undefined> {
+async function lerRegistro(id: string): Promise<Registro | undefined> {
   const local = memoria.get(id);
-  if (local) return local.blob;
+  if (local) return local;
   const banco = await abrirBanco();
   if (!banco) return undefined;
   try {
-    const r = await transacao<Registro | undefined>(banco, "readonly", (l) => l.get(id));
-    return r?.blob;
+    return await transacao<Registro | undefined>(banco, "readonly", (l) => l.get(id));
   } catch {
     return undefined;
   }
+}
+
+/** Blob com o MIME seguro da extensão do nome (arquivo antigo de tipo não permitido vira `octet-stream`). */
+function blobSeguro(r: Registro) {
+  const mime = tipoDoNome(r.nome)?.mime ?? MIME_NEUTRO;
+  // Texto sem charset seria lido como Windows-1252 e quebraria os acentos.
+  return r.blob.slice(0, r.blob.size, mime.startsWith("text/") ? `${mime};charset=utf-8` : mime);
+}
+
+/** O arquivo guardado, sempre com o MIME seguro (o da extensão), nunca o que veio com ele. */
+export async function lerArquivo(id: string): Promise<Blob | undefined> {
+  const r = await lerRegistro(id);
+  return r ? blobSeguro(r) : undefined;
 }
 
 export async function baixarArquivoSalvo(id: string, nome: string): Promise<boolean> {
@@ -174,20 +261,59 @@ export async function baixarArquivoSalvo(id: string, nome: string): Promise<bool
   return true;
 }
 
-/** Abre o arquivo numa nova aba (blob URL); se o navegador bloquear, baixa. `false` = arquivo não encontrado. */
+/**
+ * Abre o arquivo: PDF, imagem e texto numa nova aba (blob com MIME seguro, sem `opener`); os demais tipos
+ * (documentos, HEIC e qualquer extensão fora da lista) são baixados. `false` = arquivo não encontrado.
+ */
 export async function abrirArquivo(id: string, nome: string): Promise<boolean> {
+  if (!tipoDoNome(nome)?.aba) return baixarArquivoSalvo(id, nome);
   // A aba é aberta já no clique (antes do await), senão o navegador a trata como pop-up.
   const aba = window.open("", "_blank");
-  const blob = await lerArquivo(id);
-  if (!blob) {
+  if (aba) {
+    try {
+      aba.opener = null;
+    } catch {
+      /* o navegador não deixa soltar o vínculo */
+    }
+  }
+  const registro = await lerRegistro(id);
+  if (!registro) {
     aba?.close();
     return false;
   }
+  if (!tipoDoNome(registro.nome)?.aba) {
+    aba?.close();
+    return baixarArquivoSalvo(id, nome);
+  }
   if (!aba) return baixarArquivoSalvo(id, nome);
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blobSeguro(registro));
   aba.location.href = url;
   setTimeout(() => URL.revokeObjectURL(url), 5 * 60_000);
   return true;
+}
+
+/** "Apagar meus dados": fecha a conexão, apaga o banco `portal-arquivos` e esvazia a memória da aba. */
+export async function apagarTodosArquivos(): Promise<void> {
+  memoria.clear();
+  const aberta = abertura;
+  abertura = null;
+  try {
+    (await aberta)?.close();
+  } catch {
+    /* já estava fechada */
+  }
+  if (typeof indexedDB === "undefined") return;
+  await new Promise<void>((resolve) => {
+    try {
+      const req = indexedDB.deleteDatabase(BANCO);
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+      // Outra aba ainda segura o banco: ela o fecha ao receber `versionchange` e a remoção termina sozinha.
+      req.onblocked = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
 }
 
 /** URL temporária (blob) do arquivo guardado, para `<iframe>`/`<img>`. */

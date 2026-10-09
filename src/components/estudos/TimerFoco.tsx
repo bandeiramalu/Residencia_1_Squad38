@@ -17,7 +17,7 @@ import { useAgora } from "@/hooks/useAgora";
 import { useMidia } from "@/hooks/useMidia";
 import { useModoApresentacao } from "@/lib/apresentacao";
 import { cn } from "@/lib/cn";
-import { formatarMinutos, formatarRelogio, lerTimer, MIN } from "@/lib/estudos";
+import { formatarMinutos, formatarRelogio, lerTimer, minutosCumpridos, MIN } from "@/lib/estudos";
 import { adiantarFoco, encerrarFoco, iniciarFoco, pausarFoco, pularPausa, retomarFoco, simularSaida } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 import type { ModoTimer, TimerAtivo } from "@/store/types";
@@ -134,7 +134,7 @@ function ConfigurarFoco({ disciplinaSugerida }: { disciplinaSugerida: Disciplina
       <Button tamanho="lg" bloco onClick={iniciar} className="mt-6 h-12">
         <Play className="fill-current" aria-hidden />
         Iniciar foco
-        <span className="font-normal opacity-75">· {preset.focoMin ? `${preset.focoMin} min` : "livre"}</span>
+        <span className="font-normal text-white">· {preset.focoMin ? `${preset.focoMin} min` : "livre"}</span>
       </Button>
       <p className="mt-2.5 text-center text-[12px] text-texto-2">
         +{PONTOS_POR_MINUTO} ponto por minuto · +{BONUS_CICLO} por ciclo completo · sair da tela por mais de 5 min perde o ciclo
@@ -301,7 +301,7 @@ function BotaoDemo() {
 /** Quanto será salvo ao encerrar — relógio próprio para não re-renderizar o card. */
 function ResumoEncerrar({ timer }: { timer: TimerAtivo }) {
   const agora = useAgora(1000);
-  const bloco = timer.fase === "foco" ? Math.floor(lerTimer(timer, agora).decorridoMs / MIN) : 0;
+  const bloco = minutosCumpridos(timer, agora);
   const total = timer.minutosRegistrados + bloco;
   if (!total) return <>Blocos com menos de 1 minuto não contam — nada será registrado.</>;
   return (
@@ -330,10 +330,11 @@ function Relogio({ timer, tamanho }: { timer: TimerAtivo; tamanho: number }) {
       cor={pausa ? "var(--color-texto-2)" : "var(--color-verde)"}
       animar={false}
       rotulo={pausa ? "Tempo de pausa" : "Tempo de foco"}
-      className={cn("transition-opacity duration-200", timer.pausado && "opacity-50")}
+      // Pausado: só o anel esmaece (o texto continua com contraste de 4,5 : 1 ou mais).
+      className={cn("[&>svg]:transition-opacity [&>svg]:duration-200", timer.pausado && "[&>svg]:opacity-50")}
     >
       <span
-        className="block font-extralight leading-none tracking-[-0.04em] text-tinta tabular-nums"
+        className={cn("block font-extralight leading-none tracking-[-0.04em] tabular-nums", timer.pausado ? "text-texto-2" : "text-tinta")}
         style={{ fontSize: Math.round(tamanho * (texto.length > 5 ? 0.17 : 0.24)) }}
       >
         {texto}
@@ -399,7 +400,7 @@ function ModoImersivo({ timer, onSair }: { timer: TimerAtivo; onSair: () => void
           ref={botaoSair}
           type="button"
           onClick={onSair}
-          className="inline-flex h-9 items-center gap-2 rounded-lg border border-borda bg-superficie px-3.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2"
+          className="alvo-toque inline-flex h-9 items-center gap-2 rounded-lg border border-borda bg-superficie px-3.5 text-[13px] font-medium text-tinta transition-colors duration-150 hover:bg-superficie-2"
         >
           <Minimize2 className="size-4" aria-hidden />
           Sair
@@ -434,7 +435,7 @@ function ModoImersivo({ timer, onSair }: { timer: TimerAtivo; onSair: () => void
             aria-label={timer.pausado ? "Retomar foco" : "Pausar foco"}
             className={cn(
               "grid size-14 place-items-center rounded-full transition-[background-color,opacity,transform] duration-150 active:scale-95",
-              timer.pausado ? "bg-verde text-white hover:bg-verde-2" : "bg-tinta text-superficie hover:opacity-90",
+              timer.pausado ? "bg-acao text-white hover:bg-acao-2" : "bg-tinta text-superficie hover:opacity-90",
             )}
           >
             {timer.pausado ? <Play className="size-5 fill-current" aria-hidden /> : <Pause className="size-5 fill-current" aria-hidden />}

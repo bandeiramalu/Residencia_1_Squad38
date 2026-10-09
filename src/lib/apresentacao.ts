@@ -2,10 +2,11 @@
  * Modo apresentação: mostra os atalhos de demonstração (avançar o timer, simular saída da tela,
  * roteiro guiado). Desligado por padrão — o app aparece como na versão final.
  * Liga/desliga em Perfil › Configurações ou com o atalho Alt+Shift+D.
+ * As simulações de falha (`lib/simulacoes.ts`) só agem com o modo ligado.
  */
 import { useEffect, useSyncExternalStore } from "react";
+import { CHAVE_APRESENTACAO as CHAVE, EVENTO_APRESENTACAO, limparSimulacoes } from "./simulacoes";
 
-const CHAVE = "cepi-apresentacao";
 const ouvintes = new Set<() => void>();
 
 function ler(): boolean {
@@ -23,7 +24,11 @@ export function definirModoApresentacao(ativo: boolean) {
   } catch {
     /* sem armazenamento: vale só nesta visita */
   }
+  // Ao sair do modo, as simulações de falha voltam todas desligadas.
+  if (!ativo) limparSimulacoes();
   ouvintes.forEach((o) => o());
+  // Avisa quem depende do modo (simulações de falha, faixa de conexão…).
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(EVENTO_APRESENTACAO));
 }
 
 export function alternarModoApresentacao() {

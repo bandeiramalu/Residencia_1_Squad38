@@ -15,10 +15,11 @@ import { ESCOLA, ESPACOS } from "@/data/escola";
 import { PROFESSOR } from "@/data/professor";
 import { useFecharFora } from "@/hooks/useFecharFora";
 import { useModoApresentacao } from "@/lib/apresentacao";
-import { entrarComoDemo, sair, type PapelSessao } from "@/lib/auth";
+import { entrarComoDemo, type PapelSessao } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { selecionarEspaco } from "@/store/actions";
 import { useEstado } from "@/store/store";
+import { useSair } from "./SairSheet";
 import { TemaSegmentado } from "./TemaToggle";
 
 // Modais só são baixados quando abertos pela primeira vez: o cabeçalho carrega mais leve.
@@ -27,25 +28,29 @@ const CarteiraSheet = dynamic(() => import("./CarteiraSheet").then((m) => m.Cart
 const NotificacoesSheet = dynamic(() => import("./NotificacoesSheet").then((m) => m.NotificacoesSheet));
 const RoteiroSheet = dynamic(() => import("./RoteiroSheet").then((m) => m.RoteiroSheet));
 
+/** No celular os botões de ícone medem 44 × 44 px (DS §16); o selo acompanha o canto do ícone. */
 const BOTAO_ICONE =
-  "relative grid size-9 place-items-center rounded-full text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95";
+  "relative grid size-9 place-items-center rounded-full text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta active:scale-95 toque:size-11";
 
+/** Selo de contagem: acima de 99 mostra "99+" (cabe no botão). */
 function Contador({ valor, tom = "verde" }: { valor: number; tom?: "verde" | "alerta" }) {
+  const texto = valor > 99 ? "99+" : String(valor);
   return (
     <AnimatePresence>
       {valor > 0 && (
         <motion.span
-          key={valor}
+          key={texto}
           initial={{ scale: 0.4 }}
           animate={{ scale: 1 }}
           exit={{ scale: 0 }}
           transition={{ type: "spring", stiffness: 600, damping: 18 }}
           className={cn(
-            "absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-superficie",
+            "absolute right-0.5 top-0.5 grid min-w-4 place-items-center rounded-full px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-superficie toque:right-1.5 toque:top-1.5",
             tom === "alerta" ? "bg-alerta dark:text-fundo" : "bg-texto-2 dark:text-fundo",
           )}
+          aria-hidden
         >
-          {valor}
+          {texto}
         </motion.span>
       )}
     </AnimatePresence>
@@ -72,7 +77,7 @@ export function Header({ papel, usuarioId }: { papel: PapelSessao; usuarioId: st
   }, []);
 
   return (
-    <header className="vidro sticky top-0 z-40 border-b border-borda">
+    <header className="vidro border-b border-borda">
       <div className="coluna flex h-14 items-center gap-2 px-4 sm:px-6 lg:px-8">
         <Image
           src="/cepi-logo.png"
@@ -114,7 +119,12 @@ export function Header({ papel, usuarioId }: { papel: PapelSessao; usuarioId: st
         </div>
 
         {papel === "aluno" && (
-          <Link href="/perfil" aria-label="Seu perfil" className="ml-1 shrink-0 rounded-full active:scale-95 lg:hidden">
+          // Abaixo de 480 px não há largura para o avatar com alvo de 44 px; o Perfil continua na barra inferior.
+          <Link
+            href="/perfil"
+            aria-label="Seu perfil"
+            className="alvo-toque ml-1 shrink-0 rounded-full active:scale-95 max-[479px]:hidden lg:hidden"
+          >
             <Avatar nome={usuario.nome} foto={usuario.foto} tamanho="sm" equipados={usuario.equipados} />
           </Link>
         )}
@@ -124,7 +134,7 @@ export function Header({ papel, usuarioId }: { papel: PapelSessao; usuarioId: st
             type="button"
             onClick={() => setAberto("carteira")}
             aria-label="Ver saldo de pontos e XP"
-            className="ml-1 flex h-8 shrink-0 items-center rounded-full border border-borda bg-superficie pl-2 pr-2.5 text-[12.5px] font-medium tabular-nums text-tinta transition-colors hover:bg-superficie-2 active:scale-95"
+            className="alvo-toque ml-1 flex h-8 shrink-0 items-center rounded-full border border-borda bg-superficie pl-2 pr-2.5 text-[12.5px] font-medium tabular-nums text-tinta transition-colors hover:bg-superficie-2 active:scale-95"
           >
             <Coins className="mr-1 size-3.5 text-ambar" />
             <AnimatedNumber valor={usuario.pontos} />
@@ -163,7 +173,7 @@ function SeletorEspaco({ espaco }: { espaco: string }) {
         onClick={() => setMenuAberto((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={menuAberto}
-        className="group flex max-w-full items-center gap-1 rounded-md text-left text-xs text-texto-2 transition-colors hover:text-tinta lg:h-8 lg:rounded-lg lg:px-2.5 lg:text-[13.5px] lg:font-medium lg:text-tinta lg:hover:bg-superficie-2"
+        className="group alvo-toque flex max-w-full items-center gap-1 rounded-md text-left text-xs text-texto-2 transition-colors hover:text-tinta lg:h-8 lg:rounded-lg lg:px-2.5 lg:text-[13.5px] lg:font-medium lg:text-tinta lg:hover:bg-superficie-2 toque:py-1"
       >
         <span className="truncate">
           {espacoAtual.nome}
@@ -220,10 +230,18 @@ function MenuProfessor({ usuarioId, apresentacao, onRoteiro }: { usuarioId: stri
   const router = useRouter();
   const fecharMenu = useCallback(() => setAberto(false), []);
   useFecharFora(ref, aberto, fecharMenu);
+  const { pedir: pedirSaida, dialogo: dialogoSaida } = useSair();
 
   return (
     <div ref={ref} className="relative ml-1 shrink-0">
-      <button type="button" onClick={() => setAberto((v) => !v)} aria-haspopup="menu" aria-expanded={aberto} aria-label="Menu da conta" className="rounded-full active:scale-95">
+      <button
+        type="button"
+        onClick={() => setAberto((v) => !v)}
+        aria-haspopup="menu"
+        aria-expanded={aberto}
+        aria-label="Menu da conta"
+        className="alvo-toque rounded-full active:scale-95"
+      >
         <Avatar nome={PROFESSOR.nome} iniciais="R" tamanho="sm" />
       </button>
       <AnimatePresence>
@@ -250,14 +268,7 @@ function MenuProfessor({ usuarioId, apresentacao, onRoteiro }: { usuarioId: stri
                     { icone: Repeat2, texto: "Ver como aluna (Ana)", acao: () => router.push(entrarComoDemo("aluno")) },
                   ]
                 : []),
-              {
-                icone: LogOut,
-                texto: "Sair",
-                acao: () => {
-                  sair();
-                  router.push("/login");
-                },
-              },
+              { icone: LogOut, texto: "Sair", acao: pedirSaida },
             ].map(({ icone: Icone, texto, acao }) => (
               <button
                 key={texto}
@@ -267,7 +278,7 @@ function MenuProfessor({ usuarioId, apresentacao, onRoteiro }: { usuarioId: stri
                   setAberto(false);
                   acao();
                 }}
-                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-texto transition-colors hover:bg-superficie-2 hover:text-tinta"
+                className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] text-texto transition-colors hover:bg-superficie-2 hover:text-tinta toque:py-3"
               >
                 <Icone className="size-4 text-texto-2" /> {texto}
               </button>
@@ -275,6 +286,7 @@ function MenuProfessor({ usuarioId, apresentacao, onRoteiro }: { usuarioId: stri
           </motion.div>
         )}
       </AnimatePresence>
+      {dialogoSaida}
     </div>
   );
 }

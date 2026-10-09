@@ -167,7 +167,7 @@ function LinhaAtividade({ atividade: a, agora }: { atividade: Atividade; agora: 
               {a.anexo && <Paperclip className="size-3.5 shrink-0 text-texto-2" aria-label="Com anexo" />}
             </span>
             <span className="block truncate text-[12px] text-texto-2">
-              {ROTULO_ATIVIDADE[a.tipo]} · {a.disciplina} · {turmaCurta(a.turma)} · <span className={cn(urgente && "text-ambar")}>{textoPrazo(a.prazo, agora)}</span>
+              {ROTULO_ATIVIDADE[a.tipo]} · {a.disciplina} · {turmaCurta(a.turma)} · <span className={cn(urgente && "text-ouro")}>{textoPrazo(a.prazo, agora)}</span>
               <span className="hidden lg:inline">
                 {" "}
                 · até {a.pontos} pts e {a.xp} XP
