@@ -6,16 +6,20 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
 import { Sheet } from "@/components/ui/Sheet";
+import { useAtor } from "@/hooks/useAtor";
 import { cn } from "@/lib/cn";
 import { useUrlArquivo } from "@/lib/arquivos";
 import { previaDoAnexo, resumoDoAnexo, tipoDoAnexo } from "@/lib/materiais";
 import { dataCurta } from "@/lib/tempo";
 import { salvar } from "@/store/actions";
+import { salvou } from "@/store/seletores";
 import type { Pessoa, Post } from "@/store/types";
 import { abrirDoPost, baixarDoPost } from "./anexo";
 
 /** Pré-visualização de um material (PDF) antes de baixar. */
 export function MaterialSheet({ aberto, post, autor, onFechar }: { aberto: boolean; post: Post | null; autor?: Pessoa; onFechar: () => void }) {
+  const ator = useAtor();
+  const guardado = post ? salvou(post, ator.id) : false;
   const nomeAnexo = post?.anexo?.nome;
   const disciplina = post?.disciplina;
   const arquivoId = post?.anexo?.arquivoId;
@@ -44,7 +48,7 @@ export function MaterialSheet({ aberto, post, autor, onFechar }: { aberto: boole
           )}
           {arquivoId && url && tipo === "Imagem" && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={url} alt={`Prévia de ${post.anexo.nome}`} className="mt-4 max-h-[52vh] w-full rounded-xl border border-borda bg-superficie-2 object-contain" />
+            <img src={url} alt={post.anexo.descricao || `Imagem enviada por ${autor?.nome ?? "um membro do CEPI"}`} className="mt-4 max-h-[52vh] w-full rounded-xl border border-borda bg-superficie-2 object-contain" />
           )}
           {arquivoId && !url && <p className="mt-4 rounded-xl bg-superficie-2 px-3.5 py-3 text-[13px] text-texto-2">Carregando o arquivo…</p>}
 
@@ -75,8 +79,8 @@ export function MaterialSheet({ aberto, post, autor, onFechar }: { aberto: boole
           <p className="mt-2.5 text-[14.5px] leading-relaxed text-texto">{post.texto}</p>
 
           <RodapeSheet>
-            <Button variante="secundario" tamanho="lg" className="px-4" onClick={() => salvar(post.id)} aria-pressed={post.salvo} aria-label={post.salvo ? "Remover dos salvos" : "Salvar"}>
-              <Bookmark className={cn(post.salvo && "fill-current")} />
+            <Button variante="secundario" tamanho="lg" className="px-4" onClick={() => salvar(post.id)} aria-pressed={guardado} aria-label={guardado ? "Remover dos salvos" : "Salvar"}>
+              <Bookmark className={cn(guardado && "fill-current")} />
             </Button>
             <Button
               variante="secundario"
