@@ -7,12 +7,12 @@
 
 | Arquivo | Para que serve |
 | --- | --- |
-| [`docs/api/openapi.yaml`](api/openapi.yaml) | Contrato REST completo (OpenAPI 3.1): 115 endpoints, schemas, erros, exemplos. Abra no [Swagger Editor](https://editor.swagger.io) para navegar. |
+| [`docs/api/openapi.yaml`](api/openapi.yaml) | Contrato REST completo (OpenAPI 3.1): 117 endpoints, schemas, erros, exemplos. Abra no [Swagger Editor](https://editor.swagger.io) para navegar. |
 | [`docs/api/schema.sql`](api/schema.sql) | Banco PostgreSQL pronto para rodar: tabelas, enums, chaves, índices, gatilhos e views de ranking. |
 | [`src/api/endpoints.ts`](../src/api/endpoints.ts) | O mesmo catálogo em TypeScript, tipado: o front chama `chamar(ENDPOINTS.feed.curtir, …)`. |
 | [`src/api/dto.ts`](../src/api/dto.ts) | Formatos dos corpos e respostas que diferem do estado do app. |
 | [`src/api/sync.ts`](../src/api/sync.ts) | Ponte ação → requisição, com fila de saída offline (outbox). |
-| [`src/api/realtime.ts`](../src/api/realtime.ts) | Cliente WebSocket (ainda desligado) para salas, notificações e campeonatos. |
+| [`src/api/realtime.ts`](../src/api/realtime.ts) | Cliente WebSocket para salas, notificações e campeonatos (hoje ligado só para notificações, só no modo http). |
 | [`.env.example`](../.env.example) | Variáveis para ligar o front na API. |
 
 ## Sumário
@@ -23,9 +23,9 @@
 4. [Como ligar a API](#4-como-ligar-a-api)
 5. [Autenticação e papéis](#5-autenticação-e-papéis)
 6. [Modelo de dados](#6-modelo-de-dados)
-7. [Endpoints ↔ ações do front](#7-endpoints--ações-do-front)
+7. [Endpoints ↔ ações do front](#7-endpoints--ações-do-front) (inclui o [feed do professor](#72-feed-do-professor-feed-compartilhado) e os [estados de erro e simulações](#73-estados-de-erro-e-simulações))
 8. [Tempo real](#8-tempo-real)
-9. [Regras de negócio que o backend DEVE garantir](#9-regras-de-negócio-que-o-backend-deve-garantir)
+9. [Regras de negócio que o backend DEVE garantir](#9-regras-de-negócio-que-o-backend-deve-garantir) (inclui [jobs do servidor](#912-virada-do-dia-lembretes-e-fechamentos-tarefas-do-servidor) e [segurança de arquivos e cabeçalhos](#913-segurança-de-arquivos-planilhas-e-cabeçalhos))
 10. [Sugestão de stack](#10-sugestão-de-stack)
 11. [Checklist de integração](#11-checklist-de-integração)
 12. [Dados iniciais (seed)](#12-dados-iniciais-seed)
@@ -142,19 +142,28 @@ Cada regra devolve uma requisição ou `null`. Há quatro famílias:
 | **Criação** com id do cliente | `publicar`, `responder`, `comprar`, `registrarSessao` | `POST` com o `id` gerado no front; a chave de idempotência é fixa (`post:p1…`). |
 | **Evento** | `missaoProgresso`, `responderCarta`, `entrarSala` | Um fato novo a cada vez; chave aleatória. |
 | **Estado desejado** | `curtir`, `salvar`, `equipar`, `definirPrivacidade` | `PUT`/`DELETE` idempotentes; se houver outro pedido do mesmo recurso na fila, **o mais novo substitui** (curtir → descurtir → curtir offline = 1 pedido). |
-| **Não sobe** (`null`) | `premiar`, `notificar`, `notificarVarios`, `desbloquearMedalha`, `virarCarta`, `adiantarTimer`, `ajustarSaida`, `dispensarFocoPerdido`, `selecionarEspaco`, `membrosSala` | Calculado pelo servidor (pontos, XP, medalhas, notificações), só visual, só da demo ou chega pelo tempo real. |
+| **Não sobe** (`null`) | `premiar`, `notificar`, `notificarVarios`, `desbloquearMedalha`, `virarDia`, `confirmarEnvio`, `virarCarta`, `adiantarTimer`, `ajustarSaida`, `dispensarFocoPerdido`, `selecionarEspaco`, `membrosSala` | Calculado pelo servidor (pontos, XP, medalhas, notificações, virada do dia), só visual, só da demo ou chega pelo tempo real. |
 
 ### A fila de saída (outbox)
 
 - Salva em `localStorage["cepi-api-fila"]`: sobrevive a recarregar a página e a ficar sem internet.
 - Envia **um por vez, em ordem** (a criação do post chega antes da curtida nele).
-- Rede caiu / 408 / 429 / 401 → espera exponencial (1 s, 2 s, 4 s… até 5 min) e tenta de novo; também tenta
-  na hora em que o navegador volta a ficar `online` ou a aba volta a ficar visível.
-- 5xx → tenta até 8 vezes. Outros 4xx → descarta, guarda em `cepi-api-rejeitadas` (sem o corpo, por privacidade)
-  e dispara `window` event `cepi:sync-rejeitada` (a tela pode mostrar um toast).
-- 401 dispara `cepi:sessao-expirada` (hora de chamar `POST /auth/renovar`).
-- Cada pedido guarda o `usuarioId`: se outra pessoa entrar no mesmo computador, nada sai com o token errado.
+- Rede caiu / 408 / 429 / 401 / 5xx → espera **1 s, 2 s, 4 s… até 5 min** (mais 0–20 % de variação, para os aparelhos
+  não voltarem todos juntos) e tenta de novo; também tenta na hora em que o navegador volta a ficar `online` ou a aba
+  volta a ficar visível. **Erro 5xx não descarta o pedido** (deploy ou queda do servidor não pode perder o que o aluno
+  fez): só a validade de 7 dias o remove.
+- Outros 4xx → descarta, guarda em `cepi-api-rejeitadas` (sem o corpo, por privacidade) e dispara o evento de janela
+  `cepi:sync-rejeitada`, que vira um aviso na tela. O estado otimista **ainda não é desfeito** (pendência, §11).
+- 401 dispara `cepi:sessao-expirada` (aviso na tela; hora de chamar `POST /auth/renovar` ou voltar ao login).
+- Cada pedido guarda o `usuarioId`: se outra pessoa entrar no mesmo computador, nada sai com o token errado. A fila é
+  compartilhada por todas as contas do navegador, então **`sair()` apaga só os pedidos de quem saiu** (evento
+  `cepi:sessao-encerrada`, `detail: { usuarioId }`) e nunca os da conta aberta em outra aba. O login dispara
+  `cepi:sessao-iniciada` (`detail: { usuarioId, papel }`), que liga o tempo real. `lib/auth.ts` não importa
+  `api/sync.ts` (sem ciclo): os dois conversam por esses eventos de janela.
 - Só uma aba envia por vez (Web Locks). Pedidos com mais de 7 dias são descartados.
+- Publicação feita sem conexão: o post aparece com o selo "Aguardando envio · salvo neste aparelho"
+  (`Post.aguardandoEnvio`) até a fila entregar, e uma faixa "Sem conexão. Tentando retransmitir…" avisa no topo
+  (`navigator.onLine`). Veja §7.3.
 - **Arquivos reais**: anexos escolhidos pela pessoa ficam no IndexedDB do navegador (`src/lib/arquivos.ts`, `anexo.arquivoId`).
   Quando a ação leva um anexo (`publicar` de material, `criarAtividade`, entrega de atividade), o pedido na fila traz `arquivo`:
   antes de enviá-lo, a fila faz `POST /anexos` (multipart, campo `arquivo`, `Idempotency-Key: <chave>:anexo`), grava o `anexoId`
@@ -203,7 +212,12 @@ Se preferir não guardar a resposta, devolva `409` com `{ "codigo": "ja_processa
 | Desafios personalizados | `desafios.abrir` → `desafios.responder` |
 | Material com arquivo / entrega com anexo | `feed.enviarAnexo` (multipart) e depois o post/entrega com `anexoId` |
 | Busca, ranking, listas paginadas, painel do professor | `GET` correspondente |
-| Lembrar pendentes (professor) | `atividades.lembrarPendentes` |
+| Lembrar pendentes (professor) | `atividades.lembrarPendentes` (hoje sobe pela fila: `lembrarAlunos` com `atividadeId`) |
+
+> **Pendência documentada (modo integrado):** a camada de **leitura** (`/me/bootstrap`, `GET /posts`, `GET /ranking/*`…)
+> e as telas de **duelo, desafio e rodada** ainda **não** chamam os endpoints do servidor: com a API ligada, o app lê
+> do estado local e joga duelos e desafios no navegador (o gabarito ainda está no pacote do front). Veja o
+> [checklist](#11-checklist-de-integração), fases 2 e 7.
 
 ---
 
@@ -233,7 +247,7 @@ Se preferir não guardar a resposta, devolva `409` com `{ "codigo": "ja_processa
 | Modo | Quando | Comportamento |
 | --- | --- | --- |
 | `mock` | sem `NEXT_PUBLIC_API_URL` | Demo completa no navegador; `sync.ts` e `realtime.ts` não fazem nada. |
-| `http` | com `NEXT_PUBLIC_API_URL` | Login real; ações vão para a fila; os botões de acesso rápido da demo (token `"demo"`) não sincronizam. |
+| `http` | com `NEXT_PUBLIC_API_URL` | Login real (`Authorization: Bearer` em todo pedido); ações vão para a fila; o tempo real conecta (notificações); os botões de acesso rápido da demo (token `"demo"`) não sincronizam. |
 
 > Enquanto o passo "bootstrap" do checklist não for feito, o front em modo `http` ainda começa com os dados do
 > seed local — por isso o seed do banco deve usar **os mesmos ids** de `src/data` (seção 12).
@@ -270,9 +284,14 @@ sequenceDiagram
 ### Onde fica a guarda de rotas
 
 O front **não usa mais `proxy.ts` nem o cookie `cepi_papel`**. A regra de acesso (login, home por papel, rotas
-compartilhadas `/estudos/salas`, `/campeonatos`, `/pessoas`; aluno fora de `/professor/*`; professor só em
-`/professor/*` e nas compartilhadas) está em `src/lib/guarda.ts` e roda **no cliente**, no `AppShell` (Next) e na demo em
-HTML único. A sessão fica no `sessionStorage` (uma por aba) e `src/lib/auth.ts` só apaga o cookie antigo, se existir.
+compartilhadas `/feed`, `/estudos/salas`, `/campeonatos`, `/pessoas`; aluno fora de `/professor/*`; professor fora das
+áreas só da aluna — `/estudos`, `/missoes`, `/ranking`, `/loja`, `/perfil`, `/estatisticas` — e rota desconhecida =
+página 404) está em `src/lib/guarda.ts` e roda **no cliente**, no `AppShell` (Next) e na demo em HTML único. O `/feed`
+é **uma rota só para os dois papéis** (o professor também participa; veja §7.2); um link `/feed?post=id` sem sessão
+leva ao login e volta ao post. A sessão fica no `sessionStorage` (uma por aba) e `src/lib/auth.ts` só apaga o cookie
+antigo, se existir. `src/api/client.ts` lê o token dessa sessão (`sessionStorage["cepi-sessao"]`) e o envia em
+`Authorization: Bearer` (cookie também, `credentials: "include"`). `sair()` chama `POST /auth/sair` (revoga o refresh
+token; um erro ali não trava a saída) e apaga a sessão da aba.
 Isso é **só UX** (não piscar a tela errada): qualquer pessoa pode editar o `sessionStorage`; a segurança está no backend.
 
 Na integração com a API real:
@@ -292,9 +311,13 @@ Na integração com a API real:
 
 | Recurso | Aluno | Professor | Coordenação (`coord`) |
 | --- | --- | --- | --- |
-| Feed: publicar, responder, curtir, denunciar | ✔ (espaços em que participa) | ✔ | ✔ |
+| Feed: publicar, responder, curtir, salvar, denunciar | ✔ (espaços em que participa) | ✔ (curtir e salvar são por usuário) | ✔ |
+| Feed: publicar Aviso / Material / Publicação **com destino** (toda a escola, 9º A, 9º B, 8º A) | — | ✔ (só turmas dele e escola) | ✔ |
 | Aviso oficial | — | ✔ (turmas dele / escola) | ✔ |
 | Resposta oficial fixada | — | ✔ (automático em dúvidas) | ✔ |
+| Marcar resposta como útil | ✔ (autor da dúvida) | ✔ (resposta de aluno de dúvida das turmas dele) | ✔ |
+| Remover publicação de aluno pelo feed (com motivo) | — | ✔ (turmas dele) | ✔ |
+| Contestar a retenção de uma publicação | ✔ (só o autor, uma vez) | ✔ (só o autor) | — |
 | Chat de sala | ✔ (na sala em que está) | ✔ | ✔ + mensagens retidas |
 | Perfil (foto, bio, @), flashcards próprios | ✔ | ✔ (perfil) | ✔ |
 | Estatísticas | ✔ (as suas) | ✔ (turmas dele) | ✔ |
@@ -343,7 +366,7 @@ erDiagram
   SALA_MENSAGENS ||--o{ MODERACOES : "decisões (chat de sala)"
   PESSOAS ||--o{ FLASHCARDS_PROPRIOS : "cria"
   PESSOAS ||--o{ FLASHCARDS_CAIXAS : "Leitner"
-  PESSOAS ||--o{ LEMBRETES_PROFESSOR : "avisada (trava 12 h)"
+  PESSOAS ||--o{ LEMBRETES_PROFESSOR : "avisada (trava 6 h)"
   MISSOES ||--o{ MISSAO_PROGRESSO : "progresso por dia"
   PESSOAS ||--o{ MISSAO_PROGRESSO : "cumpre"
   TURMAS ||--o{ MISSOES_COLETIVAS : "maratona"
@@ -415,16 +438,19 @@ Nomes de endpoint = chaves de `ENDPOINTS` em `src/api/endpoints.ts`.
 | `acao.type` | Disparada por | Requisição | Observação |
 | --- | --- | --- | --- |
 | `premiar` | várias (`premiar()`) | — | O servidor calcula pontos/XP a partir do evento original. |
-| `curtir` | `curtir` | `PUT`/`DELETE /posts/{id}/curtida` | Estado desejado (lê o `curtido` depois da ação). |
-| `salvar` | `salvar` | `PUT`/`DELETE /posts/{id}/salvo` | Estado desejado. |
-| `publicar` | `publicar`, `publicarAviso` | `POST /posts` ou `POST /professor/avisos` | Aviso vai para o endpoint do professor. Material com arquivo real sobe antes por `POST /anexos` (`anexoId`). Triagem US06 no servidor. |
+| `curtir` | `curtir` | `PUT`/`DELETE /posts/{id}/curtida` | Estado desejado, **por pessoa** (`por`; o professor também curte). Só o gesto de quem está logado na aba sobe; o contador `curtidas` é único. |
+| `salvar` | `salvar` | `PUT`/`DELETE /posts/{id}/salvo` | Estado desejado, por pessoa (igual a `curtir`). |
+| `publicar` | `publicar`, `publicarAviso` | `POST /posts` ou `POST /professor/avisos` | Aviso vai para o endpoint do professor (`espaco` = destino: `escola`, `9A`, `9B` ou `8A`); material e publicação do professor usam `POST /posts` com o mesmo `espaco`. Arquivo ou imagem real sobe antes por `POST /anexos` (`anexoId`); `anexoDescricao` leva o texto alternativo da imagem. No aviso, `disciplina` (a do professor, mostrada no card), `tags` e `anexoDescricao` também seguem no corpo de `POST /professor/avisos`. Mensagem de sala retida pela triagem sobe como mensagem da sala, não como post. Triagem US06 no servidor. |
 | `responder` | `responder` | `POST /posts/{id}/respostas` | Só respostas da própria pessoa (as simuladas não sobem). |
-| `marcarUtil` | `marcarUtil` | `POST /posts/{id}/respostas/{respostaId}/util` | |
-| `respostaAjudou` | resposta marcada como útil | — | A recompensa é do servidor (`marcarUtil`); o efeito local não sobe. |
-| `denunciar` | `denunciar` | `POST /posts/{id}/denuncias` | Triagem (categoria/prioridade) no servidor. |
+| `marcarUtil` | `marcarUtil` (autor da dúvida), `marcarRespostaUtil` (professor) | `POST /posts/{id}/respostas/{respostaId}/util` ou, se quem marca é professor, `POST /professor/respostas/{respostaId}/util` `{ postId }` | +25 pontos e +25 XP ao autor da resposta, uma vez, não importa quem marcou. |
+| `respostaAjudou` | resposta marcada como útil | mesmo pedido de `marcarUtil` | A ação só difere por contar a resposta útil da aluna; a recompensa é do servidor. |
+| `denunciar` | `denunciar` | `POST /posts/{id}/denuncias` | Triagem (categoria/prioridade) no servidor. `semTriagem?` (opcional): `true` quando a IA do cliente estava indisponível (tela 73) — vale o motivo informado, prioridade média (`denuncias.triagem_indisponivel`). |
+| `contestar` | `contestarRetencao` | `POST /posts/{id}/contestacao` `{ texto? }` | Só o autor de publicação retida, uma vez; vai para a fila da coordenação (`posts.contestado_em`, `posts.contestacao_texto`). |
+| `confirmarEnvio` | monitor de envio (volta a conexão) | — | Só limpa o selo "Aguardando envio"; o post sobe pela regra `publicar`. |
 | `missaoProgresso` | `avancarMissao`, `concluirMissao` | `POST /missoes/{id}/progresso` | Só missões manuais; as automáticas o servidor deriva. |
-| `materialAberto` | `abrirMaterial` | `POST /posts/{id}/aberturas` | |
+| `materialAberto` | `abrirMaterial` | `POST /posts/{id}/aberturas` | Só a aluna (conta para missões); o professor abrindo ou baixando não registra nada. |
 | `registrarEstudo` | `registrarEstudo` | `POST /me/sequencia/registro` | Chave por dia (idempotente). |
+| `virarDia` | `virarDiaSeNecessario` (ao abrir e ao passar da meia-noite) | — | O cliente só mantém a tela coerente (missões diárias, sequência, congeladores). A virada de verdade é uma **tarefa do servidor** (§9.12). |
 | `simularAusencia` | botão da demo | — | Só demonstração. |
 | `recuperarSequencia` | `recuperarSequencia` | `POST /me/sequencia/recuperacao` | Débito de 200 pontos no servidor. |
 | `recomecarSequencia` | `recomecarSequencia` | `POST /me/sequencia/recomeco` | |
@@ -443,7 +469,7 @@ Nomes de endpoint = chaves de `ENDPOINTS` em `src/api/endpoints.ts`.
 | `alternarLembrete` | `alternarLembrete` | `PUT`/`DELETE /me/lembretes/{eventoId}` | Estado desejado. |
 | `definirLembretesAgendados` | `agendarLembrete…` | `PUT /me/lembretes-agendados` | Estado desejado: lista `{ eventoId, disparoEm }`. O servidor notifica na hora (job idempotente). |
 | `editarPerfil` | `editarPerfil` | `PUT /me` | Nome, @, bio, foto (dataURL JPEG ~256 px), selos. Estado desejado. |
-| `flashcards` | `salvarCarta`, `apagarCarta`, `iniciarRodada` | `PUT`/`DELETE /me/flashcards/{id}`, `POST /pratica/rodadas` | Cartas próprias; a caixa de Leitner é atualizada pelo servidor em `POST /pratica/respostas`. |
+| `flashcards` | `salvarCarta`, `apagarCarta`, `iniciarRodada` | `PUT`/`DELETE /me/flashcards/{id}`, `POST /pratica/rodadas` | Cartas próprias; a caixa de Leitner é atualizada pelo servidor em `POST /pratica/respostas`. A operação `premiada` (a recompensa do dia já foi dada) é controle local e não sobe. |
 | `selecionarEspaco` | `selecionarEspaco` | — | Preferência visual local. |
 | `resetar` | `resetarDemonstracao` | — | Só demonstração. |
 | `iniciarTimer` | `iniciarFoco` | `PUT /me/estudos/timer` | Opcional (continuar em outro aparelho). |
@@ -469,19 +495,21 @@ Nomes de endpoint = chaves de `ENDPOINTS` em `src/api/endpoints.ts`.
 | `criarAtividade` | `criarAtividade` | `POST /atividades` | Anexo real sobe antes por `POST /anexos` (`anexoId`). |
 | `atualizarEntrega` | `entregarAtividade`, `corrigirEntrega` | `POST /atividades/{id}/entrega` ou `PUT …/entregas/{alunoId}/correcao` | Entregas simuladas de colegas não sobem. Arquivo real da entrega sobe antes por `POST /anexos` (`anexoId`). |
 | `removerAtividade` | `excluirAtividade` | `DELETE /atividades/{id}` | |
-| `atribuir` | `atribuirPontos` | `POST /professor/atribuicoes` | Ignora as atribuições automáticas da correção (o servidor já credita na correção). |
+| `atribuir` | `atribuirPontos` | `POST /professor/atribuicoes` | Só o "Dar pontos" do professor sobe. Atribuições automáticas (`origem` "correcao" ou "util") não: o servidor já credita na correção e ao marcar a resposta útil. |
 | `moderarPost` | `moderarPost` | — | Efeito local; sobe junto com `registrarModeracao`. |
-| `registrarModeracao` | `moderarPost` | `PUT /moderacao/posts/{postId}` `{ decisao, observacao }` | `observacao` = motivo (obrigatório ao remover). O histórico (`GET /moderacao/historico`) é derivado da auditoria dessas decisões. |
+| `registrarModeracao` | `moderarPost`, `removerPublicacao` | `PUT /moderacao/posts/{postId}` `{ decisao, observacao, origem? }` ou, para mensagem de sala retida, `PUT /moderacao/salas/{salaId}/mensagens/{mensagemId}` | `observacao` = motivo (obrigatório ao remover). `origem` (opcional, padrão `fila`): `fila` (tela Moderação) ou `feed` (o professor removeu a publicação de um aluno pelo feed). O histórico (`GET /moderacao/historico`) é derivado da auditoria dessas decisões. |
 | `entregarCompra` | `entregarCompra` (professor) | `PUT /loja/compras/{id}/entrega` | Marca a troca como entregue (idempotente) e avisa a aluna. |
-| `lembrarAlunos` | `lembrarAlunos` (professor) | `POST /professor/lembretes` `{ alunoIds, em }` | Trava de 12 h por aluno no servidor. |
+| `lembrarAlunos` | `lembrarAlunos` (professor) | `POST /professor/lembretes` `{ alunoIds, em }` ou, com `atividadeId`, `POST /atividades/{id}/lembretes` | Trava de **6 h** por aluno no servidor (a do lembrete de atividade é por aluno e atividade). As chaves da trava do cliente (`ids`) nunca sobem. |
 | `notificar`, `notificarVarios` | `notificar()`, `notificarTodos()` | — | O servidor cria as notificações (uma por destinatário) ao processar a ação de origem; o sino local é só estado de UI até chegar `notificacao.nova`. |
 | `lerNotificacao` | `lerNotificacao` | `POST /notificacoes/{id}/leitura` | |
 | `lerTodasNotificacoes` | `lerTodasNotificacoes` | `POST /notificacoes/leitura` | |
 
-Endpoints que **não** saem de ações (chamados direto pelas telas ou só leitura): todo o grupo `auth`, os `GET`,
-`perfil.bootstrap`, `feed.buscar`, `feed.enviarAnexo`, `feed.excluir`, `desafios.*`, `campeonatos.editar`,
+Endpoints que **não** saem de ações (chamados direto pelas telas ou só leitura): todo o grupo `auth` (o login e o
+`POST /auth/sair` saem de `lib/auth.ts`), os `GET`, `perfil.bootstrap`, `feed.buscar`, `feed.enviarAnexo` (a fila
+chama no upload prévio), `feed.excluir`, `desafios.*`, `campeonatos.editar`,
 `campeonatos.abrirDuelo/responderDuelo/abrirRodada/responderRodada`, `atividades.editar`, `atividades.corrigirTodas`,
-`atividades.lembrarPendentes`, `moderacao.decidirMensagemSala`, `moderacao.historico`, `perfil.estatisticas`, `professor.estatisticas`, `missoes.flashcards`.
+`moderacao.mensagensSala`, `moderacao.historico`, `perfil.estatisticas`, `professor.estatisticas`, `missoes.flashcards`.
+Hoje as telas de duelo, desafio e rodada **não** os chamam (pendência do modo integrado, §11).
 
 
 ### 7.1 O que o backend precisa cobrir (funcionalidades atuais)
@@ -489,23 +517,70 @@ Endpoints que **não** saem de ações (chamados direto pelas telas ou só leitu
 | Área | O que o front faz | O que o servidor garante |
 | --- | --- | --- |
 | **Perfil** (`PUT /me`) | Foto recortada (dataURL JPEG ~256 px), bio (até 160), @ (3–24 `[a-z0-9._]`), nome/iniciais, selos exibidos. | `arroba` único (409); nome e iniciais passam a valer para todos (pessoas, rankings, feed); a foto vem no `GET /pessoas/{id}` conforme a privacidade. |
-| **Arquivos/upload** (`POST /anexos`, `GET /anexos/{id}`) | PDFs e imagens reais (até 10 MB) em materiais, atividades e entregas; abrir/baixar pelo `url` assinado. | Confere mime e tamanho, guarda em storage privado, URL assinada e curta; só quem pode ver o post/entrega abre o anexo. |
-| **Dúvidas e resposta oficial** | Dúvida em `POST /posts` (tipo `duvida`); resposta de professor em `POST /posts/{id}/respostas`. A tela `/professor/duvidas` lista `GET /posts?tipo=duvida` das suas turmas, com e sem resposta oficial. | Resposta de professor vira `oficial` (fixada no topo, 1 premiação por dúvida, a mesma regra no feed e na tela Dúvidas); o autor é notificado. |
+| **Arquivos/upload** (`POST /anexos`, `GET /anexos/{id}`) | Arquivos reais (até 10 MB) em materiais, avisos, atividades e entregas; só a **lista permitida** (`.pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx`), no clique e ao arrastar; imagem leva texto alternativo (`anexoDescricao`); abrir/baixar pelo `url` assinado. | Confere o **tipo real** (magic bytes) e o tamanho, recusa o resto com 415, guarda em storage privado, URL assinada e curta; serve com `nosniff` e `Content-Disposition: attachment` fora de PDF/imagem (§9.13); só quem pode ver o post/entrega abre o anexo. |
+| **Dúvidas e resposta oficial** | Dúvida em `POST /posts` (tipo `duvida`); resposta de professor em `POST /posts/{id}/respostas`, **no feed ou na tela Dúvidas** (`/professor/duvidas` lista `GET /posts?tipo=duvida` das suas turmas, com e sem resposta oficial). Só uma resposta **oficial** marca a dúvida como "Resolvida". | Resposta de professor vira `oficial` (fixada no topo, 1 premiação por dúvida — +20 pontos e +15 XP à aluna —, a mesma regra no feed e na tela Dúvidas); o autor é notificado; o professor nunca ganha pontos por responder. |
 | **Relatos** | `POST /relatos`; coordenação decide em `PUT /moderacao/relatos/{id}`. | Status `em análise` → `validado` ou `recusado`, com `decididoEm`/`decididoPor`; só `validado` credita +30 pontos (nunca XP); aluna notificada. |
-| **Moderação com motivo e histórico** | `PUT /moderacao/posts/{postId}` e `PUT /moderacao/salas/{salaId}/mensagens/{mensagemId}` com `observacao`; `GET /moderacao/historico` (até 300 itens na tela). | Remover exige motivo; decisão sempre de uma pessoa; auditoria imutável; o autor recebe o motivo; histórico inclui posts e chat de sala. |
+| **Moderação com motivo e histórico** | `PUT /moderacao/posts/{postId}` e `PUT /moderacao/salas/{salaId}/mensagens/{mensagemId}` com `observacao` e `origem` (`fila` ou `feed`); `GET /moderacao/historico` (até 300 itens na tela). | Remover exige motivo; decisão sempre de uma pessoa; auditoria imutável; o autor recebe o motivo; histórico inclui posts e chat de sala e diz de onde veio a decisão. |
+| **Contestação de retenção** | "Isso foi um engano? Conteste aqui" no aviso "Em revisão pela coordenação…" (só o autor): `POST /posts/{id}/contestacao`. | Uma contestação por publicação; vai para a fila da coordenação junto com o post; não muda o status (a decisão continua humana). |
 | **Trocas da loja e entrega** | `POST /loja/compras`; professor/secretaria marca `PUT /loja/compras/{id}/entrega`. | Compra atômica com voucher; `entregueEm`/`entregue_por`; só alunas das turmas do professor; aluna notificada. |
-| **Lembretes** | Evento do calendário: `PUT`/`DELETE /me/lembretes/{eventoId}` + `PUT /me/lembretes-agendados` (horário). Professor: `POST /professor/lembretes`. | O servidor dispara a notificação em `disparoEm` (job idempotente). Aviso do professor tem **trava de 12 h por aluno** (`lembretes_professor`); quem está na trava é ignorado e não conta em `avisados`. |
+| **Lembretes** | Evento do calendário: `PUT`/`DELETE /me/lembretes/{eventoId}` + `PUT /me/lembretes-agendados` (horário). Professor: `POST /professor/lembretes`. | O servidor dispara a notificação em `disparoEm` (job idempotente). Aviso do professor tem **trava de 6 h por aluno** (`lembretes_professor`); quem está na trava é ignorado e não conta em `avisados`. O front agenda três disparos por evento ativo: **72 h, 24 h e 2 h** antes (`antecedenciaMin` 4320, 1440 e 120). |
 | **Notificações por destinatário** | Sino com `GET /notificacoes`, leitura individual e geral. | Uma notificação por destinatário, criada pelo servidor ao processar a ação de origem (aviso, correção, atribuição, entrega, relato, troca, lembrete…); teto de 100 por pessoa no cliente. |
 | **Flashcards próprios e Leitner** | Cartas próprias em `PUT`/`DELETE /me/flashcards/{id}`; rodada em `POST /pratica/rodadas`; resposta em `POST /pratica/respostas`; estado em `GET /me/flashcards`. | Caixas 1–5 atualizadas no servidor (acerto sobe, erro volta à 1; intervalos 0/1/3/7/15 dias); só a dona vê as cartas. |
 | **Estatísticas** | Aluna: `GET /me/estatisticas`. Professor: `GET /professor/estatisticas` (+ relatório PDF/CSV gerado no cliente a partir deles). | Agregar no servidor a partir de `sessoes_estudo` (view `v_estudo_dia`), `entregas`, `lancamentos`, `missao_progresso`, duelos, medalhas e `sequencia_dias`. Aluno: foco por dia/disciplina/hora, mapa de calor, sequência, notas, duelos, medalhas. Professor: ativos, foco, notas e entregas no prazo, missões, ranking da turma (respeita anônimo e Sombra), campeonatos, moderação e alunos em risco. Só turmas do professor; cache de 1–5 min. |
 | **Sessão por aba** | Cada aba/janela tem o seu login (`sessionStorage`): dá para abrir aluna e professor lado a lado. | Tokens independentes por aba; o refresh cookie é por navegador, então use `POST /auth/ticket-tempo-real` para autenticar o WebSocket de cada aba. |
 | **Tempo real** | Salas, notificações, campeonatos e entregas (seção 8). Entre abas do mesmo navegador o front já sincroniza pelo evento `storage`. | Eventos com `id` único e entrega por destinatário; nada de mensagens privadas. |
 
+### 7.2 Feed do professor (`/feed` compartilhado)
+
+O feed é **uma rota só para os dois papéis** (`lib/guarda.ts`); não existe `/professor/feed`. A navegação do professor:
+barra inferior **Painel · Feed · Alunos · Atividades · Estatísticas** (Salas, Campeonatos, Dúvidas e Moderação ficam a um
+toque no Painel); barra lateral com os grupos **Turmas** (Painel, Alunos, Atividades, Estatísticas), **Engajamento**
+(Salas de estudo, Campeonatos) e **Comunidade** (Feed da escola, Dúvidas, Moderação). O título da página continua
+"Feed da escola".
+
+| O professor faz no feed | Chamada | O servidor garante |
+| --- | --- | --- |
+| Publica **Aviso** (até 280 caracteres) para Toda a escola, 9º A, 9º B ou 8º A | `POST /professor/avisos` `{ id, texto, espaco, disciplina?, anexoId? }` | Só turmas dele e a escola (senão 403); notifica os alunos do destino; sem pontos. |
+| Publica **Material** (arquivo real, disciplina obrigatória) ou **Publicação** (até 600 caracteres), com destino | `POST /posts` `{ tipo, espaco, disciplina, texto, tags, anexoId?, anexoDescricao? }` | Mesmo destino; triagem US06 também vale para professor; material exige arquivo. |
+| Responde uma dúvida de aluno | `POST /posts/{id}/respostas` | Vira resposta **oficial**; a dúvida fica "Resolvida"; +20 pontos e +15 XP à aluna, uma única vez. |
+| Marca a resposta de um aluno como **Útil** | `POST /professor/respostas/{respostaId}/util` `{ postId }` | +25 pontos e +25 XP ao autor da resposta, uma vez (a resposta não pode ser do professor). |
+| **Remove a publicação de um aluno** (motivo obrigatório) | `PUT /moderacao/posts/{postId}` `{ decisao: "removido", observacao, origem: "feed" }` | Some do feed nas duas contas; entra no "Histórico" da Moderação, contado em "Decisões" (`moderacoes.origem = 'feed'`); o autor recebe o motivo. |
+| Curte e salva | `PUT`/`DELETE /posts/{id}/curtida` e `/salvo` | Por usuário: o professor curtir não muda o "curtido" da aluna; o contador é único. |
+| Filtra: Tudo · Dúvidas · **Sem resposta** (dúvidas sem resposta oficial) · Materiais · Avisos · **Minhas turmas** | `GET /posts?tipo=…&espaco=…` | O professor vê a escola e os espaços das suas turmas; publicações retidas de outros e mensagens de sala nunca aparecem. |
+
+Visibilidade para a aluna: ela vê "Toda a escola" e o espaço da própria turma (e os clubes de que participa); um aviso
+para o 9º B ou o 8º A **não** aparece para a Ana (9º A). No celular o professor vê, no topo, "N publicações aguardando
+revisão · Abrir moderação"; a coluna lateral (a partir de 1280 px) mostra dúvidas sem resposta, aguardando moderação,
+próximas entregas e atalhos para publicar aviso e compartilhar material.
+
+### 7.3 Estados de erro e simulações
+
+O protótipo mostra o que acontece quando algo falha (telas 71 a 79 dos wireframes). Tudo isso é do **front**; o servidor
+só precisa respeitar os contratos acima.
+
+| Situação | O que a pessoa vê | Contrato com o servidor |
+| --- | --- | --- |
+| Sem conexão (`navigator.onLine`) | Faixa "Sem conexão. Tentando retransmitir…" no topo; publicações com o selo "Aguardando envio · salvo neste aparelho" | A fila reenvia em ordem (§3); `Post.aguardandoEnvio` é só do cliente. |
+| Falha ao carregar uma tela | Limite de erro: "Não foi possível carregar agora" com "Tentar novamente" e "Voltar ao Início" | — |
+| IA indisponível ou lenta | Faixa neutra "Sugestões indisponíveis no momento…"; a publicação segue (`semSugestoes`); a denúncia vai para a fila com o motivo escolhido | `lib/ia.ts` dá tempo-limite e plano B a cada função: **P01 2 s, P02 2,5 s, P04 2 s, P05 1 s, P07 3 s**. A denúncia leva `semTriagem: true` (`denuncias.triagem_indisponivel`). |
+| Busca por significado indisponível | Resultados por **palavra-chave** com o aviso "Resultados por palavra-chave. A busca por significado está indisponível agora." | `GET /busca` é a busca por significado; a por palavra é local. |
+| Publicação retida por engano | "Isso foi um engano? Conteste aqui" → "Contestação enviada em DD/MM · aguardando revisão" | `POST /posts/{id}/contestacao` (uma vez). |
+| Progresso não salvo | "Não conseguimos salvar seu progresso" com tentar de novo | `POST /missoes/{id}/progresso` e `POST /missoes/coletiva/contribuicoes`. |
+| Rejeição ou sessão expirada na fila | Aviso na tela (`cepi:sync-rejeitada`, `cepi:sessao-expirada`); o estado otimista ainda **não** é desfeito (pendência, §11) | `4xx` descarta; `401` pede `POST /auth/renovar`. |
+
+**Simulações de falha** (IA, busca, sem conexão, falha ao salvar, falha ao carregar) existem **só com o modo
+apresentação ligado** (Alt+Shift+D ou Perfil › Configurações) e se ativam em **Roteiro de apresentação › Simular falhas**.
+Ficam em `localStorage["cepi-simulacoes"]`; `simulacaoAtiva()` (`lib/simulacoes.ts`) devolve sempre `false` com o modo
+apresentação desligado e nunca lança exceção. Nada disso existe em produção.
+
 ---
 
 ## 8. Tempo real
 
-Cliente pronto em `src/api/realtime.ts` (ainda **não ligado**). Protocolo: um JSON por frame.
+Cliente em `src/api/realtime.ts`. **Ligado só no modo http** (`store/store.ts`): conecta quando há sessão
+(`cepi:sessao-iniciada` ou sessão já gravada ao abrir), desconecta ao sair (`cepi:sessao-encerrada`) e ouve
+`notificacao.nova` (entra com `despachar`, não volta ao servidor). Presença, chat e fase das salas, campeonatos e
+entregas **ainda não assinam** (pendência, §11, fase 6). No modo local nada conecta. Protocolo: um JSON por frame.
 
 ```text
 cliente → servidor   {"tipo":"autenticar","token":"<jwt ou ticket>"}      (1º frame; 5 s para autenticar)
@@ -570,19 +645,19 @@ O front simula estas regras no navegador, mas **só o servidor pode garanti-las*
 | Ciclo de foco completo | +10 | — | Só se o bloco cobriu o ciclo inteiro. |
 | Dia de sequência | 10, 15, 20, 25, 30, 40, 50 (dia 8+ = 50) | — | 1 vez por dia (America/Maceio). |
 | Material compartilhado | +10 | — | Sugestão: no máximo 3 por dia. |
-| Sua dúvida respondida por colega | +10 | — | Uma vez por dúvida. |
-| Sua dúvida recebeu resposta oficial | +20 | +15 | Como no front; vale revisar (XP por *receber* resposta é pouco "mérito"). |
+| Sua dúvida respondida por colega | +10 | — | Uma vez por dúvida, quando **um colega** responde (a resposta oficial paga à parte, abaixo). |
+| Sua dúvida recebeu resposta oficial | +20 | +15 | **Uma única vez** por dúvida (responder de novo não premia); vale revisar (XP por *receber* resposta é pouco "mérito"). |
 | Responder dúvida de colega | +15 | +10 | Limite diário; respostas curtas demais não contam. |
-| Sua resposta marcada útil | +25 | +25 | Só o autor da dúvida marca, uma vez por resposta. |
+| Sua resposta marcada útil | +25 | +25 | O autor da dúvida **ou um professor** (`POST /professor/respostas/{respostaId}/util`) marca; uma vez por resposta, não importa quem marcou primeiro. |
 | Missão diária concluída | conforme a missão | conforme a missão | Uma vez por dia. |
-| Rodada de flashcards concluída | +10 | +15 | Uma vez por rodada; limite diário. |
+| Rodada de flashcards concluída | +10 | +15 | Premia **1 vez por disciplina por dia**, com pelo menos 1 acerto; só cartas **vencidas** contam na missão e na Maratona. |
 | Missão coletiva concluída | `pontosTotal ÷ participantes` | `xp` da missão | Só quem contribuiu. |
 | Desafio personalizado | 5 por acerto | 10 por acerto | Corrigido no servidor; +4% de domínio por acerto. |
-| Duelo (campeonato oficial) | 2 por acerto | 6 por acerto | Amistoso: nada (9.9). |
-| Rodada de quiz (oficial) | 2 por acerto | 5 por acerto | Amistoso: nada. |
-| Campeão (oficial) | `premio.pontos` | `premio.xp` | Uma vez, no encerramento. |
+| Duelo (campeonato oficial) | 2 por acerto | 6 por acerto | O duelo é **consumido ao começar**: sair no meio vale derrota, com os acertos até ali. Amistoso: nada (9.9). |
+| Rodada de quiz (oficial) | 2 por acerto | 5 por acerto | Pontos corridos: **1 rodada por dia** por jogador. Amistoso: nada. |
+| Campeão (oficial) | `premio.pontos` | `premio.xp` | Uma vez, no encerramento. Se o líder tem 0 ponto não há campeão; empate se resolve por XP. |
 | Atividade corrigida | proporcional à nota (9.5) | proporcional à nota | |
-| Atribuição do professor | até 200 | até 100 | 9.6. |
+| Atribuição do professor | até 200 | até 100 | 9.6. O professor não ganha pontos por responder, publicar ou marcar útil. |
 | Relato validado | +30 | — | |
 | Compra na Loja | − custo | — | Atômica; saldo nunca negativo. |
 | Recuperar sequência | −200 | — | Em até 48 h da quebra. |
@@ -597,7 +672,8 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
   guardada (conta nas métricas) mas `minutosComPontos` para de crescer.
 - Blocos do mesmo aluno **não podem se sobrepor** no tempo (o banco bloqueia com `EXCLUDE`); nada no futuro.
 - `origem: "manual"` entra nas métricas, **não rende pontos e não entra no ranking de foco**.
-- `origem: "sala"`: só vale se a pessoa estava presente na sala durante o bloco.
+- `origem: "sala"`: só vale se a pessoa estava presente na sala durante o bloco, e conta **só desde a entrada** (quem
+  entra no meio de um ciclo não recebe o trecho que já tinha passado).
 - Bônus de ciclo só com `minutos` = duração do ciclo; sugestão: no máximo 8 ciclos bonificados por dia.
 - O servidor pode cruzar com o timer salvo (`PUT /me/estudos/timer`) para recusar blocos maiores que o tempo real
   decorrido desde o início do timer.
@@ -639,6 +715,16 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
 - Conteúdo sinalizado fica **invisível para os outros** (`emRevisao`/`retida`) até uma pessoa decidir.
 - Toda decisão registra `moderador_id` (nunca nulo), data e observação; o autor é notificado.
 - Uma denúncia por pessoa por post. A identidade de quem denunciou nunca vai para o autor denunciado.
+- **Sem falso positivo:** a triagem casa por **palavra ou expressão inteira** (nunca por pedaço de palavra) e só trata como
+  grave o que é xingamento dirigido a alguém. "Como excluir os valores negativos da inequação?", "Como funciona a
+  reciclagem do lixo urbano?" e "Como armazenar os dados?" não podem ser retidas; "Esse livro é um lixo, quem escolheu
+  não sabe nada." e "Cala a boca, idiota" têm de ser. A do cliente é `lib/moderacao.ts`; a do servidor deve seguir a
+  mesma regra e, na dúvida, **não reter** (a denúncia manual continua disponível).
+- **Contestação:** o autor de uma publicação retida pode contestar uma vez (`POST /posts/{id}/contestacao`). Isso só
+  leva o caso à fila da coordenação; o status não muda sem uma decisão humana. Se a triagem estiver fora do ar, a
+  denúncia entra na fila com o motivo informado (`semTriagem`, prioridade média).
+- **Remoção pelo feed:** o professor pode remover a publicação de um aluno pelo próprio feed; vale como decisão humana
+  (`origem: "feed"`), com motivo obrigatório, auditoria e notificação ao autor.
 
 ### 9.8 Quiz validado no servidor (anti-trapaça)
 
@@ -689,8 +775,8 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
 
 ### 9.11 Outras regras importantes
 
-- **Loja**: preço do servidor; compra atômica; cada item uma vez; voucher gerado no servidor e resgatado na
-  secretaria; só item comprado pode ser equipado (FK no banco).
+- **Loja**: preço do servidor; compra atômica; cada item uma vez, **exceto vouchers, que podem ser trocados de novo**;
+  voucher gerado no servidor e resgatado na secretaria; só item comprado pode ser equipado (FK no banco).
 - **Sequência**: 1 registro por dia no fuso America/Maceio; até 2 congeladores/mês; recuperação por 200 pontos em
   até 48 h.
 - **Chat de sala**: só quem está na sala lê/envia; limite de taxa (ex.: 30 mensagens/min); retidas não são entregues.
@@ -698,6 +784,42 @@ o índice único impede crédito duplo mesmo se o pedido chegar duas vezes.
 - **Campeonatos**: inscrição só em `inscricoes`, turma elegível e com vaga; só o organizador inicia/encerra;
   `iniciar`/`encerrar` idempotentes.
 - **Limites de taxa** em login, recuperação de senha, busca por código de sala, publicação e mensagens → `429`.
+
+### 9.12 Virada do dia, lembretes e fechamentos (tarefas do servidor)
+
+O cliente só simula estas rotinas para a tela ficar coerente enquanto está sem resposta do servidor; **quem decide é um
+job**, sempre no fuso `America/Maceio` e idempotente:
+
+- **Virada do dia** (00:00): fecha o dia anterior da sequência (estudou, congelado ou perdido, com os congeladores do
+  mês) e renova as **missões diárias**.
+- **Fechamento semanal** (domingo 23:59): fecha a **liga** (`ligas_semana`: sobe, mantém ou cai) e a **missão coletiva**
+  da turma (Maratona).
+- **Lembretes de evento**: o servidor notifica em cada `disparoEm` de `PUT /me/lembretes-agendados` — o front agenda
+  **72 h, 24 h e 2 h** antes de cada evento com lembrete ativo.
+- **Trava de lembrete do professor**: no máximo 1 aviso a cada **6 h** por aluno (`lembretes_professor`).
+- Limpeza de `idempotencia` (24 h) e retenção LGPD (9.10).
+
+### 9.13 Segurança de arquivos, planilhas e cabeçalhos
+
+- **Anexos — lista permitida**: `.pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx`, até 10 MB.
+  O **front** valida a extensão (e o `accept` do campo) ao escolher **e ao arrastar e soltar**, e guarda o tipo pela
+  extensão, nunca pelo `file.type` (`lib/arquivos.ts`). O **servidor** repete tudo: confere o **tipo real** (magic bytes),
+  recusa o resto com `415`, ignora o `Content-Type` e o nome enviados e **nunca serve um upload como página**: resposta
+  com o MIME conferido, `X-Content-Type-Options: nosniff` e `Content-Disposition: attachment` para tudo que não for PDF
+  ou imagem (um `.html` ou `.svg` aberto no navegador rodaria script na origem do portal).
+- **Abrir arquivo no front**: só PDF, imagem e texto abrem em outra aba (blob com MIME seguro e `opener` nulo); os demais
+  baixam. Arquivos antigos de tipo não permitido viram `application/octet-stream` e baixam.
+- **CSV (Excel/Sheets)**: célula de texto que começa com `=`, `+`, `-`, `@`, tab ou CR recebe `'` na frente
+  (`lib/exportar.ts`), para `=HYPERLINK(...)` não executar. Números e textos numéricos puros ficam como estão.
+- **Calendário `.ics`**: linhas dobradas por **octetos UTF-8** (no máximo 75), sem partir caractere acentuado nem emoji.
+- **PDF**: caracteres fora do Windows-1252 (emoji, setas, aspas tipográficas…) são transliterados quando comuns e
+  removidos no resto — nunca viram "?" (`lib/pdf.ts`).
+- **Cabeçalhos HTTP do front** (`next.config.ts`, todas as rotas): `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin`, `X-Frame-Options: DENY`,
+  `Permissions-Policy: camera=(), microphone=(), geolocation=()` e
+  `Content-Security-Policy: frame-ancestors 'none'; object-src 'none'; base-uri 'self'`. O `script-src` não é restrito
+  de propósito: o tema roda como script inline antes da pintura. Na API: CORS só para a origem exata, `Cache-Control:
+  no-store` nas respostas autenticadas e os mesmos `nosniff` e `attachment` nos arquivos.
 
 ---
 
@@ -761,9 +883,9 @@ Faça em ordem; cada fase termina com um teste visível no front.
 - [ ] `GET /me/bootstrap` montando o formato de `AppState` para quem está logado.
 - [ ] Front (`src/store/store.ts`): no modo `http`, depois do login, `despachar({ type: "resetar", estado })` com o
   bootstrap (mais `versao`, `criadoEm`, `espaco: "escola"`) em vez do seed local.
-- [ ] Front (`src/store/actions.ts`): trocar a constante `USUARIO_ID` (`"ana"`) por `obterEstado().usuario.id` em
-  `publicar` e `responder`. O sync só envia o que foi escrito por quem está
-  logado — com o id fixo, os posts de outro aluno seriam ignorados.
+- [x] Front (`src/store/actions.ts`): `atorId()` já usa o id da **sessão** da aba (`USUARIO_ID`, `"ana"`, só vale sem
+  sessão). O sync só envia o que foi escrito por quem está logado — por isso curtir e salvar levam `por` e o aluno que
+  vem do `bootstrap` precisa ter o mesmo `usuario.id` da sessão.
 - [ ] Teste: apague um post no banco, recarregue — ele some da tela.
 
 **Fase 3 — Escritas do dia a dia (sync)**
@@ -786,7 +908,8 @@ Faça em ordem; cada fase termina com um teste visível no front.
 **Fase 6 — Tempo real**
 
 - [ ] Gateway `/ws` com autenticação no 1º frame, presença no Redis, eventos da seção 8.
-- [ ] Front: ligar `tempoReal` nas salas, notificações e chat de sala (com `despachar`).
+- [x] Front: notificações em tempo real já ligadas no modo http (`store/store.ts`: conecta com a sessão, `notificacao.nova` → `despachar`).
+- [ ] Front: ligar `tempoReal` nas salas (presença, chat, fase), campeonatos e entregas (com `despachar`) — **pendência**.
 - [ ] Teste: duas janelas (aluno e professor) — a entrega aparece para o professor sem recarregar.
 
 **Fase 7 — Quiz e desafios no servidor**
@@ -798,18 +921,30 @@ Faça em ordem; cada fase termina com um teste visível no front.
 
 **Fase 8 — Desligar as simulações no modo `http`**
 
-- [ ] `simularRespostasDaDuvida`, resposta automática no `responder` (`respostaAjudou`), entregas simuladas em `criarAtividade`, `simularAtividadeSala`, membros simulados em
-  `criarSala`, `validarRelato` agendado em `enviarRelato`, adversário em `jogarDuelo`, colegas em
-  `jogarRodadaQuiz`, `simularAusencia` e `adiantarFoco` (botões de demo).
-- [ ] Sugestão: um `if (MODO_API === "mock")` em volta de cada `agendar(...)` de simulação.
+- [ ] Simulações que ainda existem e não podem rodar com servidor: `simularAusencia` (Missões), `adiantarFoco` e `simularSaida`
+  (Estudos), os atalhos "(demonstração)" de Missões e da Maratona (`MissaoItem`, `MissaoColetivaCard`), o adversário
+  simulado em `jogarDuelo` e os colegas em `jogarRodadaQuiz`, a presença simulada das salas (`SalaEstudo.membros`) e
+  "Ver como professor/aluna". As simulações de falha já só existem com o modo apresentação (§7.3).
+- [ ] Sugestão: esconder esses atalhos e simulações quando `MODO_API === "http"`.
 
 **Fase 9 — Segurança, LGPD e produção**
 
 - [ ] API validando o JWT em todo endpoint; token fora do `sessionStorage` (cookie httpOnly) e, se quiser, `proxy.ts` otimista (seção 5).
-- [ ] Ouvir `cepi:sync-rejeitada` (toast) e `cepi:sessao-expirada` (renovar ou mandar para o login).
-- [ ] Chamar `limparFila()` de `src/api/sync.ts` no `sair()` se o computador for compartilhado.
+- [ ] `cepi:sync-rejeitada` e `cepi:sessao-expirada` já viram aviso na tela; falta **desfazer o estado otimista** do que o servidor recusou (recarregar o trecho afetado com um `GET`/`bootstrap`) e chamar `POST /auth/renovar` na expiração.
+- [x] `sair()` já apaga só a fila de quem saiu (evento `cepi:sessao-encerrada`) e revoga o refresh token (`POST /auth/sair`).
 - [ ] Limites de taxa, backups, jobs de retenção, termo de consentimento, política de privacidade.
 - [ ] `npx @redocly/cli lint docs/api/openapi.yaml` no CI para o contrato não quebrar.
+- [ ] Arquivos: conferir o tipo real e servir com `nosniff` e `attachment` (§9.13); cabeçalhos HTTP também na API.
+
+**Pendências documentadas do modo integrado** (o que o front ainda não faz com a API ligada)
+
+1. **Leitura pela API**: `perfil.bootstrap`, `feed.listar`, rankings e demais `GET` não são chamados; o app lê do estado
+   local (fase 2).
+2. **Duelo, desafio e rodada**: as telas ainda não chamam `campeonatos.abrirDuelo/responderDuelo/abrirRodada/responderRodada`
+   nem `desafios.*`; jogam no navegador e o gabarito continua no pacote (fase 7).
+3. **Recusa do servidor**: o aviso aparece, mas o estado otimista não é revertido (fase 9).
+4. **Tempo real**: só notificações; salas, campeonatos e entregas ainda não assinam (fase 6).
+5. **Simulações do cliente** (colegas, respostas, entregas) seguem ativas no modo http (fase 8).
 
 ---
 
@@ -837,7 +972,10 @@ para o front funcionar igual antes e depois da integração. **Nunca** use dados
 **Caminho A — rápido (para ver funcionando hoje):** rode o front em modo mock, abra o DevTools → Console e execute
 `copy(localStorage.getItem("cepi-portal-do-aluno"))`. Você terá o `AppState` inteiro em JSON (posts, salas,
 campeonatos…); um script do backend lê esse JSON e faz os `INSERT`s pela tabela acima. As listas fixas (loja,
-medalhas, questões, flashcards, eventos) não estão no estado: copie de `src/data`.
+medalhas, questões, flashcards, eventos) não estão no estado: copie de `src/data`. Várias abas escrevem no mesmo
+estado: cada gravação também troca `localStorage["cepi-portal-do-aluno-rev"]` (um texto curto). Antes de cada ação a
+aba confere essa revisão e, se outra aba gravou, relê o estado salvo e aplica a ação sobre ele (`src/store/store.ts`),
+sem `JSON.parse` do estado quando nada mudou.
 
 **Caminho B — reprodutível (recomendado):** um script de seed no backend que importa os próprios arquivos de
 `src/data` (são TypeScript puro, sem React). Copie `src/data`, `src/lib/aleatorio.ts` e `src/store/types.ts` para o
@@ -910,6 +1048,7 @@ que nada se perde, que a ordem é respeitada e que reenvios não duplicam nada (
 TypeScript aponta tudo que quebrou) e a tabela da seção 7. O `sync.ts` usa o catálogo, então um corpo errado não
 compila.
 
-**E se o servidor recusar algo que a tela já mostrou?** Hoje a fila descarta e dispara `cepi:sync-rejeitada`.
-O passo seguinte (depois do bootstrap) é, ao receber esse evento, recarregar o trecho do estado afetado com um
-`GET` (ou o `bootstrap` inteiro) — assim a tela volta a refletir a verdade do servidor.
+**E se o servidor recusar algo que a tela já mostrou?** Hoje a fila descarta, dispara `cepi:sync-rejeitada` e a tela
+mostra um aviso, mas o estado otimista **não é desfeito** (pendência). O passo seguinte (depois do bootstrap) é, ao
+receber esse evento, recarregar o trecho do estado afetado com um `GET` (ou o `bootstrap` inteiro) — assim a tela volta
+a refletir a verdade do servidor.

@@ -2,7 +2,12 @@
  * Tempo real (WebSocket): presença, chat e ciclo das salas coletivas, notificações, campeonatos,
  * entregas de atividades e chat das salas coletivas.
  *
- * AINDA NÃO ESTÁ LIGADO AO APP — no modo local a sincronização entre janelas usa o evento `storage` do navegador. Para ligar (docs/BACKEND.md § Tempo real):
+ * LIGADO SÓ NO MODO HTTP (com `NEXT_PUBLIC_API_URL`): `store/store.ts` chama `tempoReal.conectar()` quando há sessão
+ * (`cepi:sessao-iniciada` ou sessão já gravada ao abrir), `desconectar()` ao sair (`cepi:sessao-encerrada`) e ouve
+ * `notificacao.nova` → `despachar({ type: "notificar", … })`. No modo local `WS_URL` é vazio e nada conecta — a
+ * sincronização entre janelas usa o evento `storage` do navegador. Ainda NÃO assinam: presença/chat/fase das salas
+ * (`assinarSala`), `campeonato.atualizado` e `atividade.entregue` (pendência: as telas leem o estado local;
+ * docs/BACKEND.md § Tempo real). Exemplo de uso completo:
  *
  *   tempoReal.conectar();                       // depois do login
  *   const sair = tempoReal.assinarSala(id, {

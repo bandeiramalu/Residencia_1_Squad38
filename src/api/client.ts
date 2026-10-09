@@ -22,13 +22,27 @@ export class ErroApi extends Error {
   }
 }
 
+/**
+ * Chave da sessão no `sessionStorage` (uma por aba). É gravada por `lib/auth.ts`; fica aqui para o cliente
+ * ler o token sem importar `lib/auth` (evita ciclo) e para os dois nunca divergirem.
+ */
+export const CHAVE_SESSAO = "cepi-sessao";
+
+/** Token da aba quando o `sessionStorage` não está disponível (a sessão dura até recarregar). Gravado por `lib/auth.ts`. */
+let tokenEmMemoria: string | undefined;
+
+export function definirTokenEmMemoria(token: string | undefined) {
+  tokenEmMemoria = token;
+}
+
 function lerToken() {
   try {
-    const bruto = localStorage.getItem("cepi-sessao");
-    return bruto ? (JSON.parse(bruto) as { token?: string }).token : undefined;
+    const bruto = sessionStorage.getItem(CHAVE_SESSAO);
+    if (bruto) return (JSON.parse(bruto) as { token?: string }).token;
   } catch {
-    return undefined;
+    /* sem acesso ao armazenamento: vale o token em memória */
   }
+  return tokenEmMemoria;
 }
 
 /**

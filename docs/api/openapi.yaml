@@ -478,7 +478,10 @@ paths:
       tags: [Feed]
       operationId: feedListar
       summary: Feed paginado
-      description: Só espaços de que a pessoa participa. Posts em revisão só aparecem para o autor e a moderação.
+      description: >-
+        Só espaços de que a pessoa participa: a aluna vê a escola, o espaço da própria turma e os clubes em que está;
+        o professor vê a escola e os espaços das suas turmas (`9A`, `9B`, `8A`). Posts em revisão só aparecem para o autor e a moderação;
+        mensagens de chat de sala retidas nunca aparecem no feed. `curtido` e `salvo` são do ponto de vista de quem pediu.
       x-acesso: logado
       parameters:
         - { name: espaco, in: query, schema: { $ref: '#/components/schemas/EspacoId' } }
@@ -501,7 +504,8 @@ paths:
       description: >-
         A triagem automática (US06) roda no servidor: se sinalizar, o post volta com `emRevisao: true` e só
         aparece para os outros depois da decisão humana. Material exige `anexoId` (POST /anexos antes).
-        Primeiro material do dia rende +10 pontos (nunca XP).
+        Primeiro material do dia rende +10 pontos (nunca XP). O professor publica Material e Publicação aqui com `espaco`
+        = destino (`escola`, `9A`, `9B` ou `8A`, só turmas dele) e não ganha pontos; o Aviso dele usa `POST /professor/avisos`.
       x-acesso: logado
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -630,13 +634,42 @@ paths:
       tags: [Feed]
       operationId: feedMarcarUtil
       summary: Marcar resposta como útil
-      description: Só o autor da dúvida; uma vez por resposta. O autor da resposta ganha +25 pontos e +25 XP.
+      description: >-
+        Só o autor da dúvida; uma vez por resposta. O autor da resposta ganha +25 pontos e +25 XP.
+        O professor reconhece a resposta de um aluno por `POST /professor/respostas/{respostaId}/util`.
       x-acesso: logado
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204': { description: Marcada. }
         '403': { $ref: '#/components/responses/Erro' }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /posts/{id}/contestacao:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Feed]
+      operationId: feedContestar
+      summary: Contestar a retenção de uma publicação ("Isso foi um engano?")
+      description: >-
+        Só o autor de uma publicação retida pela triagem (`emRevisao`), uma vez por publicação (repetir devolve 409).
+        A contestação vai para a fila da coordenação, junto com a publicação, e não muda o status: quem decide
+        continua sendo uma pessoa (`PUT /moderacao/posts/{postId}`). O servidor grava `posts.contestado_em` e
+        `posts.contestacao_texto` e o front mostra "Contestação enviada em DD/MM · aguardando revisão".
+      x-acesso: logado
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ContestacaoCorpo' }
+      responses:
+        '204': { description: Contestação registrada. }
+        '403': { $ref: '#/components/responses/Erro' }
+        '404': { $ref: '#/components/responses/Erro' }
+        '409': { $ref: '#/components/responses/Erro' }
         default: { $ref: '#/components/responses/Erro' }
 
   /posts/{id}/curtida:
@@ -756,8 +789,13 @@ paths:
     post:
       tags: [Feed]
       operationId: feedEnviarAnexo
-      summary: Enviar arquivo (PDF ou imagem, até 10 MB)
-      description: O servidor confere o tipo real do arquivo (não só a extensão) e guarda no storage de objetos.
+      summary: Enviar arquivo (PDF, imagem ou documento, até 10 MB)
+      description: >-
+        Lista permitida: `.pdf .png .jpg .jpeg .heic .webp .txt .doc .docx .odt .ppt .pptx .xls .xlsx`.
+        O servidor confere o tipo real do arquivo (assinatura/magic bytes, não a extensão nem o `Content-Type` enviado),
+        recusa o resto com 415 (`.html`, `.svg`, `.exe`, `.js`…), nunca confia no nome, guarda em storage privado
+        e serve o arquivo com o MIME conferido, `X-Content-Type-Options: nosniff` e `Content-Disposition: attachment`
+        para tudo que não for PDF ou imagem. O front aplica a mesma lista antes de enviar (também ao arrastar e soltar).
       x-acesso: logado
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -1987,7 +2025,7 @@ paths:
       tags: [Atividades]
       operationId: atividadesLembrarPendentes
       summary: Notificar quem não entregou
-      description: No máximo uma vez a cada 12 h por atividade.
+      description: Trava de 6 h por aluno nessa atividade (quem já foi avisado nesse prazo é ignorado).
       x-acesso: professor
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2111,6 +2149,11 @@ paths:
       tags: [Professor]
       operationId: professorPublicarAviso
       summary: Aviso oficial no feed
+      description: >-
+        `espaco` é o destino: `escola` (toda a escola) ou uma turma do professor (`9A`, `9B`, `8A`); outra turma devolve 403.
+        `disciplina` é a do professor, mostrada no card do aviso (sem ela o servidor usa a do cadastro dele).
+        Aviso (até 280 caracteres no front) aceita arquivo ou imagem (`anexoId`). Notifica os alunos do destino.
+        Material e publicação do professor usam `POST /posts` (`tipo` material/publicacao) com o mesmo `espaco`.
       x-acesso: professor
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2127,12 +2170,40 @@ paths:
               schema: { $ref: '#/components/schemas/Post' }
         default: { $ref: '#/components/responses/Erro' }
 
+  /professor/respostas/{respostaId}/util:
+    parameters:
+      - name: respostaId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Professor]
+      operationId: professorMarcarUtil
+      summary: Reconhecer a resposta de um aluno como útil
+      description: >-
+        O professor marca como útil a resposta de um aluno numa dúvida de uma das suas turmas (a resposta não pode ser
+        dele). O servidor marca a resposta e credita +25 pontos e +25 XP ao autor dela, uma única vez
+        (`lancamentos.referencia = resposta_util:{respostaId}`). Repetir é idempotente (204 sem novo crédito).
+      x-acesso: professor
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UtilProfessorCorpo' }
+      responses:
+        '204': { description: Resposta marcada como útil. }
+        '403': { $ref: '#/components/responses/Erro' }
+        '404': { $ref: '#/components/responses/Erro' }
+        default: { $ref: '#/components/responses/Erro' }
+
   /professor/lembretes:
     post:
       tags: [Professor]
       operationId: professorLembrarAlunos
       summary: Avisar alunos que estão sem estudar
-      description: Trava de 12 h por aluno (quem já foi avisado nesse prazo é ignorado). Só alunos das turmas do professor.
+      description: Trava de 6 h por aluno (quem já foi avisado nesse prazo é ignorado e não conta em `avisados`). Só alunos das turmas do professor.
       x-acesso: professor
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2452,7 +2523,10 @@ components:
       enum: [Matemática, Biologia, História, Português, Química, Física, Geografia, Inglês]
     EspacoId:
       type: string
-      enum: [escola, 9A, robotica, bilingue]
+      enum: [escola, 9A, 9B, 8A, robotica, bilingue]
+      description: >-
+        `9B` e `8A` existem como espaço de turma só para o professor publicar para elas (aviso, material, publicação);
+        a aluna vê a timeline do seu espaço (`9A`, ou `robotica`/`bilingue` se participa) e "escola".
     Papel:
       type: string
       enum: [aluno, professor, escola]
@@ -2638,6 +2712,7 @@ components:
         nome: { type: string }
         paginas: { type: integer, minimum: 1 }
         tamanho: { type: string, examples: [96 KB] }
+        descricao: { type: string, maxLength: 200, description: Texto alternativo de imagem enviada (acessibilidade; gravado em `anexos.descricao`). }
     AnexoDTO:
       allOf:
         - $ref: '#/components/schemas/Anexo'
@@ -2646,7 +2721,23 @@ components:
           properties:
             id: { type: string }
             url: { type: string, format: uri, description: URL assinada e temporária. }
-            mime: { type: string, enum: [application/pdf, image/png, image/jpeg, image/webp] }
+            mime:
+              type: string
+              description: Tipo conferido pelo servidor (nunca o informado pelo cliente).
+              enum:
+                - application/pdf
+                - image/png
+                - image/jpeg
+                - image/webp
+                - image/heic
+                - text/plain
+                - application/msword
+                - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+                - application/vnd.oasis.opendocument.text
+                - application/vnd.ms-powerpoint
+                - application/vnd.openxmlformats-officedocument.presentationml.presentation
+                - application/vnd.ms-excel
+                - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
     Resposta:
       type: object
       required: [id, autorId, texto, criadoEm, uteis, util]
@@ -2668,6 +2759,7 @@ components:
         categoriaIA: { type: string }
         prioridade: { $ref: '#/components/schemas/Prioridade' }
         criadoEm: { $ref: '#/components/schemas/Instante' }
+        semTriagem: { type: boolean, description: A triagem estava indisponível quando a denúncia foi feita (`denuncias.triagem_indisponivel`) — vale o motivo informado, prioridade média. }
     Post:
       type: object
       required: [id, tipo, autorId, espaco, texto, tags, criadoEm, curtidas, curtido, salvo, respostas]
@@ -2682,11 +2774,18 @@ components:
         anexo: { $ref: '#/components/schemas/Anexo' }
         criadoEm: { $ref: '#/components/schemas/Instante' }
         curtidas: { type: integer, minimum: 0 }
-        curtido: { type: boolean, description: Do ponto de vista de quem pediu. }
+        curtido: { type: boolean, description: Do ponto de vista de quem pediu (curtir e salvar são por usuário; o professor também curte e salva). }
         salvo: { type: boolean, description: Do ponto de vista de quem pediu. }
         respostas: { type: array, items: { $ref: '#/components/schemas/Resposta' } }
         emRevisao: { type: boolean, description: US06 — aguardando revisão humana. }
         denuncia: { $ref: '#/components/schemas/Denuncia' }
+        contestacao:
+          type: object
+          description: O autor contestou a retenção (`posts.contestado_em` e `posts.contestacao_texto`).
+          required: [em]
+          properties:
+            em: { $ref: '#/components/schemas/Instante' }
+            texto: { type: string, maxLength: 300 }
     PaginaPost:
       type: object
       required: [itens, proximoCursor]
@@ -2704,7 +2803,8 @@ components:
         disciplina: { $ref: '#/components/schemas/Disciplina' }
         texto: { type: string, minLength: 1, maxLength: 5000 }
         tags: { type: array, maxItems: 10, items: { type: string, maxLength: 30 } }
-        anexoId: { type: string }
+        anexoId: { type: string, description: Arquivo enviado antes em `POST /anexos` (material ou imagem). }
+        anexoDescricao: { type: string, maxLength: 200, description: Texto alternativo da imagem anexada (gravado em `anexos.descricao`). }
     NovaRespostaCorpo:
       type: object
       required: [id, texto]
@@ -2726,6 +2826,7 @@ components:
         motivo: { type: string, enum: [Bullying, Ofensa, Assédio, Conteúdo inadequado, Spam ou golpe, Outro] }
         descricao: { type: string, maxLength: 1000 }
         evidencia: { type: boolean }
+        semTriagem: { type: boolean, description: O cliente não conseguiu triar (IA indisponível); o servidor guarda o motivo informado e triagem própria quando puder. }
     DenunciaRecebida:
       type: object
       required: [categoriaIA, prioridade, protocolo]
@@ -2748,6 +2849,21 @@ components:
         id: { type: string, maxLength: 64 }
         texto: { type: string, minLength: 1, maxLength: 2000 }
         espaco: { $ref: '#/components/schemas/EspacoId' }
+        disciplina: { $ref: '#/components/schemas/Disciplina' }
+        anexoId: { type: string, description: Arquivo ou imagem enviado antes em `POST /anexos`. }
+        tags: { type: array, maxItems: 10, items: { type: string, maxLength: 30 } }
+        anexoDescricao: { type: string, maxLength: 200, description: Texto alternativo da imagem anexada (gravado em `anexos.descricao`). }
+    ContestacaoCorpo:
+      type: object
+      additionalProperties: false
+      properties:
+        texto: { type: string, maxLength: 300, description: Por que a retenção foi um engano (opcional). }
+    UtilProfessorCorpo:
+      type: object
+      required: [postId]
+      additionalProperties: false
+      properties:
+        postId: { type: string, description: Dúvida a que a resposta pertence. }
 
     # ── Missões, sequência, prática ──
     Missao:
@@ -3375,12 +3491,14 @@ components:
         motivo: { type: string, minLength: 3, maxLength: 200 }
     ResumoTurma:
       type: object
-      required: [total, ativosHoje, mediaMinutosSemana, mediaDominio, emRisco, xpSemanaTotal, minutos7d]
+      required: [total, ativosHoje, mediaMinutosSemana, mediaDominio, minutosMedios, dominioMedio, emRisco, xpSemanaTotal, minutos7d]
       properties:
         total: { type: integer, minimum: 0 }
         ativosHoje: { type: integer, minimum: 0 }
         mediaMinutosSemana: { type: integer, minimum: 0 }
         mediaDominio: { type: integer, minimum: 0, maximum: 100 }
+        minutosMedios: { type: integer, minimum: 0, description: Estudo por aluno (média de minutos dos últimos 7 dias; mesmo valor de mediaMinutosSemana, nome do Painel). }
+        dominioMedio: { type: integer, minimum: 0, maximum: 100, description: Domínio médio da turma (mesmo valor de mediaDominio, nome do Painel). }
         emRisco: { type: integer, minimum: 0 }
         xpSemanaTotal: { type: integer, minimum: 0 }
         minutos7d: { type: array, minItems: 7, maxItems: 7, items: { type: integer, minimum: 0 } }
@@ -3435,9 +3553,12 @@ components:
     # ── Moderação ──
     ItemModeracao:
       type: object
-      required: [post, origem, motivo, prioridade, denuncias, criadoEm]
+      required: [origem, motivo, prioridade, denuncias, criadoEm]
       properties:
+        tipo: { type: string, enum: [post, mensagem_sala], default: post }
         post: { $ref: '#/components/schemas/Post' }
+        mensagem: { $ref: '#/components/schemas/MensagemSala' }
+        salaId: { type: string, description: Presente quando `tipo` é `mensagem_sala`. }
         origem: { type: string, enum: [triagem, denuncia] }
         motivo: { type: string }
         prioridade: { $ref: '#/components/schemas/Prioridade' }
@@ -3450,6 +3571,7 @@ components:
       properties:
         decisao: { $ref: '#/components/schemas/DecisaoModeracao' }
         observacao: { type: string, maxLength: 1000 }
+        origem: { type: string, enum: [fila, feed], default: fila, description: "De onde veio a decisão: `fila` = tela Moderação; `feed` = o professor removeu a publicação de um aluno pelo próprio feed (gravado em `moderacoes.origem`)." }
     MensagemSalaRetida:
       type: object
       required: [salaId, mensagem, motivo]
@@ -3470,6 +3592,8 @@ components:
         motivo: { type: string, description: Obrigatório quando a decisão é `removido`. }
         autorId: { type: string }
         texto: { type: string, description: Texto do conteúdo (o removido sai do feed; o histórico continua legível). }
+        origem: { type: string, enum: [fila, feed], description: Onde a decisão foi tomada (fila de moderação ou feed). }
+        salaId: { type: string, description: Presente quando `tipo` é `mensagem_sala`. }
     PaginaRegistroModeracao:
       type: object
       required: [itens, proximoCursor]
