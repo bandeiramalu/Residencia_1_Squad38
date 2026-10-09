@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto, Campo } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
+import { useRascunho } from "@/components/ui/rascunhos";
 import { Sheet } from "@/components/ui/Sheet";
 import { ESPACOS } from "@/data/escola";
 import { cn } from "@/lib/cn";
@@ -23,13 +24,14 @@ export function AvisoSheet({ aberto, onFechar }: { aberto: boolean; onFechar: ()
 }
 
 function Formulario({ onFechar }: { onFechar: () => void }) {
-  const [texto, setTexto] = useState("");
+  const [texto, setTexto, limparRascunho] = useRascunho("aviso");
   const [espaco, setEspaco] = useState<EspacoId>("9A");
   const valido = texto.trim().length >= 5;
 
   const publicar = () => {
     if (!valido) return;
     publicarAviso(texto, espaco);
+    limparRascunho();
     onFechar();
   };
 

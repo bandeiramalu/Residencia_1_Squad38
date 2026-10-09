@@ -6,6 +6,7 @@ import { DISCIPLINAS, type Disciplina } from "@/data/escola";
 import { TURMAS_DO_PROFESSOR } from "@/data/professor";
 import { hashTexto } from "@/lib/aleatorio";
 import { DIA, inicioDaSemana, inicioDoDia, type CelulaMapa } from "@/lib/estudos";
+import { somarDias } from "@/lib/tempo";
 import type { AlunoPainel } from "@/lib/turmas";
 
 export type Periodo = "7" | "30" | "bim";
@@ -41,8 +42,21 @@ export function fatiaDisciplina(alunoId: string, disc: Disciplina | "todas") {
   return pesos[DISCIPLINAS.indexOf(disc)] / pesos.reduce((s, p) => s + p, 0);
 }
 
-/** Minutos de estudo do aluno `diasAtras` dias atrás (0 = hoje). Os 7 últimos dias são os dados reais. */
-export function minutosDia(a: AlunoPainel, diasAtras: number, disc: Disciplina | "todas") {
+/** Aluna ao vivo: soma as sessões reais do dia (e da disciplina, se houver filtro). */
+function minutosReais(a: AlunoPainel, diasAtras: number, disc: Disciplina | "todas", agora: number) {
+  const ini = somarDias(inicioDoDia(agora), -diasAtras);
+  const fim = somarDias(ini, 1);
+  let total = 0;
+  for (const s of a.sessoes ?? []) if (s.inicio >= ini && s.inicio < fim && (disc === "todas" || s.disciplina === disc)) total += s.minutos;
+  return total;
+}
+
+/**
+ * Minutos de estudo do aluno `diasAtras` dias atrás (0 = hoje). Para a aluna ao vivo vêm sempre das sessões reais;
+ * para os colegas, os 7 últimos dias são os dados de exemplo e os mais antigos uma derivação determinística.
+ */
+export function minutosDia(a: AlunoPainel, diasAtras: number, disc: Disciplina | "todas", agora: number) {
+  if (a.sessoes) return minutosReais(a, diasAtras, disc, agora);
   const f = fatiaDisciplina(a.id, disc);
   if (diasAtras < 7) return Math.round((a.minutos7d[6 - diasAtras] ?? 0) * f);
   const media = a.minutosSemana / 7;
@@ -67,7 +81,7 @@ export function serie(alunos: AlunoPainel[], dias: number, disc: Disciplina | "t
     let minutos = 0;
     for (const d of faixa) {
       for (const a of alunos) {
-        const m = minutosDia(a, d, disc);
+        const m = minutosDia(a, d, disc, agora);
         if (m > 0) ativos += 1;
         minutos += m;
       }
@@ -89,11 +103,31 @@ export function mapa(alunos: AlunoPainel[], semanas: number, disc: Disciplina | 
       const dia = new Date(primeira).setDate(new Date(primeira).getDate() + w * 7 + d);
       const futuro = dia > hoje;
       const atras = Math.round((hoje - dia) / DIA);
-      const media = futuro ? 0 : Math.round(alunos.reduce((s, a) => s + minutosDia(a, atras, disc), 0) / n);
+      const media = futuro ? 0 : Math.round(alunos.reduce((s, a) => s + minutosDia(a, atras, disc, agora), 0) / n);
       const nivel = (media === 0 ? 0 : media < 10 ? 1 : media < 20 ? 2 : media < 35 ? 3 : 4) as CelulaMapa["nivel"];
       return { dia, minutos: media, nivel, futuro };
     }),
   );
+}
+
+/**
+ * XP ganho no período (`dias`). Aluna ao vivo: o que ela realmente ganhou (nunca passa do XP total do perfil).
+ * Colegas: derivado do XP da semana, limitado ao total do aluno. Com filtro de disciplina, só a fatia dela.
+ */
+export function xpNoPeriodo(a: AlunoPainel, dias: number, disc: Disciplina | "todas", agora: number) {
+  if (a.xpDiario90) {
+    const total = a.xpDiario90.slice(-dias).reduce((s, x) => s + x, 0);
+    if (disc === "todas") return Math.min(a.xp, total);
+    let todas = 0;
+    let daDisc = 0;
+    for (let d = 0; d < dias; d++) {
+      todas += minutosReais(a, d, "todas", agora);
+      daDisc += minutosReais(a, d, disc, agora);
+    }
+    return Math.min(a.xp, Math.round(todas ? (total * daDisc) / todas : 0));
+  }
+  const total = Math.min(a.xp, Math.round((a.xpSemana * dias) / 7));
+  return disc === "todas" ? total : Math.round(total * fatiaDisciplina(a.id, disc));
 }
 
 /** Curva de estudo por hora (6h–23h), com pico à tarde e à noite. */

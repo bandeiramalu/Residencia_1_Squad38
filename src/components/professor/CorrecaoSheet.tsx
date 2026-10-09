@@ -10,6 +10,7 @@ import { abrirAnexoDe, baixarAnexo, baixarAnexoDe } from "@/lib/materiais";
 import { Button } from "@/components/ui/Button";
 import { AreaTexto } from "@/components/ui/Campo";
 import { RodapeSheet } from "@/components/ui/RodapeSheet";
+import { useRascunho } from "@/components/ui/rascunhos";
 import { Sheet } from "@/components/ui/Sheet";
 import { useAgora } from "@/hooks/useAgora";
 import { cn } from "@/lib/cn";
@@ -173,7 +174,7 @@ function FormCorrecao({
   const agora = useAgora(30_000);
   const pessoas = useSeletor((e) => e.pessoas);
   const [nota, setNota] = useState(9);
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback, limparFeedback] = useRascunho(`correcao:${atividade.id}:${alunoId}`);
   const entrega = atividade.entregas.find((e) => e.alunoId === alunoId);
   const aluno = pessoas[alunoId];
   const nome = aluno?.nome ?? "Aluno";
@@ -184,6 +185,7 @@ function FormCorrecao({
 
   const enviar = (seguir: boolean) => {
     corrigirEntrega(atividade.id, alunoId, nota, feedback);
+    limparFeedback();
     if (seguir && proximo) onProxima(proximo);
     else onFechar();
   };
@@ -271,12 +273,13 @@ export function CorrigirTodasSheet({ atividade, aberto, onFechar }: { atividade:
 
 function FormTodas({ atividade, onFechar }: { atividade: Atividade; onFechar: () => void }) {
   const [nota, setNota] = useState(8);
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback, limparFeedback] = useRascunho(`correcao-todas:${atividade.id}`);
   const qtd = atividade.entregas.filter((e) => e.status === "entregue").length;
   const { pontos, xp } = recompensaDaNota(atividade, nota);
 
   const aplicar = () => {
     corrigirTodas(atividade.id, nota, feedback);
+    limparFeedback();
     onFechar();
   };
 

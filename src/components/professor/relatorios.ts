@@ -29,11 +29,19 @@ function entregasDoAluno(estado: AppState, a: AlunoPainel) {
     .sort((x, y) => x.at.prazo - y.at.prazo);
 }
 
+/** Taxa real de entregas no prazo (entregues sem atraso / entregues), ou null sem entregas. */
+function taxaNoPrazo(estado: AppState, a: AlunoPainel) {
+  const feitas = entregasDoAluno(estado, a).filter((l) => l.e.status !== "pendente");
+  if (!feitas.length) return null;
+  return feitas.filter((l) => !(l.e.entregueEm && l.e.entregueEm > l.at.prazo)).length / feitas.length;
+}
+
 /** Boletim em PDF: notas, médias por disciplina, entregas, foco, medalhas e observações. */
 export function baixarBoletim(estado: AppState, a: AlunoPainel) {
   const linhas = entregasDoAluno(estado, a);
   const corrigidas = linhas.filter((l) => l.e.status === "corrigida" && l.e.nota !== undefined);
   const entregues = linhas.filter((l) => l.e.status !== "pendente").length;
+  const noPrazo = linhas.filter((l) => l.e.status !== "pendente" && !(l.e.entregueEm && l.e.entregueEm > l.at.prazo)).length;
   const mediaGeral = corrigidas.length ? corrigidas.reduce((s, l) => s + (l.e.nota ?? 0), 0) / corrigidas.length : null;
 
   const porDisc = DISCIPLINAS.map((d) => {
@@ -48,9 +56,9 @@ export function baixarBoletim(estado: AppState, a: AlunoPainel) {
   const observacoes = [
     `Mais forte em ${ordenadas[0]} (${a.dominio[ordenadas[0]]}% de domínio); precisa de apoio em ${ordenadas[ordenadas.length - 1]} (${a.dominio[ordenadas[ordenadas.length - 1]]}%).`,
     `Situação de engajamento: ${NOME_RISCO[a.risco]}. Último acesso: ${ultimoAcesso(a.ultimoAcessoHa)}.`,
-    a.pendentes > 0 ? `${a.pendentes} ${a.pendentes === 1 ? "atividade pendente" : "atividades pendentes"} de entrega.` : "Nenhuma atividade pendente.",
+    a.pendentes > 0 ? `${fmt(a.pendentes)} ${a.pendentes === 1 ? "atividade pendente" : "atividades pendentes"} de entrega.` : "Nenhuma atividade pendente.",
     ...bonus.map((b) => {
-      const ganho = [b.pontos > 0 && `+${b.pontos} pontos`, b.xp > 0 && `+${b.xp} XP`].filter(Boolean).join(", ");
+      const ganho = [b.pontos > 0 && `+${fmt(b.pontos)} pontos`, b.xp > 0 && `+${fmt(b.xp)} XP`].filter(Boolean).join(", ");
       return `${dataCurta(b.criadoEm)}: ${b.motivo}${ganho ? ` (${ganho})` : ""}.`;
     }),
   ];
@@ -64,7 +72,7 @@ export function baixarBoletim(estado: AppState, a: AlunoPainel) {
         ["Turma", a.turma],
         ["Média geral das atividades corrigidas", mediaGeral === null ? "sem notas ainda" : nota(mediaGeral)],
         ["Entregas realizadas", `${entregues} de ${linhas.length}`],
-        ["Entregas no prazo", `${a.entregasNoPrazo}%`],
+        ["Entregas no prazo", entregues ? `${Math.round((noPrazo / entregues) * 100)}% (${noPrazo} de ${entregues})` : "sem entregas ainda"],
         ["Estudo na semana", formatarMinutos(a.minutosSemana)],
         ["Sequência de estudo", `${a.sequencia} ${a.sequencia === 1 ? "dia" : "dias"}`],
         ["XP total / pontos", `${fmt(a.xp)} XP / ${fmt(a.pontos)} pontos`],
@@ -120,6 +128,8 @@ export function baixarRelatorioTurma(estado: AppState, turma: string, alunos: Al
   const atividades = estado.atividades.filter((at) => at.turma === turma);
   const aguardando = atividades.reduce((s, at) => s + at.entregas.filter((e) => e.status === "entregue").length, 0);
   const medias = alunos.map((a) => mediaNotas(estado, a)).filter((m): m is number => m !== null);
+  const taxas = alunos.map((a) => taxaNoPrazo(estado, a)).filter((t): t is number => t !== null);
+  const prazoMedio = taxas.length ? taxas.reduce((s, t) => s + t, 0) / taxas.length : null;
 
   const blocos: Bloco[] = [
     { tipo: "secao", texto: "Resumo da turma" },
@@ -131,7 +141,7 @@ export function baixarRelatorioTurma(estado: AppState, turma: string, alunos: Al
         ["Em risco", String(emRisco.length)],
         ["Estudo médio por semana", formatarMinutos(Math.round(alunos.reduce((s, a) => s + a.minutosSemana, 0) / total))],
         ["Domínio médio", `${Math.round(alunos.reduce((s, a) => s + a.dominioMedio, 0) / total)}%`],
-        ["Entregas no prazo (média)", `${Math.round(alunos.reduce((s, a) => s + a.entregasNoPrazo, 0) / total)}%`],
+        ["Entregas no prazo (média)", prazoMedio === null ? "sem entregas ainda" : `${Math.round(prazoMedio * 100)}%`],
         ["Média das notas corrigidas", medias.length ? nota(medias.reduce((s, m) => s + m, 0) / medias.length) : "sem notas ainda"],
         ["Entregas aguardando correção", String(aguardando)],
       ],
@@ -181,7 +191,7 @@ export function baixarCsvTurma(estado: AppState, turma: string, alunos: AlunoPai
       .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"))
       .map((a) => {
         const m = mediaNotas(estado, a);
-        return [a.nome, a.turma, a.xp, a.xpSemana, a.pontos, a.minutosSemana, a.sequencia, a.dominioMedio, a.entregasNoPrazo, a.pendentes, m === null ? "" : nota(m), NOME_RISCO[a.risco], ultimoAcesso(a.ultimoAcessoHa), ...DISCIPLINAS.map((d) => a.dominio[d])];
+        return [a.nome, a.turma, a.xp, a.xpSemana, a.pontos, a.minutosSemana, a.sequencia, a.dominioMedio, taxaNoPrazo(estado, a) === null ? "" : Math.round((taxaNoPrazo(estado, a) ?? 0) * 100), a.pendentes, m === null ? "" : nota(m), NOME_RISCO[a.risco], ultimoAcesso(a.ultimoAcessoHa), ...DISCIPLINAS.map((d) => a.dominio[d])];
       }),
   );
   toast({ tipo: "info", titulo: "Planilha exportada", mensagem: `turma-${slug(turma)}.csv` }, 2600);
@@ -199,7 +209,7 @@ export interface SecaoExport {
 export function baixarEstatisticasPdf(recorte: string, secoes: SecaoExport[]) {
   const blocos: Bloco[] = secoes.flatMap((s): Bloco[] => [
     { tipo: "secao", texto: s.titulo },
-    s.linhas.length ? { tipo: "tabela", colunas: s.colunas, linhas: s.linhas } : { tipo: "paragrafo", texto: "Sem dados neste recorte." },
+    s.linhas.length ? { tipo: "tabela", colunas: s.colunas, linhas: s.linhas.map((l) => l.map((c) => (/^\d{4,}$/.test(c) ? fmt(Number(c)) : c))) } : { tipo: "paragrafo", texto: "Sem dados neste recorte." },
   ]);
   const { blob } = gerarPdfDocumento({ escola: ESCOLA.nome, titulo: "Estatísticas da turma", subtitulo: `${recorte} · emitido em ${dataCurta(Date.now())}`, blocos });
   baixarArquivo(blob, "estatisticas.pdf");
