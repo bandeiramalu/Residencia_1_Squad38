@@ -5,18 +5,20 @@ import { Avatar } from "@/components/ui/Avatar";
 import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { Badge } from "@/components/ui/Badge";
 import { ROTULO_METRICA } from "@/data/campeonatos";
-import { classificacao, partidasDaRodada, totalRodadas } from "@/lib/campeonatos";
+import { classificacao, empateNoTopo, partidasDaRodada, totalRodadas, type NivelDe } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
 import { fmt, primeiroNome } from "@/lib/format";
 import type { Campeonato, Pessoa } from "@/store/types";
-import { Medalha, ordinal, turmaCurta } from "./comum";
+import { Medalha, ordinal, turmaCurta, useDesempate } from "./comum";
 
 const ENTRADA = { duration: 0.18, ease: [0.2, 0, 0, 1] } as const;
 
 /** Tabela de classificação (pontos corridos) com a aluna destacada e a distância para quem está à frente. */
 export function TabelaClassificacao({ c, pessoas, euId }: { c: Campeonato; pessoas: Record<string, Pessoa>; euId: string | null }) {
-  const linhas = classificacao(c);
+  const nivelDe = useDesempate(c.disciplina);
+  const linhas = classificacao(c, nivelDe);
   const unidade = ROTULO_METRICA[c.metrica].unidade;
+  const comEmpate = linhas.some((l, i) => i > 0 && l.pontos === linhas[i - 1].pontos);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-borda bg-superficie">
@@ -43,8 +45,12 @@ export function TabelaClassificacao({ c, pessoas, euId }: { c: Campeonato; pesso
                 <LinkPessoa id={l.id} rotulo={`Perfil de ${pessoas[l.id]?.nome ?? l.id}`} className="shrink-0">
                   <Avatar nome={pessoas[l.id]?.nome ?? l.id} iniciais={pessoas[l.id]?.iniciais} tamanho="sm" />
                 </LinkPessoa>
-                <LinkPessoa id={l.id} className={cn("truncate text-[14px]", eu ? "font-medium text-tinta" : "text-texto")}>{pessoas[l.id]?.nome ?? l.id}</LinkPessoa>
-                {eu && <Badge tom="claro">Você</Badge>}
+                {/* A privacidade dos rankings vale para a aluna; aqui, para quem joga com ela, a linha dela diz "Você". */}
+                {eu ? (
+                  <span className="truncate text-[14px] font-medium text-tinta">Você</span>
+                ) : (
+                  <LinkPessoa id={l.id} className="truncate text-[14px] text-texto">{pessoas[l.id]?.nome ?? l.id}</LinkPessoa>
+                )}
               </span>
               <span className="text-right">
                 <span className="block text-[14px] font-medium tabular-nums text-tinta">{fmt(l.pontos)}</span>
@@ -54,49 +60,55 @@ export function TabelaClassificacao({ c, pessoas, euId }: { c: Campeonato; pesso
           );
         })}
       </ol>
+      {comEmpate && <p className="border-t border-borda px-4 py-2.5 text-[12px] text-texto-2">Desempate: maior XP.</p>}
     </div>
   );
 }
 
 /** Placar do interclasses: linhas com barra fina relativa à turma líder; a turma da aluna em verde. */
 export function PlacarTurmas({ c, turma }: { c: Campeonato; turma: string | null }) {
-  const linhas = classificacao(c);
+  const nivelDe = useDesempate(c.disciplina);
+  const linhas = classificacao(c, nivelDe);
   const lider = linhas[0]?.pontos || 1;
   const unidade = ROTULO_METRICA[c.metrica].unidade;
+  const comEmpate = linhas.some((l, i) => i > 0 && l.pontos === linhas[i - 1].pontos);
 
   return (
-    <ol className="divide-y divide-borda">
-      {linhas.map((l, i) => {
-        const minha = l.id === turma;
-        const pct = Math.max(2, (l.pontos / lider) * 100);
-        return (
-          <li key={l.id} className="py-3 first:pt-0 last:pb-0">
-            <div className="flex items-center gap-3">
-              <Medalha posicao={l.posicao} />
-              <span className={cn("min-w-0 flex-1 truncate text-[14px]", minha ? "font-medium text-tinta" : "text-texto")}>{l.id}</span>
-              {minha && <Badge tom="claro">Sua turma</Badge>}
-              <span className="shrink-0 text-[14px] font-medium tabular-nums text-tinta">
-                {fmt(l.pontos)} <span className="text-[12px] font-normal text-texto-2">{unidade}</span>
-              </span>
-            </div>
-            <div className="ml-9 mt-2 h-1.5 overflow-hidden rounded-full bg-superficie-2">
-              <motion.div
-                className={cn("h-full rounded-full", minha ? "bg-verde" : "bg-texto-2/35")}
-                initial={{ width: 0 }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 0.5, ease: [0.2, 0, 0, 1], delay: i * 0.04 }}
-              />
-            </div>
-          </li>
-        );
-      })}
-    </ol>
+    <>
+      <ol className="divide-y divide-borda">
+        {linhas.map((l, i) => {
+          const minha = l.id === turma;
+          const pct = Math.max(2, (l.pontos / lider) * 100);
+          return (
+            <li key={l.id} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex items-center gap-3">
+                <Medalha posicao={l.posicao} />
+                <span className={cn("min-w-0 flex-1 truncate text-[14px]", minha ? "font-medium text-tinta" : "text-texto")}>{l.id}</span>
+                {minha && <Badge tom="claro">Sua turma</Badge>}
+                <span className="shrink-0 text-[14px] font-medium tabular-nums text-tinta">
+                  {fmt(l.pontos)} <span className="text-[12px] font-normal text-texto-2">{unidade}</span>
+                </span>
+              </div>
+              <div className="ml-9 mt-2 h-1.5 overflow-hidden rounded-full bg-superficie-2">
+                <motion.div
+                  className={cn("h-full rounded-full", minha ? "bg-verde" : "bg-texto-2/35")}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.5, ease: [0.2, 0, 0, 1], delay: i * 0.04 }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+      {comEmpate && <p className="mt-3 border-t border-borda pt-3 text-[12px] text-texto-2">Desempate: maior XP.</p>}
+    </>
   );
 }
 
 /** Frase de disputa do interclasses: quanto falta para a turma da aluna passar a da frente. */
-export function fraseDaDisputa(c: Campeonato, turma: string) {
-  const linhas = classificacao(c);
+export function fraseDaDisputa(c: Campeonato, turma: string, nivelDe?: NivelDe) {
+  const linhas = classificacao(c, nivelDe);
   const minha = linhas.find((l) => l.id === turma);
   if (!minha) return null;
   const unidade = c.metrica === "foco" ? "min" : "XP";
@@ -114,9 +126,12 @@ interface Degrau {
 }
 
 /** Top 3 de um campeonato encerrado. No mata-mata: campeão, vice e o melhor semifinalista. */
-function top3(c: Campeonato): Degrau[] {
+function top3(c: Campeonato, nivelDe: NivelDe): Degrau[] {
   const unidade = ROTULO_METRICA[c.metrica].unidade;
-  if (c.formato !== "mata-mata") return classificacao(c).slice(0, 3).map((l) => ({ id: l.id, valor: `${fmt(l.pontos)} ${unidade}` }));
+  if (c.formato !== "mata-mata") {
+    if (!c.campeao) return [];
+    return classificacao(c, nivelDe).slice(0, 3).map((l) => ({ id: l.id, valor: `${fmt(l.pontos)} ${unidade}` }));
+  }
   const rodadas = totalRodadas(c);
   const final = partidasDaRodada(c, rodadas - 1)[0];
   const campeao = c.campeao ?? final?.vencedor;
@@ -133,7 +148,8 @@ function top3(c: Campeonato): Degrau[] {
 
 /** Pódio simples: 1º, 2º e 3º lado a lado, com medalhas pequenas. */
 export function Podio({ c, pessoas, euId, turma }: { c: Campeonato; pessoas: Record<string, Pessoa>; euId: string | null; turma: string | null }) {
-  const degraus = top3(c);
+  const nivelDe = useDesempate(c.disciplina);
+  const degraus = top3(c, nivelDe);
   if (!degraus.length) return null;
   const interclasses = c.formato === "interclasses";
   const campeao = degraus[0];
@@ -146,6 +162,7 @@ export function Podio({ c, pessoas, euId, turma }: { c: Campeonato; pessoas: Rec
         <h2 className="text-[15px] font-semibold text-tinta">{souCampea ? (interclasses ? "Sua turma é campeã" : "Você é a campeã") : `Campeão: ${nomeCampeao}`}</h2>
         {c.premio.titulo && <span className="text-[13px] text-texto-2">Título: {c.premio.titulo}</span>}
       </div>
+      {c.formato !== "mata-mata" && empateNoTopo(c) && <p className="-mt-2 mb-3 text-[12px] text-texto-2">Desempate: maior XP.</p>}
       <ol className={cn("grid gap-2", degraus.length === 3 ? "grid-cols-3" : degraus.length === 2 ? "grid-cols-2" : "grid-cols-1")}>
         {degraus.map((d, i) => {
           const eu = d.id === euId || (interclasses && d.id === turma);

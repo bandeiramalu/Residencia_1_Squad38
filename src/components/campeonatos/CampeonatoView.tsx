@@ -5,7 +5,7 @@ import { AnimatePresence, m as motion } from "motion/react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ArenaAbas } from "@/components/shell/ArenaAbas";
 import { Avatar } from "@/components/ui/Avatar";
@@ -15,10 +15,11 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { CAPAS_CAMPEONATO, nomeDaRodada, ROTULO_FORMATO, ROTULO_METRICA } from "@/data/campeonatos";
 import { useSessao } from "@/lib/auth";
-import { classificacao, partidaDoAluno, partidasPendentes, participa, podeInscrever, rodadaAtual, totalRodadas } from "@/lib/campeonatos";
+import { useAgora } from "@/hooks/useAgora";
+import { classificacao, empateNoTopo, jogouRodadaHoje, lider as liderDe, partidaDoAluno, partidasPendentes, participa, podeInscrever, rodadaAtual, totalRodadas } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
 import { fmt, plural } from "@/lib/format";
-import { encerrarCampeonato, excluirCampeonato, iniciarCampeonato, inscreverCampeonato, sairDoCampeonato } from "@/store/actions";
+import { encerrarCampeonato, excluirCampeonato, iniciarCampeonato, inscreverCampeonato, resolverDueloEmCurso, sairDoCampeonato } from "@/store/actions";
 import { useSeletor } from "@/store/store";
 import type { Campeonato, Pessoa, Usuario } from "@/store/types";
 import { Chaveamento } from "./Chaveamento";
@@ -40,6 +41,7 @@ import {
   ROTULO_STATUS,
   textoPremio,
   turmaCurta,
+  useDesempate,
 } from "./comum";
 import type { ModoJogo } from "./Duelo";
 import { fraseDaDisputa, ListaInscritos, PlacarTurmas, Podio, TabelaClassificacao } from "./Placares";
@@ -54,8 +56,20 @@ interface JogoAberto {
   n: number;
 }
 
-function podeJogarRodada(c: Campeonato, alunoId: string) {
+/** Pontos corridos de quiz em andamento em que a aluna joga (uma rodada por dia). */
+function ehRodadaDeQuiz(c: Campeonato, alunoId: string) {
   return c.formato === "pontos-corridos" && c.metrica === "quiz" && c.status === "andamento" && c.participantes.includes(alunoId);
+}
+
+function podeJogarRodada(c: Campeonato, alunoId: string, agora: number) {
+  return ehRodadaDeQuiz(c, alunoId) && !jogouRodadaHoje(c, alunoId, agora);
+}
+
+/** O que está liberado para a aluna jogar agora neste campeonato (duelo da vez ou a rodada do dia). */
+function modoLiberado(c: Campeonato, alunoId: string, agora: number): ModoJogo | null {
+  const partida = partidaDoAluno(c, alunoId);
+  if (partida) return { tipo: "duelo", partidaId: partida.id };
+  return podeJogarRodada(c, alunoId, agora) ? { tipo: "rodada" } : null;
 }
 
 /** Detalhe do campeonato (aluno e professor): cabeçalho, disputa no formato certo, duelo e gestão. */
@@ -68,20 +82,36 @@ export function CampeonatoView({ id }: { id: string }) {
   const pessoas = useSeletor((e) => e.pessoas);
   const [saindo, setSaindo] = useState(false);
 
-  // Vindo do "Jogar" da lista: já abre o duelo/rodada liberado.
-  const [jogo, setJogo] = useState<JogoAberto | null>(() => {
-    if (professor || !c || !jogoPedido(c.id)) return null;
-    const partida = partidaDoAluno(c, usuario.id);
-    if (partida) return { modo: { tipo: "duelo", partidaId: partida.id }, n: 0 };
-    return podeJogarRodada(c, usuario.id) ? { modo: { tipo: "rodada" }, n: 0 } : null;
-  });
+  const [jogo, setJogo] = useState<JogoAberto | null>(null);
+  const verificouEmCurso = useRef(false);
+
+  // Ao abrir: um duelo deixado pela metade (recarregou, saiu da tela) é finalizado com os acertos feitos.
+  // Depois, vindo do "Jogar" da lista, já abre o duelo/rodada liberado — o pedido sobrevive a montar a tela duas vezes
+  // e só é limpo quando o jogo abre (efeito abaixo) ou fecha.
+  useEffect(() => {
+    if (professor || !c || jogo) return;
+    if (!verificouEmCurso.current) {
+      verificouEmCurso.current = true;
+      if (resolverDueloEmCurso(c.id)) return; // o estado mudou: este efeito roda de novo com o campeonato atualizado
+    }
+    if (!jogoPedido(c.id)) return;
+    const modo = modoLiberado(c, usuario.id, Date.now());
+    if (!modo) return;
+    let cancelado = false;
+    queueMicrotask(() => {
+      if (!cancelado) setJogo({ modo, n: 0 });
+    });
+    return () => {
+      cancelado = true;
+    };
+  }, [c, jogo, professor, usuario.id]);
 
   useEffect(() => {
-    limparPedidoDeJogo();
-  }, []);
+    if (jogo) limparPedidoDeJogo();
+  }, [jogo]);
 
   // Com duelo/rodada liberado, já baixa a tela do jogo: o "Jogar" abre sem espera.
-  const temJogo = !professor && !!c && (!!partidaDoAluno(c, usuario.id) || podeJogarRodada(c, usuario.id));
+  const temJogo = !professor && !!c && (!!partidaDoAluno(c, usuario.id) || ehRodadaDeQuiz(c, usuario.id));
   useEffect(() => {
     if (temJogo) void import("./Duelo");
   }, [temJogo]);
@@ -110,6 +140,10 @@ export function CampeonatoView({ id }: { id: string }) {
   const organizador = professor || (!c.oficial && c.criadorId === usuario.id);
   const abrirDuelo = (partidaId: string) => setJogo((j) => ({ modo: { tipo: "duelo", partidaId }, n: (j?.n ?? 0) + 1 }));
   const abrirRodada = () => setJogo((j) => ({ modo: { tipo: "rodada" }, n: (j?.n ?? 0) + 1 }));
+  const fecharJogo = () => {
+    limparPedidoDeJogo();
+    setJogo(null);
+  };
   const excluir = () => {
     setSaindo(true);
     router.replace("/campeonatos");
@@ -118,6 +152,7 @@ export function CampeonatoView({ id }: { id: string }) {
 
   const encerrado = c.status === "encerrado";
   const chaveamento = c.formato === "mata-mata" && c.partidas.length > 0;
+  const semCampeao = encerrado && !c.campeao;
 
   const lateral = (
     <>
@@ -131,7 +166,7 @@ export function CampeonatoView({ id }: { id: string }) {
       {!professor && <ArenaAbas />}
 
       <div className="space-y-3">
-        <Link href="/campeonatos" className="-ml-1 inline-flex h-7 items-center gap-0.5 rounded-md pr-2 text-[13px] text-texto-2 transition-colors hover:text-tinta">
+        <Link href="/campeonatos" className="alvo-toque -ml-1 inline-flex h-7 items-center gap-0.5 rounded-md pr-2 text-[13px] text-texto-2 transition-colors hover:text-tinta">
           <ChevronLeft className="size-4" aria-hidden />
           Campeonatos
         </Link>
@@ -140,7 +175,14 @@ export function CampeonatoView({ id }: { id: string }) {
 
       {!professor && <Chamada c={c} usuario={usuario} pessoas={pessoas} onJogarDuelo={abrirDuelo} onJogarRodada={abrirRodada} />}
 
-      {encerrado && <Podio c={c} pessoas={pessoas} euId={euId} turma={minhaTurma} />}
+      {semCampeao && (
+        <Aviso
+          icone={<Flag />}
+          titulo={c.formato === "mata-mata" ? "Encerrado sem campeão: nenhum confronto foi decidido" : "Encerrado sem campeão: ninguém pontuou"}
+          texto="Sem campeão, ninguém recebe o prêmio."
+        />
+      )}
+      {encerrado && !semCampeao && <Podio c={c} pessoas={pessoas} euId={euId} turma={minhaTurma} />}
       {encerrado && <CartaoResultado c={c} pessoas={pessoas} usuario={usuario} organizador={organizador} />}
 
       {chaveamento ? (
@@ -172,9 +214,8 @@ export function CampeonatoView({ id }: { id: string }) {
                 campId={c.id}
                 modo={jogo.modo}
                 chave={`${jogo.modo.tipo === "duelo" ? jogo.modo.partidaId : "rodada"}-${jogo.n}`}
-                onFechar={() => setJogo(null)}
+                onFechar={fecharJogo}
                 onProximo={abrirDuelo}
-                onNovaRodada={abrirRodada}
               />
             )}
           </AnimatePresence>,
@@ -228,8 +269,9 @@ function Cabecalho({ c, pessoas }: { c: Campeonato; pessoas: Record<string, Pess
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-borda pt-3 text-[13px] text-texto-2">
           <span className="inline-flex min-w-0 items-center gap-2">
             <LinkPessoa id={c.criadorId} rotulo={`Perfil de ${organizador}`}><Avatar nome={organizador} iniciais={pessoas[c.criadorId]?.iniciais} tamanho="xs" /></LinkPessoa>
-            <span className="truncate">
-              Organizado por <LinkPessoa id={c.criadorId} className="font-medium text-texto">{organizador}</LinkPessoa>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="shrink-0">Organizado por</span>
+              <LinkPessoa id={c.criadorId} className="min-w-0 truncate font-medium text-texto">{organizador}</LinkPessoa>
             </span>
           </span>
           <Prazo c={c} className="font-medium text-texto" />
@@ -259,6 +301,8 @@ interface ChamadaProps {
 /** O que a aluna pode fazer agora neste campeonato (jogar, inscrever-se, estudar) — ou a situação dela. */
 function Chamada({ c, usuario, pessoas, onJogarDuelo, onJogarRodada }: ChamadaProps) {
   const dentro = participa(c, usuario.id, usuario.turma);
+  const agora = useAgora(60_000);
+  const nivelDe = useDesempate(c.disciplina);
 
   if (c.status === "inscricoes") {
     if (c.formato === "interclasses") {
@@ -344,7 +388,7 @@ function Chamada({ c, usuario, pessoas, onJogarDuelo, onJogarRodada }: ChamadaPr
     return (
       <Aviso
         icone={<Users />}
-        titulo={fraseDaDisputa(c, usuario.turma) ?? "Sua turma está na disputa"}
+        titulo={fraseDaDisputa(c, usuario.turma, nivelDe) ?? "Sua turma está na disputa"}
         texto={c.metrica === "foco" ? "Cada minuto de foco na Sala de Estudos soma para a sua turma." : "Todo XP de mérito da turma conta até o fim."}
         acao={
           <Link href={c.metrica === "foco" ? "/estudos" : "/missoes"} className={LINK_PRIMARIO}>
@@ -358,18 +402,19 @@ function Chamada({ c, usuario, pessoas, onJogarDuelo, onJogarRodada }: ChamadaPr
 
   // Pontos corridos
   if (!dentro) return <Aviso icone={<Users />} titulo="Você não está neste campeonato" texto="As inscrições já fecharam." />;
-  const minha = classificacao(c).find((l) => l.id === usuario.id);
+  const minha = classificacao(c, nivelDe).find((l) => l.id === usuario.id);
   const pos = minha ? `Você está em ${ordinal(minha.posicao)}` : "Você está na disputa";
-  if (podeJogarRodada(c, usuario.id)) {
+  if (ehRodadaDeQuiz(c, usuario.id)) {
+    const jaJogou = !podeJogarRodada(c, usuario.id, agora);
     return (
       <Aviso
         icone={<Zap />}
         titulo={pos}
-        texto="Rodada de 5 perguntas: cada acerto vale 10 pontos."
+        texto={jaJogou ? "Você já jogou a rodada de hoje. A próxima abre amanhã." : "Uma rodada por dia, de 5 perguntas: cada acerto vale 10 pontos."}
         acao={
-          <Button onClick={onJogarRodada}>
-            <Play />
-            Jogar rodada
+          <Button onClick={onJogarRodada} disabled={jaJogou}>
+            {jaJogou ? <Hourglass /> : <Play />}
+            {jaJogou ? "Próxima rodada amanhã" : "Jogar rodada"}
           </Button>
         }
       />
@@ -441,7 +486,7 @@ function Disputa({ c, pessoas, euId, turma }: { c: Campeonato; pessoas: Record<s
 function CartaoDetalhes({ c, largo }: { c: Campeonato; largo?: boolean }) {
   const regras: string[] = [ROTULO_METRICA[c.metrica].descricao];
   if (c.formato === "mata-mata") regras.push("Cada duelo tem 5 perguntas com 20 s. Empate: vence quem respondeu mais rápido.", "Quem perde está fora; quem vence avança.");
-  if (c.formato === "pontos-corridos") regras.push(c.metrica === "quiz" ? "Jogue quantas rodadas quiser: cada acerto vale 10 pontos." : "Vence quem tiver mais no fim do prazo.");
+  if (c.formato === "pontos-corridos") regras.push(c.metrica === "quiz" ? "Uma rodada por dia, de 5 perguntas: cada acerto vale 10 pontos." : "Vence quem tiver mais no fim do prazo.");
   if (c.formato === "interclasses") regras.push("Todos os alunos da turma somam para ela, sem inscrição.");
   regras.push(c.oficial ? "Oficial: o campeão recebe pontos (Loja) e XP (nível)." : "Amistoso: vale o título, sem pontos da escola.");
 
@@ -484,9 +529,10 @@ function CartaoDetalhes({ c, largo }: { c: Campeonato; largo?: boolean }) {
 
 /** Resultado final: certificados em PDF (campeão, vice, participante) e tabela em CSV. */
 function CartaoResultado({ c, pessoas, usuario, organizador }: { c: Campeonato; pessoas: Record<string, Pessoa>; usuario: Usuario; organizador: boolean }) {
-  const { campeao, vice } = podio(c);
+  const nivelDe = useDesempate(c.disciplina);
+  const { campeao, vice } = podio(c, nivelDe);
   const emitidoPor = organizador ? (pessoas[c.criadorId]?.nome ?? "organização") : "Portal do Aluno";
-  const meuPapel = !organizador ? papelNoResultado(c, c.formato === "interclasses" ? usuario.turma : usuario.id) : null;
+  const meuPapel = !organizador ? papelNoResultado(c, c.formato === "interclasses" ? usuario.turma : usuario.id, nivelDe) : null;
   const meuId = c.formato === "interclasses" ? usuario.turma : usuario.id;
   const nomeCert = { campeao: "Certificado de campeão", vice: "Certificado de vice-campeão", participante: "Certificado de participação" } as const;
   return (
@@ -494,19 +540,19 @@ function CartaoResultado({ c, pessoas, usuario, organizador }: { c: Campeonato; 
       <TituloSecao extra="PDF e planilha">Certificados e tabela</TituloSecao>
       <div className="flex flex-wrap gap-2">
         {meuPapel && (
-          <Button onClick={() => baixarCertificado(c, meuPapel, [meuId], pessoas, emitidoPor)}>
+          <Button onClick={() => baixarCertificado(c, meuPapel, [meuId], pessoas, emitidoPor, nivelDe)}>
             <FileText />
             {nomeCert[meuPapel]}
           </Button>
         )}
         {organizador && campeao && (
-          <Button variante="secundario" onClick={() => baixarCertificado(c, "campeao", [campeao], pessoas, emitidoPor)}>
+          <Button variante="secundario" onClick={() => baixarCertificado(c, "campeao", [campeao], pessoas, emitidoPor, nivelDe)}>
             <FileText />
             Certificado do campeão
           </Button>
         )}
         {organizador && vice && (
-          <Button variante="secundario" onClick={() => baixarCertificado(c, "vice", [vice], pessoas, emitidoPor)}>
+          <Button variante="secundario" onClick={() => baixarCertificado(c, "vice", [vice], pessoas, emitidoPor, nivelDe)}>
             <FileText />
             Certificado do vice
           </Button>
@@ -521,6 +567,7 @@ function CartaoResultado({ c, pessoas, usuario, organizador }: { c: Campeonato; 
                 c.participantes.filter((id) => id !== campeao && id !== vice),
                 pessoas,
                 emitidoPor,
+                nivelDe,
               )
             }
           >
@@ -528,7 +575,7 @@ function CartaoResultado({ c, pessoas, usuario, organizador }: { c: Campeonato; 
             Certificado de participação
           </Button>
         )}
-        <Button variante="secundario" onClick={() => exportarTabelaCsv(c, pessoas)}>
+        <Button variante="secundario" onClick={() => exportarTabelaCsv(c, pessoas, nivelDe)}>
           <Download />
           Exportar tabela (CSV)
         </Button>
@@ -541,7 +588,9 @@ function CartaoResultado({ c, pessoas, usuario, organizador }: { c: Campeonato; 
 function CartaoGestao({ c, professor, onExcluir }: { c: Campeonato; professor: boolean; onExcluir: () => void }) {
   const [confirmar, setConfirmar] = useState<"encerrar" | "excluir" | null>(null);
   const semChave = c.formato === "mata-mata" && c.participantes.length < 2;
-  const lider = classificacao(c)[0];
+  const nivelDe = useDesempate(c.disciplina);
+  const liderId = liderDe(c, nivelDe);
+  const lider = liderId ? classificacao(c, nivelDe)[0] : undefined;
 
   return (
     <Card>
@@ -555,7 +604,9 @@ function CartaoGestao({ c, professor, onExcluir }: { c: Campeonato; professor: b
                 ? "Placar, chaveamento e inscrições somem para todos. Não dá para desfazer."
                 : c.formato === "mata-mata"
                   ? `${partidasPendentes(c) ? `${partidasPendentes(c)} ${partidasPendentes(c) === 1 ? "confronto ainda não foi decidido" : "confrontos ainda não foram decididos"}: cada um vai para quem tem melhor desempenho real (XP total e domínio da disciplina), sem sorteio e marcado como tal na chave. ` : ""}O campeão recebe o prêmio.`
-                  : `${lider ? `Hoje o campeão seria ${c.formato === "interclasses" ? lider.id : "o 1º da tabela"} com ${fmt(lider.pontos)} ${ROTULO_METRICA[c.metrica].unidade}.` : ""} O prêmio é entregue na hora.`}
+                  : lider
+                    ? `Hoje o campeão seria ${c.formato === "interclasses" ? lider.id : "o 1º da tabela"} com ${fmt(lider.pontos)} ${ROTULO_METRICA[c.metrica].unidade}${empateNoTopo(c) ? " (desempate: maior XP)" : ""}. O prêmio é entregue na hora.`
+                    : "Ninguém pontuou ainda: se você encerrar agora, o campeonato termina sem campeão e sem prêmio."}
             </p>
             <div className="mt-3 flex gap-2">
               <Button variante="secundario" tamanho="sm" className="flex-1" onClick={() => setConfirmar(null)}>

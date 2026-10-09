@@ -3,7 +3,7 @@
 import { Check, ChevronLeft, Info, Lock, Users } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
@@ -118,6 +118,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
   const pessoas = useSeletor((e) => e.pessoas);
   const disciplinaProf = pessoas[sessao?.usuarioId ?? ""]?.disciplina;
 
+  const enviando = useRef(false);
   const [etapa, setEtapa] = useState(0);
   const [tentou, setTentou] = useState(false);
   const [r, setR] = useState<Rascunho>(() => ({
@@ -173,6 +174,9 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
   };
 
   const criar = () => {
+    // Trava de duplo clique: um campeonato por toque, mesmo antes de o painel terminar de fechar.
+    if (enviando.current) return;
+    enviando.current = true;
     const agoraMs = Date.now();
     const inicio = agora ? agoraMs : Math.max(agoraMs + 60_000, new Date(r.data).getTime());
     const participantes = interclasses
@@ -224,7 +228,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
               type="button"
               disabled={i > etapa}
               onClick={() => i < etapa && setEtapa(i)}
-              className="group w-full text-left disabled:cursor-default"
+              className="group alvo-toque w-full text-left disabled:cursor-default"
               aria-current={i === etapa ? "step" : undefined}
             >
               <span className="block h-1 overflow-hidden rounded-full bg-superficie-2 ring-1 ring-inset ring-borda">
@@ -302,7 +306,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
                         aria-pressed={ativo}
                         onClick={() => mudar({ metrica: m })}
                         className={cn(
-                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] font-medium transition-colors duration-150",
+                          "flex items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] font-medium transition-colors duration-150 toque:min-h-11",
                           ativo ? "border-verde bg-verde-mclaro text-acento" : "border-borda bg-superficie text-texto hover:bg-superficie-2",
                           !permitido && "opacity-45",
                         )}
@@ -391,7 +395,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
                         title={NOME_CAPA[capa]}
                         onClick={() => mudar({ capa })}
                         className={cn(
-                          "grid size-8 place-items-center rounded-full ring-offset-2 ring-offset-superficie transition-shadow duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-verde",
+                          "grid size-8 place-items-center rounded-full ring-offset-2 ring-offset-superficie transition-shadow duration-150 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-verde alvo-toque",
                           r.capa === capa ? "ring-2 ring-tinta" : "hover:ring-1 hover:ring-borda",
                         )}
                         style={{ background: CAPAS_CAMPEONATO[capa].brilho }}
@@ -421,7 +425,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
                           aria-pressed={ativo}
                           onClick={() => alternarTurma(t)}
                           className={cn(
-                            "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ring-1 ring-inset transition-colors duration-150 active:scale-[0.98]",
+                            "inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium ring-1 ring-inset transition-colors duration-150 active:scale-[0.98] toque:min-h-11",
                             ativo ? "bg-verde-mclaro text-acento ring-verde" : "bg-superficie text-texto ring-borda hover:bg-superficie-2",
                           )}
                         >
@@ -465,7 +469,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
                             <span
                               className={cn(
                                 "grid size-5 shrink-0 place-items-center rounded-md border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-verde-2",
-                                marcado ? "border-verde bg-verde text-white" : "border-borda bg-superficie",
+                                marcado ? "border-acao bg-acao text-white" : "border-borda bg-superficie",
                               )}
                               aria-hidden
                             >
@@ -538,7 +542,7 @@ function Pilulas({ opcoes, valor, onChange, formatar }: { opcoes: number[]; valo
           aria-pressed={o === valor}
           onClick={() => onChange(o)}
           className={cn(
-            "h-8 min-w-11 rounded-lg px-3 text-[13px] font-medium tabular-nums transition-colors duration-150 active:scale-[0.98]",
+            "h-8 min-w-11 rounded-lg px-3 text-[13px] font-medium tabular-nums transition-colors duration-150 active:scale-[0.98] toque:min-h-11",
             o === valor ? "bg-tinta text-superficie" : "bg-superficie text-texto ring-1 ring-inset ring-borda hover:bg-superficie-2",
           )}
         >

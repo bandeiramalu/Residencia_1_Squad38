@@ -1,7 +1,7 @@
 import { ESCOLA } from "@/data/escola";
 import { nomeDaRodada, ROTULO_FORMATO, ROTULO_METRICA } from "@/data/campeonatos";
 import { baixarCsv } from "@/lib/exportar";
-import { classificacao, nomeParticipante, totalRodadas } from "@/lib/campeonatos";
+import { classificacao, nomeParticipante, totalRodadas, type NivelDe } from "@/lib/campeonatos";
 import { baixarArquivo, gerarPdfDocumento, type Bloco } from "@/lib/pdf";
 import type { Campeonato, Pessoa } from "@/store/types";
 
@@ -22,35 +22,40 @@ function slug(texto: string) {
     .replace(/^-|-$/g, "");
 }
 
-/** Campeão e vice: no mata-mata, o vencedor e o derrotado da final; nos demais, 1º e 2º da tabela. */
-export function podio(c: Campeonato): { campeao?: string; vice?: string } {
+/**
+ * Campeão e vice: no mata-mata, o vencedor e o derrotado da final; nos demais, 1º e 2º da tabela
+ * (empate desempata por maior XP via `nivelDe`). Campeonato encerrado sem campeão (ninguém pontuou) não tem pódio.
+ */
+export function podio(c: Campeonato, nivelDe?: NivelDe): { campeao?: string; vice?: string } {
   if (c.formato === "mata-mata") {
     const final = c.partidas.find((p) => p.rodada === totalRodadas(c) - 1);
     const campeao = c.campeao ?? final?.vencedor;
     const vice = final && final.vencedor ? (final.a === final.vencedor ? final.b : final.a) : null;
     return { campeao, vice: vice ?? undefined };
   }
-  const tabela = classificacao(c);
-  return { campeao: c.campeao ?? tabela[0]?.id, vice: tabela.find((l) => l.id !== (c.campeao ?? tabela[0]?.id))?.id };
+  if (c.status === "encerrado" && !c.campeao) return {};
+  const tabela = classificacao(c, nivelDe);
+  const campeao = c.campeao ?? tabela[0]?.id;
+  return { campeao, vice: tabela.find((l) => l.id !== campeao)?.id };
 }
 
 /** Papel de um participante no resultado final (null = não participou). */
-export function papelNoResultado(c: Campeonato, id: string): PapelCertificado | null {
+export function papelNoResultado(c: Campeonato, id: string, nivelDe?: NivelDe): PapelCertificado | null {
   if (!c.participantes.includes(id)) return null;
-  const { campeao, vice } = podio(c);
+  const { campeao, vice } = podio(c, nivelDe);
   if (id === campeao) return "campeao";
   if (id === vice) return "vice";
   return "participante";
 }
 
-function desfecho(c: Campeonato, id: string) {
+function desfecho(c: Campeonato, id: string, nivelDe?: NivelDe) {
   if (c.formato === "mata-mata") {
     const total = totalRodadas(c);
     const ultima = [...c.partidas].reverse().find((p) => p.status === "encerrada" && (p.a === id || p.b === id));
     if (!ultima) return "Participou do campeonato.";
     return ultima.vencedor === id ? "Avançou até o fim da chave." : `Eliminação na fase: ${nomeDaRodada(ultima.rodada, total)}.`;
   }
-  const linha = classificacao(c).find((l) => l.id === id);
+  const linha = classificacao(c, nivelDe).find((l) => l.id === id);
   return linha ? `${linha.posicao}º lugar de ${c.participantes.length}, com ${linha.pontos.toLocaleString("pt-BR")} ${ROTULO_METRICA[c.metrica].unidade}.` : "Participou do campeonato.";
 }
 
@@ -73,16 +78,16 @@ function baseCertificado(c: Campeonato, papel: PapelCertificado, nomes: string[]
 }
 
 /** Certificado em PDF. `ids` = quem recebe (campeão/vice: 1 pessoa; participação: todos os participantes ou só a aluna). */
-export function baixarCertificado(c: Campeonato, papel: PapelCertificado, ids: string[], pessoas: Record<string, Pessoa>, emitidoPor: string) {
+export function baixarCertificado(c: Campeonato, papel: PapelCertificado, ids: string[], pessoas: Record<string, Pessoa>, emitidoPor: string, nivelDe?: NivelDe) {
   const nomes = ids.map((id) => nomeParticipante(id, pessoas));
   const blocos = baseCertificado(c, papel, nomes, emitidoPor);
-  if (ids.length === 1) blocos.splice(1, 0, { tipo: "quadro", titulo: "Resultado", texto: desfecho(c, ids[0]) });
+  if (ids.length === 1) blocos.splice(1, 0, { tipo: "quadro", titulo: "Resultado", texto: desfecho(c, ids[0], nivelDe) });
   const { blob } = gerarPdfDocumento({ escola: ESCOLA.nome, titulo: ROTULO_PAPEL[papel], subtitulo: c.nome, blocos });
   baixarArquivo(blob, `${slug(ROTULO_PAPEL[papel])}-${slug(c.nome)}${ids.length === 1 ? `-${slug(nomes[0])}` : ""}.pdf`);
 }
 
 /** Tabela final em CSV (abre no Excel). */
-export function exportarTabelaCsv(c: Campeonato, pessoas: Record<string, Pessoa>) {
+export function exportarTabelaCsv(c: Campeonato, pessoas: Record<string, Pessoa>, nivelDe?: NivelDe) {
   const nome = (id: string | null) => nomeParticipante(id, pessoas);
   if (c.formato === "mata-mata") {
     const total = totalRodadas(c);
@@ -107,6 +112,6 @@ export function exportarTabelaCsv(c: Campeonato, pessoas: Record<string, Pessoa>
   baixarCsv(
     `tabela-${slug(c.nome)}`,
     ["Posição", c.formato === "interclasses" ? "Turma" : "Participante", `Pontuação (${ROTULO_METRICA[c.metrica].unidade})`],
-    classificacao(c).map((l) => [l.posicao, nome(l.id), l.pontos]),
+    classificacao(c, nivelDe).map((l) => [l.posicao, nome(l.id), l.pontos]),
   );
 }

@@ -119,7 +119,7 @@ function Confronto({ p, pessoas, euId, indice, onJogar }: { p: Partida; pessoas:
         </span>
       )}
       {p.status === "disponivel" && (
-        <span className={cn("absolute -top-2 right-2 inline-flex items-center gap-1 rounded-full border px-1.5 text-[11px] font-medium leading-4", jogavel ? "border-verde bg-verde text-white" : "border-borda bg-superficie text-texto-2")}>
+        <span className={cn("absolute -top-2 right-2 inline-flex items-center gap-1 rounded-full border px-1.5 text-[11px] font-medium leading-4", jogavel ? "border-acao bg-acao text-white" : "border-borda bg-superficie text-texto-2")}>
           {!jogavel && <PontoAoVivo className="size-1" />}
           {jogavel ? "Jogar" : "Em disputa"}
         </span>
@@ -150,15 +150,25 @@ function Lado({ id, placar, venceu, perdeu, pessoas, euId, folga }: { id: string
   const eu = !!id && id === euId;
   const nome = id ? (eu ? "Você" : primeiroNome(pessoas[id]?.nome ?? id)) : folga ? "Folga" : "A definir";
   return (
-    <div className="flex h-9 items-center gap-2 px-2.5">
+    // No toque cada lado tem 44 px (2 × 44 + divisória + bordas = 91 px, cabe na vaga de 92): avatar e nome não disputam a mesma área.
+    <div className="flex h-9 items-center gap-2 px-2.5 toque:h-11 toque:gap-2.5">
       {id ? (
         <LinkPessoa id={id} rotulo={`Perfil de ${pessoas[id]?.nome ?? id}`} className="shrink-0">
-          <Avatar nome={pessoas[id]?.nome ?? id} iniciais={pessoas[id]?.iniciais} tamanho="xs" className={cn(perdeu && "opacity-50")} />
+          <Avatar nome={pessoas[id]?.nome ?? id} iniciais={pessoas[id]?.iniciais} tamanho="xs" className={cn(perdeu && "opacity-80 grayscale")} />
         </LinkPessoa>
       ) : (
         <span className="size-6 shrink-0 rounded-full border border-dashed border-borda" aria-hidden />
       )}
-      <span className={cn("min-w-0 flex-1 truncate text-[13px]", !id ? "text-texto-2" : venceu ? "font-medium text-tinta" : perdeu ? "text-texto-2" : "text-texto")}>{id ? <LinkPessoa id={id}>{nome}</LinkPessoa> : nome}</span>
+      {/* O link é quem corta com reticências (um pai com `truncate` recortaria a área de toque de 44 px). */}
+      {id ? (
+        <span className="min-w-0 flex-1">
+          <LinkPessoa id={id} className={cn("block w-fit max-w-full truncate text-[13px]", venceu ? "font-medium text-tinta" : perdeu ? "text-texto-2" : "text-texto")}>
+            {nome}
+          </LinkPessoa>
+        </span>
+      ) : (
+        <span className="min-w-0 flex-1 truncate text-[13px] text-texto-2">{nome}</span>
+      )}
       {placar !== undefined && !folga && <span className={cn("text-[13px] tabular-nums", venceu ? "font-medium text-tinta" : "text-texto-2")}>{placar}</span>}
     </div>
   );

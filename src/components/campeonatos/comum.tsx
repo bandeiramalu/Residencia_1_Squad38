@@ -1,12 +1,15 @@
 "use client";
 
 import { Hourglass, ListOrdered, Sparkles, Swords, Users, Zap, type LucideIcon } from "lucide-react";
+import { useMemo } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { CAPAS_CAMPEONATO, nomeDaRodada } from "@/data/campeonatos";
+import type { Disciplina } from "@/data/escola";
 import { useAgora } from "@/hooks/useAgora";
-import { classificacao, partidaDoAluno, participa, totalRodadas } from "@/lib/campeonatos";
+import { classificacao, nivelDoEstado, partidaDoAluno, participa, totalRodadas, type NivelDe } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
 import { fmt } from "@/lib/format";
+import { useEstado } from "@/store/store";
 import type { Campeonato, CapaCampeonato, FormatoCampeonato, MetricaCampeonato, Pessoa, StatusCampeonato } from "@/store/types";
 
 export const ICONE_FORMATO: Record<FormatoCampeonato, LucideIcon> = {
@@ -17,11 +20,20 @@ export const ICONE_FORMATO: Record<FormatoCampeonato, LucideIcon> = {
 
 export const ICONE_METRICA: Record<MetricaCampeonato, LucideIcon> = { quiz: Zap, foco: Hourglass, xp: Sparkles };
 
-/** Links com cara de botão (mesmas medidas do `Button` do kit). */
+/** Links com cara de botão (mesmas medidas do `Button` do kit; no celular a área de toque chega a 44 px). */
 export const LINK_PRIMARIO =
-  "inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg bg-verde px-4 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-verde-2 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-verde [&_svg]:size-4 [&_svg]:shrink-0";
+  "alvo-toque inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg bg-acao px-4 text-sm font-medium text-white transition-[background-color,transform] duration-150 hover:bg-acao-2 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-verde toque:min-w-11 [&_svg]:size-4 [&_svg]:shrink-0";
 export const LINK_SECUNDARIO =
-  "inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg border border-borda bg-superficie px-4 text-sm font-medium text-tinta transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-verde [&_svg]:size-4 [&_svg]:shrink-0";
+  "alvo-toque inline-flex h-9 shrink-0 select-none items-center justify-center gap-2 rounded-lg border border-borda bg-superficie px-4 text-sm font-medium text-tinta transition-[background-color,transform] duration-150 hover:bg-superficie-2 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-verde toque:min-w-11 [&_svg]:size-4 [&_svg]:shrink-0";
+
+/**
+ * Desempate das tabelas (maior XP): o mesmo critério que decide o campeão ao encerrar.
+ * Use em `classificacao(c, nivelDe)` para a tabela mostrada e o título coincidirem.
+ */
+export function useDesempate(disciplina?: Disciplina): NivelDe {
+  const estado = useEstado();
+  return useMemo(() => nivelDoEstado(estado, disciplina), [estado, disciplina]);
+}
 
 export const ROTULO_STATUS: Record<StatusCampeonato, string> = {
   andamento: "Em andamento",
@@ -30,17 +42,20 @@ export const ROTULO_STATUS: Record<StatusCampeonato, string> = {
 };
 
 /**
- * "Jogar" da lista: a tela do campeonato abre o duelo/rodada assim que monta.
+ * "Jogar" da lista: a tela do campeonato abre o duelo/rodada assim que monta, sem um segundo toque.
  * Guardado em memória (e não na URL) porque o Next só atualiza a URL depois de renderizar a nova tela.
+ * O pedido tem validade curta e só é limpo quando o jogo abre ou fecha: sobrevive a montar a tela duas vezes
+ * (modo estrito, transição de rota) e não dispara um duelo "velho" mais tarde.
  */
-let jogarAoAbrir: string | null = null;
+let jogarAoAbrir: { campId: string; em: number } | null = null;
+const VALIDADE_PEDIDO_MS = 10_000;
 
 export function pedirJogo(campId: string) {
-  jogarAoAbrir = campId;
+  jogarAoAbrir = { campId, em: Date.now() };
 }
 
 export function jogoPedido(campId: string) {
-  return jogarAoAbrir === campId;
+  return !!jogarAoAbrir && jogarAoAbrir.campId === campId && Date.now() - jogarAoAbrir.em < VALIDADE_PEDIDO_MS;
 }
 
 export function limparPedidoDeJogo() {
@@ -150,7 +165,7 @@ export function eliminacao(c: Campeonato, alunoId: string) {
 }
 
 /** Frase curta com a situação da aluna no campeonato ("Você está em 2º", "Semifinal liberada"). */
-export function situacaoDaAluna(c: Campeonato, alunoId: string, turma: string): Situacao | null {
+export function situacaoDaAluna(c: Campeonato, alunoId: string, turma: string, nivelDe?: NivelDe): Situacao | null {
   if (!participa(c, alunoId, turma)) return null;
   const interclasses = c.formato === "interclasses";
   const chave = interclasses ? turma : alunoId;
@@ -163,7 +178,7 @@ export function situacaoDaAluna(c: Campeonato, alunoId: string, turma: string): 
       const caiu = eliminacao(c, alunoId);
       return { texto: caiu ? `Parou ${naFase(caiu)}` : "Participou", tom: "neutro" };
     }
-    const pos = classificacao(c).find((l) => l.id === chave)?.posicao;
+    const pos = classificacao(c, nivelDe).find((l) => l.id === chave)?.posicao;
     return pos ? { texto: interclasses ? `Sua turma terminou em ${ordinal(pos)}` : `Você terminou em ${ordinal(pos)}`, tom: "neutro" } : null;
   }
 
@@ -175,7 +190,7 @@ export function situacaoDaAluna(c: Campeonato, alunoId: string, turma: string): 
     return { texto: "Aguardando adversário", tom: "neutro" };
   }
 
-  const pos = classificacao(c).find((l) => l.id === chave)?.posicao;
+  const pos = classificacao(c, nivelDe).find((l) => l.id === chave)?.posicao;
   if (!pos) return null;
   return { texto: interclasses ? `Sua turma está em ${ordinal(pos)}` : `Você está em ${ordinal(pos)}`, tom: pos === 1 ? "ouro" : "verde" };
 }
@@ -190,7 +205,7 @@ export function PontoAoVivo({ className }: { className?: string }) {
   return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 animate-pulso rounded-full bg-verde", className)} />;
 }
 
-const TOM_MEDALHA = ["bg-ouro-claro text-ouro", "bg-superficie-2 text-texto-2 ring-1 ring-inset ring-borda", "bg-amber-50 text-ambar"];
+const TOM_MEDALHA = ["bg-ouro-claro text-ouro", "bg-superficie-2 text-texto-2 ring-1 ring-inset ring-borda", "bg-amber-50 text-ouro"];
 
 /** Medalha pequena de posição (1º ouro, 2º cinza, 3º âmbar); acima disso, só o número. */
 export function Medalha({ posicao, className }: { posicao: number; className?: string }) {

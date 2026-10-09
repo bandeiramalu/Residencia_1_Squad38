@@ -3,7 +3,7 @@
 import { ArrowRight, Check, Keyboard, Timer, Trophy, X } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { LinkPessoa } from "@/components/ui/LinkPessoa";
 import { Button } from "@/components/ui/Button";
@@ -14,10 +14,10 @@ import { useAgora } from "@/hooks/useAgora";
 import { classificacao, desempenhoDoColega, nivelDoEstado, totalRodadas } from "@/lib/campeonatos";
 import { cn } from "@/lib/cn";
 import { fmt, primeiroNome } from "@/lib/format";
-import { jogarDuelo, jogarRodadaQuiz, type ResultadoDuelo } from "@/store/actions";
+import { abandonarDuelo, iniciarDuelo, iniciarRodadaQuiz, jogarDuelo, jogarRodadaQuiz, registrarRespostaDuelo, type ResultadoDuelo } from "@/store/actions";
 import { obterEstado, useSeletor } from "@/store/store";
 import type { Campeonato, Pessoa } from "@/store/types";
-import { aFaseArtigo, LINK_PRIMARIO, naFase, ordinal } from "./comum";
+import { aFaseArtigo, LINK_PRIMARIO, naFase, ordinal, useDesempate } from "./comum";
 
 const TEMPO_MS = 20_000;
 const LETRAS = ["A", "B", "C", "D"];
@@ -38,11 +38,9 @@ interface Props {
   onFechar: () => void;
   /** Vitória com próximo confronto liberado: abre o próximo duelo. */
   onProximo: (partidaId: string) => void;
-  /** Pontos corridos: joga mais uma rodada. */
-  onNovaRodada: () => void;
 }
 
-type Fim = { tipo: "duelo"; r: ResultadoDuelo } | { tipo: "rodada"; posicao: number } | { tipo: "erro" };
+type Fim = { tipo: "duelo"; r: ResultadoDuelo } | { tipo: "rodada"; posicao: number } | { tipo: "erro"; rodada?: boolean };
 
 /**
  * Duelo/rodada de quiz num modal no tema atual (tela cheia no celular): apresentação, 5 perguntas com 20 s,
@@ -91,7 +89,7 @@ export function Duelo({ chave, ...props }: Props) {
   );
 }
 
-function Jogo({ campId, modo, onFechar, onProximo, onNovaRodada }: Omit<Props, "chave">) {
+function Jogo({ campId, modo, onFechar, onProximo }: Omit<Props, "chave">) {
   const c = useSeletor((e) => e.campeonatos.find((x) => x.id === campId));
   const usuario = useSeletor((e) => e.usuario);
   const pessoas = useSeletor((e) => e.pessoas);
@@ -117,38 +115,59 @@ function Jogo({ campId, modo, onFechar, onProximo, onNovaRodada }: Omit<Props, "
   const [respostas, setRespostas] = useState<(number | null)[]>([]);
   const [usados, setUsados] = useState<number[]>([]);
   const [fim, setFim] = useState<Fim | null>(null);
+  const [saindo, setSaindo] = useState(false);
+  /** Perguntas já respondidas (clique, tecla ou tempo esgotado): cada uma conta uma única vez. */
+  const registradas = useRef(new Set<number>());
+  /** O resultado só é pedido uma vez (duplo clique em "Ver resultado" não vira "partida já disputada"). */
+  const finalizado = useRef(false);
 
   const respondida = respostas.length > indice;
   const acertos = respostas.filter((r, i) => r === perguntas[i]?.correta).length;
   const pergunta = perguntas[indice];
 
+  // Registra uma resposta (opção escolhida ou `null` = tempo esgotado). No duelo, cada resposta também vai para o
+  // estado: se a aluna sair ou recarregar no meio, a partida é finalizada com o que já foi feito.
+  const registrar = useCallback(
+    (n: number, opcao: number | null, usado: number) => {
+      if (registradas.current.has(n)) return;
+      registradas.current.add(n);
+      setRespostas((r) => (r.length > n ? r : [...r, opcao]));
+      setUsados((u) => (u.length > n ? u : [...u, usado]));
+      if (modo.tipo === "duelo") registrarRespostaDuelo(campId, modo.partidaId, opcao !== null && opcao === perguntas[n]?.correta, usado);
+    },
+    [campId, modo, perguntas],
+  );
+
   // Tempo esgotado: registra a pergunta como não respondida.
   useEffect(() => {
     if (fase !== "jogo" || respondida) return;
-    const t = setTimeout(
-      () => {
-        setRespostas((r) => (r.length > indice ? r : [...r, null]));
-        setUsados((u) => (u.length > indice ? u : [...u, TEMPO_MS]));
-      },
-      Math.max(0, inicio + TEMPO_MS - Date.now()),
-    );
+    const t = setTimeout(() => registrar(indice, null, TEMPO_MS), Math.max(0, inicio + TEMPO_MS - Date.now()));
     return () => clearTimeout(t);
-  }, [fase, respondida, inicio, indice]);
+  }, [fase, respondida, inicio, indice, registrar]);
 
+  // Começar consome a tentativa: no duelo a partida passa a "em curso"; na rodada de pontos corridos, a do dia.
   const comecar = () => {
+    if (fase !== "intro") return;
+    const liberado = modo.tipo === "duelo" ? iniciarDuelo(campId, modo.partidaId) : iniciarRodadaQuiz(campId);
+    if (!liberado) {
+      setFim({ tipo: "erro", rodada: modo.tipo === "rodada" });
+      setFase("fim");
+      return;
+    }
     setFase("jogo");
     setIndice(0);
     setInicio(relogio());
   };
 
   const responder = (opcao: number) => {
-    if (fase !== "jogo" || respondida) return;
-    setRespostas([...respostas, opcao]);
-    setUsados([...usados, Math.min(TEMPO_MS, relogio() - inicio)]);
+    if (fase !== "jogo" || respondida || saindo) return;
+    registrar(indice, opcao, Math.min(TEMPO_MS, relogio() - inicio));
   };
 
   // O título de campeã é comemorado pela ação (`celebrar()` só quando vira campeã); vitórias no caminho não têm confete.
   const finalizar = () => {
+    if (finalizado.current) return;
+    finalizado.current = true;
     if (modo.tipo === "duelo") {
       const r = jogarDuelo(campId, modo.partidaId, acertos, perguntas.length, usados.reduce((a, b) => a + b, 0));
       setFim(r ? { tipo: "duelo", r } : { tipo: "erro" });
@@ -166,24 +185,37 @@ function Jogo({ campId, modo, onFechar, onProximo, onNovaRodada }: Omit<Props, "
     } else finalizar();
   };
 
+  // Fechar no meio do jogo pede confirmação (a tentativa já foi gasta); antes de começar ou depois do resultado, fecha direto.
+  const tentarFechar = () => {
+    if (fase !== "jogo") return onFechar();
+    // Já respondeu tudo e só falta ver o resultado: fechar equivale a ver o resultado.
+    if (respostas.length >= perguntas.length) return finalizar();
+    setSaindo(true);
+  };
+
+  const confirmarSaida = () => {
+    if (modo.tipo === "duelo") abandonarDuelo(campId, modo.partidaId);
+    onFechar();
+  };
+
   // Atalhos: 1–4 / A–D respondem; Esc fecha. (Enter aciona o botão focado.)
   useEffect(() => {
     const aoTeclar = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        onFechar();
+        if (saindo) setSaindo(false);
+        else tentarFechar();
         return;
       }
-      if (fase !== "jogo" || respondida || e.key.length !== 1 || e.metaKey || e.ctrlKey) return;
+      if (fase !== "jogo" || respondida || saindo || e.key.length !== 1 || e.metaKey || e.ctrlKey) return;
       const n = "1234".indexOf(e.key);
       const l = "abcd".indexOf(e.key.toLowerCase());
       const i = n >= 0 ? n : l;
       if (i < 0 || i >= (pergunta?.opcoes.length ?? 0)) return;
-      setRespostas((r) => (r.length > indice ? r : [...r, i]));
-      setUsados((u) => (u.length > indice ? u : [...u, Math.min(TEMPO_MS, Date.now() - inicio)]));
+      registrar(indice, i, Math.min(TEMPO_MS, Date.now() - inicio));
     };
     window.addEventListener("keydown", aoTeclar);
     return () => window.removeEventListener("keydown", aoTeclar);
-  }, [fase, respondida, pergunta, indice, inicio, onFechar]);
+  });
 
   const rivalNome = rivalId ? (pessoas[rivalId]?.nome ?? rivalId) : "";
 
@@ -193,7 +225,12 @@ function Jogo({ campId, modo, onFechar, onProximo, onNovaRodada }: Omit<Props, "
         <p className="min-w-0 truncate text-[13px] text-texto-2">
           <span className="font-medium text-tinta">{jogo.fase}</span> · {c?.nome}
         </p>
-        <button type="button" onClick={onFechar} aria-label="Fechar" className="-mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta">
+        <button
+          type="button"
+          onClick={tentarFechar}
+          aria-label="Fechar"
+          className="alvo-toque -mr-1.5 grid size-9 shrink-0 place-items-center rounded-full text-texto-2 transition-colors hover:bg-superficie-2 hover:text-tinta"
+        >
           <X className="size-5" />
         </button>
       </header>
@@ -263,11 +300,41 @@ function Jogo({ campId, modo, onFechar, onProximo, onNovaRodada }: Omit<Props, "
 
           {fase === "fim" && fim && (
             <motion.div key="fim" className="flex flex-1 flex-col" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2, ease: SUAVE }}>
-              <Resultado fim={fim} c={c} acertos={acertos} total={perguntas.length} respostas={respostas} perguntas={perguntas} alunoId={usuario.id} pessoas={pessoas} fase={jogo.fase} onFechar={onFechar} onProximo={onProximo} onNovaRodada={onNovaRodada} />
+              <Resultado fim={fim} c={c} acertos={acertos} total={perguntas.length} respostas={respostas} perguntas={perguntas} alunoId={usuario.id} pessoas={pessoas} fase={jogo.fase} onFechar={onFechar} onProximo={onProximo} />
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {saindo && (
+        <div className="fixed inset-0 z-[60] grid place-items-center bg-slate-950/40 p-6">
+          <motion.div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="sair-titulo"
+            aria-describedby="sair-texto"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.16, ease: SUAVE }}
+            className="w-full max-w-sm rounded-2xl border border-borda bg-superficie p-5 text-center shadow-flutuante"
+          >
+            <h3 id="sair-titulo" className="text-[17px] font-semibold text-tinta">
+              {modo.tipo === "duelo" ? "Sair do duelo?" : "Sair da rodada?"}
+            </h3>
+            <p id="sair-texto" className="mt-1.5 text-[14px] leading-snug text-texto-2">
+              {modo.tipo === "duelo" ? "Sair conta como derrota com os acertos até aqui." : "Sair agora gasta a rodada de hoje, sem pontos."}
+            </p>
+            <div className="mt-4 grid gap-2">
+              <Button tamanho="lg" bloco onClick={() => setSaindo(false)} autoFocus>
+                Continuar jogando
+              </Button>
+              <Button tamanho="lg" bloco variante="perigo" onClick={confirmarSaida}>
+                {modo.tipo === "duelo" ? "Sair e perder o duelo" : "Sair da rodada"}
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </motion.div>
   );
 }
@@ -350,6 +417,7 @@ function Apresentacao({ rivalId, nome, iniciais, turma, rivalNome, rivalIniciais
           { titulo: "Empate", texto: "vence o menor tempo total" },
         ]}
       />
+      <p className="-mt-2 text-[12px] text-texto-2">Sair no meio conta como derrota.</p>
 
       <Button tamanho="lg" bloco onClick={onComecar} autoFocus>
         Começar duelo
@@ -359,7 +427,8 @@ function Apresentacao({ rivalId, nome, iniciais, turma, rivalNome, rivalIniciais
 }
 
 function ApresentacaoRodada({ c, alunoId, onComecar }: { c: Campeonato; alunoId: string; onComecar: () => void }) {
-  const minha = classificacao(c).find((l) => l.id === alunoId);
+  const nivelDe = useDesempate(c.disciplina);
+  const minha = classificacao(c, nivelDe).find((l) => l.id === alunoId);
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 py-4 text-center">
       <div>
@@ -378,6 +447,7 @@ function ApresentacaoRodada({ c, alunoId, onComecar }: { c: Campeonato; alunoId:
           { titulo: "10 pontos", texto: "por acerto" },
         ]}
       />
+      <p className="-mt-2 text-[12px] text-texto-2">Uma rodada por dia: sair no meio gasta a de hoje.</p>
       <Button tamanho="lg" bloco onClick={onComecar} autoFocus>
         Começar rodada
       </Button>
@@ -488,7 +558,7 @@ function Alternativa({ letra, tecla, texto, estado, onClick }: { letra: string; 
       <span
         className={cn(
           "grid size-7 shrink-0 place-items-center rounded-lg text-[12px] font-medium",
-          estado === "certa" ? "bg-verde text-white" : estado === "errada" ? "bg-alerta text-white" : "border border-borda text-texto-2",
+          estado === "certa" ? "bg-acao text-white" : estado === "errada" ? "bg-alerta text-white" : "border border-borda text-texto-2",
         )}
       >
         {estado === "certa" ? <Check className="size-4" aria-label="Correta" /> : estado === "errada" ? <X className="size-4" aria-label="Sua resposta" /> : letra}
@@ -503,7 +573,7 @@ function Feedback({ escolha, pergunta, usado }: { escolha: number | null | undef
   const esgotou = escolha === null;
   return (
     <div className="rounded-xl border border-borda bg-superficie-2 p-3.5" role="status">
-      <p className={cn("flex items-center gap-1.5 text-[14px] font-medium", acertou ? "text-acento" : esgotou ? "text-ambar" : "text-alerta")}>
+      <p className={cn("flex items-center gap-1.5 text-[14px] font-medium", acertou ? "text-acento" : esgotou ? "text-ouro" : "text-alerta")}>
         {acertou ? <Check className="size-4" aria-hidden /> : esgotou ? <Timer className="size-4" aria-hidden /> : <X className="size-4" aria-hidden />}
         {acertou ? "Certo" : esgotou ? "Tempo esgotado" : "Errado"}
         {acertou && usado !== undefined && <span className="font-normal text-texto-2">· {(usado / 1000).toFixed(1).replace(".", ",")} s</span>}
@@ -527,16 +597,16 @@ interface ResultadoProps {
   fase: string;
   onFechar: () => void;
   onProximo: (partidaId: string) => void;
-  onNovaRodada: () => void;
 }
 
-function Resultado({ fim, c, acertos, total, respostas, perguntas, alunoId, pessoas, fase, onFechar, onProximo, onNovaRodada }: ResultadoProps) {
+function Resultado({ fim, c, acertos, total, respostas, perguntas, alunoId, pessoas, fase, onFechar, onProximo }: ResultadoProps) {
   if (fim.tipo === "erro" || !c) {
+    const rodada = fim.tipo === "erro" && fim.rodada;
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-6 py-4 text-center">
         <div>
-          <h2 className="text-xl font-semibold tracking-tight text-tinta">Esta partida já foi disputada</h2>
-          <p className="mt-1 text-[14px] text-texto-2">O chaveamento mudou enquanto você jogava.</p>
+          <h2 className="text-xl font-semibold tracking-tight text-tinta">{rodada ? "Você já jogou a rodada de hoje" : "Esta partida já foi disputada"}</h2>
+          <p className="mt-1 text-[14px] text-texto-2">{rodada ? "A próxima rodada abre amanhã." : "O chaveamento mudou enquanto você jogava."}</p>
         </div>
         <Button tamanho="lg" bloco onClick={onFechar} autoFocus>
           Voltar ao campeonato
@@ -572,10 +642,8 @@ function Resultado({ fim, c, acertos, total, respostas, perguntas, alunoId, pess
         {respostasLista}
         <Ganhos itens={ganhos} />
         <div className="grid w-full gap-2">
-          <Button tamanho="lg" bloco onClick={onNovaRodada} autoFocus>
-            Jogar outra rodada
-          </Button>
-          <Button tamanho="lg" bloco variante="secundario" onClick={onFechar}>
+          <p className="text-[13px] text-texto-2">Você joga uma rodada por dia: a próxima abre amanhã.</p>
+          <Button tamanho="lg" bloco onClick={onFechar} autoFocus>
             Ver classificação
           </Button>
         </div>
