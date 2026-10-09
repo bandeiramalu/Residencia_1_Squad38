@@ -310,7 +310,7 @@ function BannerSalaAtual({ sala }: { sala: SalaEstudo }) {
         </Button>
         <Link
           href={`/estudos/salas/${sala.id}`}
-          className="inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-verde px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-verde-2 active:scale-[0.98] sm:flex-none"
+          className="alvo-toque inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-acao px-4 text-sm font-medium text-white transition-colors duration-150 hover:bg-acao-2 active:scale-[0.98] sm:flex-none"
         >
           Voltar para a sala
           <ArrowRight className="size-4" aria-hidden />
@@ -342,7 +342,7 @@ function MeuFoco({ nome }: { nome: string }) {
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-medium text-tinta">{nome}</p>
         <p className="truncate text-[12px] tabular-nums text-texto-2">
-          <span className={cn("font-medium", timer.pausado ? "text-texto-2" : pausa ? "text-ambar" : "text-acento")}>{estado}</span> · {formatarRelogio(l.restanteMs ?? l.decorridoMs)} ·{" "}
+          <span className={cn("font-medium", timer.pausado ? "text-texto-2" : pausa ? "text-ouro" : "text-acento")}>{estado}</span> · {formatarRelogio(l.restanteMs ?? l.decorridoMs)} ·{" "}
           {timer.disciplina}
         </p>
       </div>

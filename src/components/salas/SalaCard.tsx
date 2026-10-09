@@ -50,7 +50,7 @@ export function SalaCard({ sala, pessoas, dentro, podeEncerrar, onEncerrar }: Pr
             onClick={() => onEncerrar(sala)}
             aria-label={`Encerrar a sala ${sala.nome}`}
             title="Encerrar sala"
-            className="relative z-10 -mr-1.5 -mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-red-50 hover:text-alerta"
+            className="alvo-toque z-10 -mr-1.5 -mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-texto-2 transition-colors hover:bg-red-50 hover:text-alerta"
           >
             <Power className="size-4" aria-hidden />
           </button>

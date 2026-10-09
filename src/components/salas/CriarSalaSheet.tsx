@@ -3,7 +3,7 @@
 import { ArrowRight, CalendarClock, Check, KeyRound, Lock, Users } from "lucide-react";
 import { AnimatePresence, m as motion } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { Badge } from "@/components/ui/Badge";
 import { Nota } from "@/components/ui/Blocos";
 import { Button } from "@/components/ui/Button";
@@ -106,6 +106,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
   const [tentou, setTentou] = useState(false);
   const [erroAgenda, setErroAgenda] = useState<string | null>(null);
   const [criadaId, setCriadaId] = useState<string | null>(null);
+  const enviando = useRef(false);
   const criada = useSeletor((e) => (criadaId ? e.salas.find((s) => s.id === criadaId) : undefined));
 
   const maxCapacidade = professor ? 100 : 30;
@@ -135,6 +136,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
 
   const enviar = (e: FormEvent) => {
     e.preventDefault();
+    if (enviando.current) return;
     setTentou(true);
     if (!valido) return;
     // Validação que depende do relógio fica no envio (o horário pode ter passado com o formulário aberto).
@@ -142,6 +144,8 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
       setErroAgenda("Escolha um horário no futuro.");
       return;
     }
+    // Trava de duplo clique: uma sala por envio, mesmo antes de o painel terminar de fechar.
+    enviando.current = true;
     const id = criarSala({
       nome,
       descricao,
@@ -292,7 +296,7 @@ function Formulario({ professor, onFechar }: { professor: boolean; onFechar: () 
                   title={TEMAS_SALA[id].nome}
                   onClick={() => setTema(id)}
                   className={cn(
-                    "grid size-8 place-items-center rounded-full ring-offset-2 ring-offset-superficie transition-shadow duration-150",
+                    "alvo-toque grid size-8 place-items-center rounded-full ring-offset-2 ring-offset-superficie transition-shadow duration-150",
                     ativo ? "ring-2 ring-tinta" : "hover:ring-2 hover:ring-borda",
                   )}
                   style={{ background: TEMAS_SALA[id].cor }}
