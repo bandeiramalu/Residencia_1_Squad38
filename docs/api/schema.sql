@@ -31,7 +31,7 @@ CREATE TYPE prioridade          AS ENUM ('alta', 'média', 'baixa');
 CREATE TYPE decisao_moderacao   AS ENUM ('aprovado', 'removido');
 CREATE TYPE tipo_missao         AS ENUM ('diaria', 'professor');
 CREATE TYPE status_dia          AS ENUM ('estudou', 'congelado', 'perdido');
-CREATE TYPE status_relato       AS ENUM ('em análise', 'validado');
+CREATE TYPE status_relato       AS ENUM ('em análise', 'validado', 'recusado');
 CREATE TYPE aba_loja            AS ENUM ('avatar', 'perfil', 'escola');
 CREATE TYPE raridade            AS ENUM ('Comum', 'Incomum', 'Raro', 'Especial', 'Exclusivo');
 CREATE TYPE slot_item           AS ENUM ('moldura', 'fundo', 'adesivo', 'efeito', 'animado', 'placa', 'tema', 'capa', 'fonte', 'figurinhas', 'voucher');
@@ -47,7 +47,7 @@ CREATE TYPE tipo_quiz           AS ENUM ('duelo', 'rodada');
 CREATE TYPE tipo_atividade      AS ENUM ('lista', 'quiz', 'leitura', 'entrega', 'projeto');
 CREATE TYPE status_entrega      AS ENUM ('pendente', 'entregue', 'corrigida');
 CREATE TYPE tipo_evento         AS ENUM ('prova', 'trabalho', 'prazo', 'evento');
-CREATE TYPE tipo_notificacao    AS ENUM ('pontos', 'atividade', 'correcao', 'entrega', 'campeonato', 'sala', 'mensagem', 'moderacao', 'sistema');
+CREATE TYPE tipo_notificacao    AS ENUM ('pontos', 'atividade', 'correcao', 'entrega', 'campeonato', 'sala', 'moderacao', 'sistema');
 CREATE TYPE liga                AS ENUM ('bronze', 'prata', 'ouro', 'diamante');
 -- De onde veio cada lançamento de pontos/XP (tabela de valores em docs/BACKEND.md § Regras).
 CREATE TYPE origem_lancamento   AS ENUM (
@@ -77,6 +77,11 @@ CREATE TABLE pessoas (
   disciplina     disciplina,                                        -- professores
   coordenacao    boolean NOT NULL DEFAULT false,
   menor_de_idade boolean NOT NULL DEFAULT true,                     -- LGPD art. 14: exige consentimento do responsável
+  -- Perfil editável (PUT /me). `foto` = JPEG recortado ~256 px em dataURL (poucos KB; fica fora do storage de anexos).
+  arroba         text CHECK (arroba ~ '^[a-z0-9._]{3,24}$'),
+  bio            text CHECK (length(bio) <= 160),
+  foto           text CHECK (length(foto) <= 120000 AND (foto IS NULL OR foto LIKE 'data:image/jpeg;base64,%')),
+  selos_exibidos text[],                                            -- NULL = todos os selos do CEPI
   ativo          boolean NOT NULL DEFAULT true,
   ultimo_acesso  timestamptz,
   criado_em      timestamptz NOT NULL DEFAULT now(),
@@ -85,6 +90,7 @@ CREATE TABLE pessoas (
   CHECK (papel = 'professor' OR NOT coordenacao OR papel = 'escola')
 );
 CREATE UNIQUE INDEX pessoas_email_unico ON pessoas (lower(email));
+CREATE UNIQUE INDEX pessoas_arroba_unico ON pessoas (lower(arroba)) WHERE arroba IS NOT NULL;   -- 409 ao editar o perfil
 CREATE INDEX pessoas_turma ON pessoas (turma_id) WHERE papel = 'aluno';
 
 -- Consentimento do responsável (LGPD art. 14 §1º): uma linha por finalidade.
@@ -93,7 +99,7 @@ CREATE TABLE consentimentos (
   aluno_id           text NOT NULL REFERENCES pessoas (id),
   responsavel_nome   text NOT NULL,
   responsavel_email  text NOT NULL,
-  finalidade         text NOT NULL CHECK (finalidade IN ('rede_social', 'ranking_publico', 'mensagens_diretas', 'notificacoes_email')),
+  finalidade         text NOT NULL CHECK (finalidade IN ('rede_social', 'ranking_publico', 'notificacoes_email')),
   concedido_em       timestamptz NOT NULL DEFAULT now(),
   revogado_em        timestamptz,
   UNIQUE (aluno_id, finalidade, concedido_em)
@@ -282,51 +288,21 @@ CREATE TABLE denuncias (
 );
 CREATE INDEX denuncias_fila ON denuncias (prioridade, criado_em);
 
--- ───────────── Mensagens diretas ─────────────
-
-CREATE TABLE conversas (
-  id          text PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 64),
-  titulo      text CHECK (length(titulo) <= 80),          -- só grupos
-  grupo       boolean NOT NULL DEFAULT false,
-  criado_por  text NOT NULL REFERENCES pessoas (id),
-  criado_em   timestamptz NOT NULL DEFAULT now(),
-  CHECK (grupo OR titulo IS NULL)
-);
-
-CREATE TABLE conversa_participantes (
-  conversa_id text NOT NULL REFERENCES conversas (id) ON DELETE CASCADE,
-  pessoa_id   text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
-  lida_ate    timestamptz,                                -- ✓✓: tudo antes disso foi lido por esta pessoa
-  PRIMARY KEY (conversa_id, pessoa_id)
-);
-CREATE INDEX conversa_participantes_pessoa ON conversa_participantes (pessoa_id);
-
-CREATE TABLE mensagens (
-  id             text PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 64),
-  conversa_id    text NOT NULL REFERENCES conversas (id) ON DELETE CASCADE,
-  autor_id       text NOT NULL REFERENCES pessoas (id),
-  texto          text NOT NULL CHECK (length(texto) BETWEEN 1 AND 2000),
-  retida         boolean NOT NULL DEFAULT false,          -- US06: não é entregue até a revisão humana
-  motivo_triagem text,
-  criado_em      timestamptz NOT NULL DEFAULT now(),
-  removida_em    timestamptz
-);
-CREATE INDEX mensagens_conversa ON mensagens (conversa_id, criado_em DESC);
-CREATE INDEX mensagens_retidas ON mensagens (criado_em) WHERE retida AND removida_em IS NULL;
-
 -- ───────────── Moderação (sempre humana) ─────────────
 
 CREATE TABLE moderacoes (
   id           bigserial PRIMARY KEY,
   post_id      text REFERENCES posts (id) ON DELETE CASCADE,
-  mensagem_id  text REFERENCES mensagens (id) ON DELETE CASCADE,
+  mensagem_id  text REFERENCES sala_mensagens (id) ON DELETE CASCADE,   -- mensagem de chat de sala retida pela triagem
   decisao      decisao_moderacao NOT NULL,
   moderador_id text NOT NULL REFERENCES pessoas (id),     -- NUNCA nulo: não existe decisão automática
-  observacao   text CHECK (length(observacao) <= 1000),
+  observacao   text CHECK (length(observacao) <= 1000),   -- motivo; obrigatório quando decisao = 'removido'
   criado_em    timestamptz NOT NULL DEFAULT now(),
-  CHECK ((post_id IS NULL) <> (mensagem_id IS NULL))
+  CHECK ((post_id IS NULL) <> (mensagem_id IS NULL)),
+  CHECK (decisao <> 'removido' OR length(btrim(observacao)) > 0)
 );
 CREATE INDEX moderacoes_post ON moderacoes (post_id) WHERE post_id IS NOT NULL;
+CREATE INDEX moderacoes_historico ON moderacoes (criado_em DESC);
 
 -- ───────────── Missões, sequência, prática, desafios e ouvidoria ─────────────
 
@@ -414,13 +390,37 @@ CREATE TABLE praticas (
   atualizado_em timestamptz NOT NULL DEFAULT now()
 );
 
+-- Cartas criadas pela própria aluna (PUT/DELETE /me/flashcards/{id}); só ela as vê.
+CREATE TABLE flashcards_proprios (
+  id         text PRIMARY KEY CHECK (length(id) BETWEEN 1 AND 64),   -- id do cliente
+  aluno_id   text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
+  disciplina disciplina NOT NULL,
+  pergunta   text NOT NULL CHECK (length(pergunta) BETWEEN 1 AND 300),
+  resposta   text NOT NULL CHECK (length(resposta) BETWEEN 1 AND 600),
+  criado_em  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX flashcards_proprios_aluno ON flashcards_proprios (aluno_id);
+
+-- Repetição espaçada (Leitner): caixa 1 (nova/errou) a 5 (dominada). Atualizada pelo SERVIDOR em POST /pratica/respostas:
+-- acertou sobe uma caixa, errou volta à 1; `proxima` = hoje + {1:0, 2:1, 3:3, 4:7, 5:15} dias.
+CREATE TABLE flashcards_caixas (
+  aluno_id  text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
+  carta_id  text NOT NULL,                                -- id de `flashcards` (como texto) ou de `flashcards_proprios`
+  caixa     smallint NOT NULL DEFAULT 1 CHECK (caixa BETWEEN 1 AND 5),
+  proxima   timestamptz NOT NULL DEFAULT now(),
+  errada    boolean NOT NULL DEFAULT false,               -- errou na última vez (alimenta a rodada "Erradas")
+  PRIMARY KEY (aluno_id, carta_id)
+);
+
 CREATE TABLE pratica_respostas (
   id           bigserial PRIMARY KEY,
   aluno_id     text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
-  flashcard_id integer NOT NULL REFERENCES flashcards (id),
+  flashcard_id integer REFERENCES flashcards (id),
+  carta_propria_id text REFERENCES flashcards_proprios (id) ON DELETE SET NULL,
   acertou      boolean NOT NULL,
   contabilizada_coletiva boolean NOT NULL DEFAULT false,   -- já contou na missão coletiva?
-  criado_em    timestamptz NOT NULL DEFAULT now()
+  criado_em    timestamptz NOT NULL DEFAULT now(),
+  CHECK ((flashcard_id IS NULL) <> (carta_propria_id IS NULL))
 );
 CREATE INDEX pratica_respostas_aluno ON pratica_respostas (aluno_id, criado_em DESC);
 
@@ -461,10 +461,10 @@ CREATE TABLE relatos (
   texto        text NOT NULL CHECK (length(texto) BETWEEN 10 AND 2000),
   status       status_relato NOT NULL DEFAULT 'em análise',
   resposta     text,
-  validado_por text REFERENCES pessoas (id),
+  decidido_por text REFERENCES pessoas (id),        -- coordenação (PUT /moderacao/relatos/{id}); a recompensa é lançada no servidor
   criado_em    timestamptz NOT NULL DEFAULT now(),
-  validado_em  timestamptz,
-  CHECK ((status = 'validado') = (validado_em IS NOT NULL))
+  decidido_em  timestamptz,
+  CHECK ((status <> 'em análise') = (decidido_em IS NOT NULL))
 );
 CREATE INDEX relatos_fila ON relatos (criado_em) WHERE status = 'em análise';
 
@@ -491,9 +491,11 @@ CREATE TABLE compras (
   custo         integer NOT NULL CHECK (custo > 0),              -- preço no momento da compra
   lancamento_id bigint NOT NULL UNIQUE REFERENCES lancamentos (id),
   voucher       text UNIQUE,                                     -- gerado NO SERVIDOR (recompensas da escola)
-  resgatado_em  timestamptz,                                     -- retirada na secretaria
+  entregue_em   timestamptz,                                     -- recompensa física entregue (PUT /loja/compras/{id}/entrega)
+  entregue_por  text REFERENCES pessoas (id),                    -- professor/secretaria que marcou (nunca nulo quando entregue)
   criado_em     timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (aluno_id, item_id)                                     -- cada item uma vez só (regra do front)
+  UNIQUE (aluno_id, item_id),                                    -- cada item uma vez só (regra do front)
+  CHECK ((entregue_em IS NULL) = (entregue_por IS NULL))
 );
 
 -- Um item por slot, e só item comprado (FK composta para `compras`).
@@ -534,10 +536,23 @@ CREATE TABLE eventos (
 CREATE INDEX eventos_periodo ON eventos (inicio);
 
 CREATE TABLE lembretes (
-  pessoa_id text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
-  evento_id text NOT NULL REFERENCES eventos (id) ON DELETE CASCADE,
+  pessoa_id   text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
+  evento_id   text NOT NULL REFERENCES eventos (id) ON DELETE CASCADE,
+  -- PUT /me/lembretes-agendados: quando o servidor deve notificar. NULL = só marcado, sem horário.
+  disparo_em  timestamptz,
+  disparado_em timestamptz,                          -- já virou notificação (job idempotente)
   PRIMARY KEY (pessoa_id, evento_id)
 );
+CREATE INDEX lembretes_a_disparar ON lembretes (disparo_em) WHERE disparo_em IS NOT NULL AND disparado_em IS NULL;
+
+-- "Lembrar alunos" (POST /professor/lembretes): histórico e TRAVA — no máximo 1 aviso a cada 12 h por aluno.
+CREATE TABLE lembretes_professor (
+  id           bigserial PRIMARY KEY,
+  professor_id text NOT NULL REFERENCES pessoas (id),
+  aluno_id     text NOT NULL REFERENCES pessoas (id) ON DELETE CASCADE,
+  enviado_em   timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX lembretes_professor_trava ON lembretes_professor (aluno_id, enviado_em DESC);
 
 -- ───────────── Salas de estudo ─────────────
 
@@ -581,9 +596,13 @@ CREATE TABLE sala_mensagens (
   autor_id  text NOT NULL REFERENCES pessoas (id),
   texto     text NOT NULL CHECK (length(texto) BETWEEN 1 AND 500),
   tipo      tipo_mensagem_sala NOT NULL DEFAULT 'mensagem',
+  retida         boolean NOT NULL DEFAULT false,          -- US06: não é entregue à sala até a revisão humana
+  motivo_triagem text,
+  removida_em    timestamptz,
   criado_em timestamptz NOT NULL DEFAULT now()
 );
-CREATE INDEX sala_mensagens_sala ON sala_mensagens (sala_id, criado_em DESC);
+CREATE INDEX sala_mensagens_sala ON sala_mensagens (sala_id, criado_em DESC) WHERE NOT retida AND removida_em IS NULL;
+CREATE INDEX sala_mensagens_retidas ON sala_mensagens (criado_em) WHERE retida AND removida_em IS NULL;
 
 -- ───────────── Tempo de estudo ─────────────
 
@@ -953,6 +972,37 @@ JOIN pessoas p ON p.id = f.aluno_id AND p.ativo AND p.anonimizado_em IS NULL
 JOIN turmas t ON t.id = p.turma_id
 WHERE pa.privacidade <> 'sombra';
 
+-- ───────────── Estatísticas e histórico de moderação ─────────────
+--
+-- GET /me/estatisticas e GET /professor/estatisticas AGREGAM no servidor (o front só desenha). Não há tabela nova:
+-- a base é `sessoes_estudo` (foco), `entregas` (notas), `lancamentos` (pontos e XP por dia), `missao_progresso`,
+-- `quiz_participacoes`/`partidas` (duelos), `medalhas_aluno` e `sequencia_dias`. As views abaixo cobrem as duas
+-- consultas mais repetidas; o restante vira consulta no endpoint (cache de 1–5 min por turma/período).
+
+-- Minutos de estudo por aluno e dia (fuso da escola). Base de séries, mapa de calor e "alunos em risco".
+CREATE VIEW v_estudo_dia AS
+SELECT
+  s.aluno_id,
+  (s.inicio AT TIME ZONE 'America/Maceio')::date AS dia,
+  s.disciplina,
+  sum(s.minutos)::integer AS minutos
+FROM sessoes_estudo s
+GROUP BY 1, 2, 3;
+
+-- Histórico de moderação (GET /moderacao/historico): posts e mensagens de sala, com o texto e o motivo.
+CREATE VIEW v_historico_moderacao AS
+SELECT
+  m.id, 'post'::text AS tipo, m.post_id AS alvo_id, m.decisao, m.moderador_id, m.criado_em AS em,
+  m.observacao AS motivo, p.autor_id, p.texto
+FROM moderacoes m JOIN posts p ON p.id = m.post_id
+UNION ALL
+SELECT
+  m.id, 'mensagem_sala'::text, m.mensagem_id, m.decisao, m.moderador_id, m.criado_em,
+  m.observacao, sm.autor_id, sm.texto
+FROM moderacoes m JOIN sala_mensagens sm ON sm.id = m.mensagem_id;
+
+COMMENT ON VIEW v_estudo_dia IS 'Minutos por aluno/dia/disciplina; fonte das estatísticas (aluno e professor).';
+COMMENT ON VIEW v_historico_moderacao IS 'Decisões de moderação (posts e chat de sala). Só professores/coordenação leem.';
 COMMENT ON VIEW v_xp_semana IS 'INTERNA: contém quem está no Modo Sombra. Nunca exponha em endpoint público.';
 COMMENT ON VIEW v_foco_semana IS 'INTERNA: contém quem está no Modo Sombra. Nunca exponha em endpoint público.';
 COMMENT ON VIEW v_ranking_liga_publico IS 'Ranking semanal de XP para GET /ranking/liga (sem Modo Sombra, anônimos mascarados).';

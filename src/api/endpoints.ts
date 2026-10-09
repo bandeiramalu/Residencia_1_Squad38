@@ -38,6 +38,7 @@ import type {
   AtribuicaoCorpo,
   AvisoCorpo,
   BootstrapDTO,
+  CartaPropriaCorpo,
   CompraCorpo,
   CompraDTO,
   ContribuicaoColetivaCorpo,
@@ -50,11 +51,17 @@ import type {
   DesafioDTO,
   EdicaoAtividadeCorpo,
   EdicaoCampeonatoCorpo,
+  EditarPerfilCorpo,
   EntregaCorpo,
+  EstatisticasAlunoDTO,
+  EstatisticasProfessorDTO,
   EventoCalendarioDTO,
+  FlashcardsDTO,
   ItemLojaDTO,
   ItemModeracaoDTO,
+  LembrarAlunosCorpo,
   LembreteEnviadoDTO,
+  LembretesAgendadosCorpo,
   LoginCorpo,
   LoginResposta,
   MedalhaDTO,
@@ -62,6 +69,7 @@ import type {
   MetaDiariaCorpo,
   MissoesDTO,
   NovaAtividadeCorpo,
+  NovaRodadaCorpo,
   NovaRespostaCorpo,
   NovaSalaCorpo,
   NovaSessaoCorpo,
@@ -77,6 +85,7 @@ import type {
   QueryAtribuicoes,
   QueryBusca,
   QueryCampeonatos,
+  QueryEstatisticas,
   QueryMensagens,
   QueryPagina,
   QueryPeriodo,
@@ -89,6 +98,7 @@ import type {
   RankingFocoDTO,
   RankingLigaDTO,
   RecuperarSenhaCorpo,
+  RegistroModeracaoDTO,
   RespostaCartaCorpo,
   RespostasDesafioCorpo,
   RespostasQuizCorpo,
@@ -172,6 +182,8 @@ export const ENDPOINTS = {
   perfil: {
     bootstrap: def<undefined, BootstrapDTO>()("GET", "/me/bootstrap", "logado", "Estado inicial do app para quem está logado (substitui o seed do modo local)."),
     obter: def<undefined, Usuario>()("GET", "/me", "logado", "Perfil, saldo de pontos, XP, domínio e privacidade."),
+    editar: def<EditarPerfilCorpo, Usuario>()("PUT", "/me", "logado", "Edita nome, @, bio, foto (dataURL JPEG ~256 px) e selos exibidos. Nome e iniciais valem para todo o portal."),
+    estatisticas: def<undefined, EstatisticasAlunoDTO, QueryEstatisticas>()("GET", "/me/estatisticas", "aluno", "Estatísticas da aluna no período (foco, evolução, notas, duelos, medalhas); base da tela e do relatório PDF/CSV."),
     definirPrivacidade: def<PrivacidadeCorpo>()("PUT", "/me/privacidade", "aluno", "Público, anônimo ou Modo Sombra nos rankings."),
     equipar: def()("PUT", "/me/equipados/{itemId}", "aluno", "Equipa um item comprado (troca o do mesmo slot)."),
     desequipar: def()("DELETE", "/me/equipados/{itemId}", "aluno", "Remove um item do perfil."),
@@ -184,6 +196,7 @@ export const ENDPOINTS = {
     eventos: def<undefined, EventoCalendarioDTO[], QueryPeriodo>()("GET", "/calendario/eventos", "logado", "Provas, trabalhos e eventos da turma no período (US04)."),
     ativarLembrete: def()("PUT", "/me/lembretes/{eventoId}", "logado", "Ativa o lembrete de um evento."),
     desativarLembrete: def()("DELETE", "/me/lembretes/{eventoId}", "logado", "Desativa o lembrete de um evento."),
+    definirLembretesAgendados: def<LembretesAgendadosCorpo>()("PUT", "/me/lembretes-agendados", "logado", "Horários de disparo dos lembretes ativos (substitui a lista). Quem notifica, na hora certa, é o servidor."),
   },
 
   feed: {
@@ -216,6 +229,10 @@ export const ENDPOINTS = {
     pratica: def<undefined, PraticaDTO>()("GET", "/pratica", "aluno", "Flashcards da rodada atual e o estado da prática."),
     responderCarta: def<RespostaCartaCorpo, Pratica>()("POST", "/pratica/respostas", "aluno", "Autoavaliação da carta da vez (acertei/errei)."),
     reiniciarPratica: def<undefined, Pratica>()("POST", "/pratica/reinicio", "aluno", "Nova rodada de flashcards."),
+    iniciarRodada: def<NovaRodadaCorpo, Pratica>()("POST", "/pratica/rodadas", "aluno", "Começa uma rodada com as cartas escolhidas (disciplina, todas ou só as erradas)."),
+    flashcards: def<undefined, FlashcardsDTO>()("GET", "/me/flashcards", "aluno", "Cartas próprias e caixas de Leitner (1–5). A caixa é atualizada pelo servidor em POST /pratica/respostas."),
+    salvarCarta: def<CartaPropriaCorpo>()("PUT", "/me/flashcards/{id}", "aluno", "Cria ou edita uma carta própria (id do cliente; idempotente)."),
+    apagarCarta: def()("DELETE", "/me/flashcards/{id}", "aluno", "Apaga uma carta própria."),
   },
 
   desafios: {
@@ -232,6 +249,7 @@ export const ENDPOINTS = {
     itens: def<undefined, ItemLojaDTO[]>()("GET", "/loja/itens", "logado", "Catálogo da loja."),
     comprar: def<CompraCorpo, CompraDTO>()("POST", "/loja/compras", "aluno", "Compra atômica: confere saldo, debita pontos e gera voucher no servidor."),
     minhasCompras: def<undefined, Compra[]>()("GET", "/me/compras", "aluno", "Histórico de trocas e vouchers."),
+    entregar: def<undefined, Compra>()("PUT", "/loja/compras/{id}/entrega", "professor", "Marca a recompensa como entregue (idempotente) e avisa a aluna. Só alunas das turmas do professor."),
   },
 
   ranking: {
@@ -295,13 +313,17 @@ export const ENDPOINTS = {
     atribuir: def<AtribuicaoCorpo, Atribuicao[]>()("POST", "/professor/atribuicoes", "professor", "Dá pontos/XP com motivo. Só a alunos das suas turmas, com limites por lançamento."),
     atribuicoes: def<undefined, Pagina<Atribuicao>, QueryAtribuicoes>()("GET", "/professor/atribuicoes", "professor", "Histórico auditável das atribuições."),
     publicarAviso: def<AvisoCorpo, Post>()("POST", "/professor/avisos", "professor", "Aviso oficial no feed da turma ou da escola."),
+    lembrarAlunos: def<LembrarAlunosCorpo, LembreteEnviadoDTO>()("POST", "/professor/lembretes", "professor", "Notifica alunos sem estudar. Trava de 12 h por aluno no servidor; devolve quantos foram avisados."),
+    estatisticas: def<undefined, EstatisticasProfessorDTO, QueryEstatisticas>()("GET", "/professor/estatisticas", "professor", "Agregados da turma no período (engajamento, foco, desempenho, risco…); base da tela e do relatório."),
   },
 
   moderacao: {
     fila: def<undefined, ItemModeracaoDTO[]>()("GET", "/moderacao/posts", "professor", "Publicações sinalizadas pela triagem ou denunciadas, por prioridade."),
-    decidirPost: def<DecisaoCorpo>()("PUT", "/moderacao/posts/{postId}", "professor", "Decisão humana (aprovar/remover), registrada em auditoria."),
+    decidirPost: def<DecisaoCorpo>()("PUT", "/moderacao/posts/{postId}", "professor", "Decisão humana (aprovar/remover). `observacao` = motivo (obrigatório ao remover); fica na auditoria e no histórico."),
+    decidirMensagemSala: def<DecisaoCorpo>()("PUT", "/moderacao/salas/{salaId}/mensagens/{mensagemId}", "professor", "Decisão sobre mensagem de chat de sala retida pela triagem (mesmas regras do post)."),
+    historico: def<undefined, Pagina<RegistroModeracaoDTO>, QueryPagina>()("GET", "/moderacao/historico", "professor", "Histórico das decisões (posts e chat de sala), mais novas primeiro."),
     relatos: def<undefined, Relato[]>()("GET", "/moderacao/relatos", "coordenacao", "Relatos da ouvidoria para análise."),
-    validarRelato: def<ValidacaoRelatoCorpo, Relato>()("PUT", "/moderacao/relatos/{id}", "coordenacao", "Valida o relato (o aluno ganha pontos, nunca XP)."),
+    validarRelato: def<ValidacaoRelatoCorpo, Relato>()("PUT", "/moderacao/relatos/{id}", "coordenacao", "Valida ou recusa o relato. Se validado, o servidor credita a recompensa (pontos, nunca XP) e notifica a aluna."),
   },
 
   notificacoes: {

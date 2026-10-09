@@ -14,10 +14,12 @@
  * e nada aqui lança erro para o app. Explicação completa: docs/BACKEND.md.
  */
 import { lerSessao, type PapelSessao } from "@/lib/auth";
+import { lerArquivo } from "@/lib/arquivos";
 import type { Acao } from "@/store/reducer";
 import { obterEstado } from "@/store/store";
-import type { AppState, Campeonato } from "@/store/types";
+import type { Anexo, AppState, Campeonato } from "@/store/types";
 import { ErroApi, MODO_API, api } from "./client";
+import type { AnexoDTO } from "./dto";
 import { ENDPOINTS as E, preparar, type PedidoPronto } from "./endpoints";
 
 export interface Requisicao extends PedidoPronto {
@@ -28,6 +30,11 @@ export interface Requisicao extends PedidoPronto {
    * substitui o que ainda está na fila — curtir → descurtir → curtir sem internet vira 1 PUT.
    */
   recurso?: string;
+  /**
+   * Arquivo real (guardado no IndexedDB) que precisa subir ANTES deste pedido: a fila faz
+   * `POST /anexos`, põe o id devolvido em `corpo.anexoId` e só então envia o pedido.
+   */
+  arquivo?: { arquivoId: string; nome: string };
 }
 
 export interface Contexto {
@@ -62,6 +69,9 @@ function hoje() {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 }
 
+/** Anexa ao pedido o arquivo real (se houver) para o upload prévio da fila. */
+const comArquivo = (req: Requisicao, anexo?: Anexo): Requisicao => (anexo?.arquivoId ? { ...req, arquivo: { arquivoId: anexo.arquivoId, nome: anexo.nome } } : req);
+
 /** Atribuições automáticas da correção (acoes/atividades.ts): o servidor já credita em PUT …/correcao. */
 const PREFIXO_CORRECAO = "Correção:";
 
@@ -93,7 +103,8 @@ function intencaoCampeonato(c: Campeonato, { eu, papel }: Contexto): Requisicao 
 /** Entrega da própria aluna ou correção do professor. Só entregas reais sobem. */
 function intencaoEntrega({ atividadeId, alunoId, dados }: AcaoDo<"atualizarEntrega">, { eu, papel }: Contexto): Requisicao | null {
   if (dados.status === "entregue" && alunoId === eu) {
-    return criar(preparar(E.atividades.entregar, { params: { id: atividadeId }, corpo: { resposta: dados.resposta } }), `entrega:${atividadeId}:${dados.entregueEm ?? 0}`);
+    const pedido = criar(preparar(E.atividades.entregar, { params: { id: atividadeId }, corpo: { resposta: dados.resposta } }), `entrega:${atividadeId}:${dados.entregueEm ?? 0}`);
+    return comArquivo(pedido, dados.anexo);
   }
   if (dados.status === "corrigida" && papel === "professor" && dados.nota !== undefined) {
     const pedido = preparar(E.atividades.corrigir, { params: { id: atividadeId, alunoId }, corpo: { nota: dados.nota, feedback: dados.feedback } });
@@ -106,6 +117,11 @@ const REGRAS: Regras = {
   /* ── Calculado pelo servidor: o cliente nunca envia pontos, XP, medalhas ou notificações ── */
   premiar: () => null,
   desbloquearMedalha: () => null,
+  /**
+   * Notificações são EFEITO de outra ação que já sobe: o servidor cria uma por destinatário ao processar
+   * aviso, correção, atribuição, relato, lembrete, troca… `notificar`/`notificarVarios` só alimentam o sino
+   * local até o evento `notificacao.nova` chegar (estado de UI, não fato a sincronizar).
+   */
   notificar: () => null,
   notificarVarios: () => null,
 
@@ -119,16 +135,16 @@ const REGRAS: Regras = {
   /* ── Só visual/local ── */
   selecionarEspaco: () => null,
   virarCarta: () => null,
-  flashcards: () => null,
 
-  /* ── No modo local nascem no navegador; com servidor chegam por tempo real ── */
+  /* ── Efeitos locais de ações que já sobem por outra regra, ou que chegam por tempo real ── */
+  /** A recompensa pela resposta útil é do servidor (marcarUtil). */
   respostaAjudou: () => null,
+  /** Variante de tela da decisão do relato; a decisão sobe em `decidirRelato`. */
   validarRelato: () => null,
-  decidirRelato: () => null,
-  registrarModeracao: () => null,
-  entregarCompra: () => null,
-  lembrarAlunos: () => null,
+  /** A presença da sala chega por `sala.presenca`. */
   membrosSala: () => null,
+  /** `moderarPost` + `registrarModeracao` são disparados juntos: só o segundo sobe (ver abaixo). */
+  moderarPost: () => null,
 
   /* ── Feed ── */
   curtir: ({ postId }, { estado }) => {
@@ -147,7 +163,7 @@ const REGRAS: Regras = {
     if (post.autorId !== eu) return null;
     const { id, tipo, espaco, texto } = post;
     if (tipo === "aviso") return criar(preparar(E.professor.publicarAviso, { corpo: { id, texto, espaco } }), `post:${id}`);
-    return criar(preparar(E.feed.publicar, { corpo: { id, tipo, espaco, texto, disciplina: post.disciplina, tags: post.tags } }), `post:${id}`);
+    return comArquivo(criar(preparar(E.feed.publicar, { corpo: { id, tipo, espaco, texto, disciplina: post.disciplina, tags: post.tags } }), `post:${id}`), post.anexo);
   },
   responder: ({ postId, resposta }, { eu }) =>
     resposta.autorId === eu
@@ -166,19 +182,38 @@ const REGRAS: Regras = {
   recomecarSequencia: () => evento(preparar(E.missoes.recomecarSequencia)),
   responderCarta: ({ acertou }) => evento(preparar(E.missoes.responderCarta, { corpo: { acertou } })),
   reiniciarPratica: () => evento(preparar(E.missoes.reiniciarPratica)),
+  /** Cartas próprias e início de rodada; a caixa de Leitner é atualizada pelo servidor em `responderCarta`. */
+  flashcards: ({ op }) => {
+    if (op.tipo === "iniciar") return evento(preparar(E.missoes.iniciarRodada, { corpo: { escolha: op.escolha, ids: op.ids } }));
+    if (op.tipo === "salvar") {
+      const { id, disciplina, pergunta, resposta } = op.carta;
+      return desejado(preparar(E.missoes.salvarCarta, { params: { id }, corpo: { disciplina, pergunta, resposta } }), `carta:${id}`);
+    }
+    return desejado(preparar(E.missoes.apagarCarta, { params: { id: op.id } }), `carta:${op.id}`);
+  },
   /** O servidor corrige o desafio: a tela chama `E.desafios.abrir/responder` direto (o gabarito não fica no cliente). */
   concluirDesafio: () => null,
   enviarRelato: ({ relato: r }) => criar(preparar(E.relatos.enviar, { corpo: { id: r.id, categoria: r.categoria, texto: r.texto } }), `relato:${r.id}`),
 
   /* ── Loja, perfil e calendário ── */
+  entregarCompra: ({ id }, { papel }) => (papel === "professor" ? desejado(preparar(E.loja.entregar, { params: { id } }), `entrega-compra:${id}`) : null),
   comprar: ({ compra }) => criar(preparar(E.loja.comprar, { corpo: { id: compra.id, itemId: compra.itemId } }), `compra:${compra.id}`),
   equipar: ({ itemId, equipar }) => {
     const params = { itemId };
     return desejado(equipar ? preparar(E.perfil.equipar, { params }) : preparar(E.perfil.desequipar, { params }), `equipado:${itemId}`);
   },
   definirPrivacidade: ({ nivel }) => desejado(preparar(E.perfil.definirPrivacidade, { corpo: { nivel } }), "privacidade"),
-  definirLembretesAgendados: () => null,
-  editarPerfil: () => null,
+  /** O servidor guarda o horário de disparo e é quem notifica; `disparado` volta no bootstrap. */
+  definirLembretesAgendados: ({ itens }) =>
+    desejado(
+      preparar(E.calendario.definirLembretesAgendados, { corpo: { itens: itens.filter((i) => !i.disparado).map((i) => ({ eventoId: i.eventoId, disparoEm: i.disparoEm })) } }),
+      "lembretes-agendados",
+    ),
+  editarPerfil: ({ dados }) =>
+    desejado(
+      preparar(E.perfil.editar, { corpo: { nome: dados.nome, iniciais: dados.iniciais, arroba: dados.arroba, bio: dados.bio, foto: dados.foto ?? null, selosExibidos: dados.selosExibidos } }),
+      "perfil",
+    ),
   alternarLembrete: ({ eventoId }, { estado }) => {
     const params = { eventoId };
     const ativo = estado.lembretes.includes(eventoId);
@@ -264,7 +299,7 @@ const REGRAS: Regras = {
       xp: a.xp,
       anexoNome: a.anexo?.nome,
     };
-    return criar(preparar(E.atividades.criar, { corpo }), `atividade:${a.id}`);
+    return comArquivo(criar(preparar(E.atividades.criar, { corpo }), `atividade:${a.id}`), a.anexo);
   },
   atualizarEntrega: (acao, ctx) => intencaoEntrega(acao, ctx),
   removerAtividade: ({ id }) => criar(preparar(E.atividades.excluir, { params: { id } }), `excluir-atividade:${id}`),
@@ -275,7 +310,13 @@ const REGRAS: Regras = {
     const corpo = { itens: [{ id: t.id, alunoId: t.alunoId }], pontos: t.pontos, xp: t.xp, motivo: t.motivo };
     return criar(preparar(E.professor.atribuir, { corpo }), `atribuicao:${t.id}`);
   },
-  moderarPost: ({ postId, decisao }) => desejado(preparar(E.moderacao.decidirPost, { params: { postId }, corpo: { decisao } }), `moderacao:${postId}`),
+  /** A decisão sobe junto com o motivo (`observacao`); o servidor grava a auditoria e o histórico a partir dela. */
+  registrarModeracao: ({ registro: r }) =>
+    desejado(preparar(E.moderacao.decidirPost, { params: { postId: r.postId }, corpo: { decisao: r.decisao, observacao: r.motivo } }), `moderacao:${r.postId}`),
+  /** Coordenação decide o relato; a recompensa (+30 pontos) é creditada pelo servidor, nunca pelo cliente. */
+  decidirRelato: ({ id, aprovado }, { papel }) =>
+    papel === "professor" ? desejado(preparar(E.moderacao.validarRelato, { params: { id }, corpo: { status: aprovado ? "validado" : "recusado" } }), `relato-decisao:${id}`) : null,
+  lembrarAlunos: ({ ids, em }) => evento(preparar(E.professor.lembrarAlunos, { corpo: { alunoIds: ids, em } })),
 
   /* ── Notificações ── */
   lerNotificacao: ({ id }) => desejado(preparar(E.notificacoes.ler, { params: { id } }), `lida:${id}`),
@@ -311,6 +352,7 @@ const MAX_REJEITADAS = 50;
 const MAX_FALHAS_SERVIDOR = 8;
 const VALIDADE_MS = 7 * 24 * 60 * 60 * 1000;
 const TEMPO_LIMITE_MS = 15_000;
+const UPLOAD_LIMITE_MS = 60_000;
 const ESPERA_MAX_MS = 5 * 60 * 1000;
 
 /** Cópia em memória para quando o localStorage não está disponível (aba anônima, cota cheia). */
@@ -428,6 +470,44 @@ async function enviar(item: ItemFila): Promise<Resultado> {
   }
 }
 
+/**
+ * Sobe o arquivo real do pedido (se houver) para `POST /anexos` e grava o id no corpo, na própria fila —
+ * se o pedido falhar depois, o reenvio não repete o upload. Sem o arquivo (outro navegador) ou com recusa
+ * definitiva do upload (413/415…), o pedido segue sem anexo e a recusa é registrada.
+ * Devolve um `Resultado` só quando é preciso esperar/tentar de novo.
+ */
+async function subirAnexoPendente(item: ItemFila): Promise<Resultado | null> {
+  if (!item.arquivo) return null;
+  const { arquivoId, nome } = item.arquivo;
+  let anexoId: string | undefined;
+  const controle = new AbortController();
+  const limite = setTimeout(() => controle.abort(), UPLOAD_LIMITE_MS);
+  try {
+    const blob = await lerArquivo(arquivoId);
+    if (blob) {
+      const form = new FormData();
+      form.append("arquivo", blob, nome);
+      anexoId = (await api<AnexoDTO>("POST", "/anexos", form, controle.signal, { "Idempotency-Key": `${item.chave}:anexo` })).id;
+    }
+  } catch (erro) {
+    if (!(erro instanceof ErroApi)) return { tipo: "tentar", servidor: false };
+    if (erro.status === 401 || erro.status === 408 || erro.status === 429) return { tipo: "tentar", servidor: false };
+    if (erro.status >= 500 && item.falhasServidor + 1 < MAX_FALHAS_SERVIDOR) return { tipo: "tentar", servidor: true };
+    rejeitar({ ...item, caminho: "/anexos", metodo: "POST" }, erro.status, erro.codigo, `Anexo "${nome}" não subiu: ${erro.message}`);
+  } finally {
+    clearTimeout(limite);
+  }
+  gravarFila(
+    lerFila().map((i) => {
+      if (i.chave !== item.chave) return i;
+      const { arquivo: _enviado, ...resto } = i;
+      void _enviado;
+      return anexoId && i.corpo && typeof i.corpo === "object" ? { ...resto, corpo: { ...i.corpo, anexoId } } : resto;
+    }),
+  );
+  return null;
+}
+
 /** Envia os pedidos do usuário logado, um por vez e em ordem (um POST de criação vem antes da curtida nele). */
 async function processar() {
   if (enviando) return;
@@ -443,7 +523,9 @@ async function processar() {
       const espera = item.proximaEm - Date.now();
       if (espera > 0) return acordar(espera);
 
-      const r = await enviar(item);
+      const falhaAnexo = await subirAnexoPendente(item);
+      if (falhaAnexo?.tipo === "tentar") return adiar(item, falhaAnexo.servidor);
+      const r = await enviar(lerFila().find((i) => i.chave === item.chave) ?? item);
       if (r.tipo === "tentar") return adiar(item, r.servidor);
       remover(item.chave);
       if (r.tipo === "rejeitar") rejeitar(item, r.status, r.codigo, r.mensagem);

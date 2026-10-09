@@ -47,13 +47,13 @@ tags:
   - name: Perfil
   - name: Calendário
   - name: Feed
-  - name: Mensagens
   - name: Missões
   - name: Desafios
   - name: Ouvidoria
   - name: Loja
   - name: Ranking
   - name: Estudos
+  - name: Estatísticas
   - name: Salas
   - name: Campeonatos
   - name: Atividades
@@ -69,8 +69,8 @@ paths:
       operationId: authLogin
       summary: Entrar com e-mail e senha
       description: >-
-        Devolve o JWT de acesso (curto) e grava dois cookies httpOnly: `cepi_sessao` (o mesmo JWT, lido pelo
-        `src/proxy.ts`) e `cepi_refresh` (refresh token, Path=/auth). Limite de 5 tentativas por minuto por e-mail+IP.
+        Devolve o JWT de acesso (curto) e grava dois cookies httpOnly: `cepi_sessao` (o mesmo JWT; a guarda de rotas do front
+        é feita no cliente por `src/lib/guarda.ts` e a API valida o JWT de novo em cada endpoint) e `cepi_refresh` (refresh token, Path=/auth). Limite de 5 tentativas por minuto por e-mail+IP.
       security: []
       x-acesso: publico
       requestBody:
@@ -213,6 +213,113 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Usuario' }
+        default: { $ref: '#/components/responses/Erro' }
+    put:
+      tags: [Perfil]
+      operationId: perfilEditar
+      summary: Editar nome, @, bio, foto e selos exibidos
+      description: >-
+        Estado desejado (idempotente). `foto` é um JPEG recortado (~256 px, até ~80 KB) em dataURL; `null` remove.
+        `arroba` é único (409 `conflito`). Nome e iniciais passam a valer para todo o portal.
+      x-acesso: logado
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EditarPerfilCorpo' }
+      responses:
+        '200':
+          description: Perfil atualizado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '409': { $ref: '#/components/responses/Erro' }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /me/estatisticas:
+    get:
+      tags: [Estatísticas]
+      operationId: perfilEstatisticas
+      summary: Estatísticas da aluna no período
+      description: >-
+        Agregadas no servidor (a partir de sessões de estudo, entregas, lançamentos, duelos e medalhas): foco por dia,
+        disciplina e hora, mapa de calor, sequência, notas, duelos. Base da tela e do relatório PDF/CSV.
+      x-acesso: aluno
+      parameters:
+        - { name: periodo, in: query, schema: { $ref: '#/components/schemas/PeriodoEstatisticas' } }
+        - { name: disciplina, in: query, schema: { $ref: '#/components/schemas/Disciplina' } }
+      responses:
+        '200':
+          description: Estatísticas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstatisticasAluno' }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /me/flashcards:
+    get:
+      tags: [Missões]
+      operationId: missoesFlashcards
+      summary: Cartas próprias e caixas de Leitner
+      x-acesso: aluno
+      responses:
+        '200':
+          description: Estado dos flashcards da aluna.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Flashcards' }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /me/flashcards/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Missões]
+      operationId: missoesSalvarCarta
+      summary: Criar ou editar uma carta própria
+      description: Id gerado no cliente; idempotente. Só a dona vê a carta.
+      x-acesso: aluno
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CartaPropriaCorpo' }
+      responses:
+        '204': { description: Carta salva. }
+        default: { $ref: '#/components/responses/Erro' }
+    delete:
+      tags: [Missões]
+      operationId: missoesApagarCarta
+      summary: Apagar uma carta própria
+      x-acesso: aluno
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Carta apagada (idempotente; 204 também se já não existia). }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /me/lembretes-agendados:
+    put:
+      tags: [Calendário]
+      operationId: calendarioDefinirLembretesAgendados
+      summary: Horários de disparo dos lembretes
+      description: >-
+        Substitui a lista de lembretes com horário da pessoa. O servidor notifica em `disparoEm` (uma vez, via
+        evento `notificacao.nova`); o cliente nunca cria essa notificação sozinho em modo http.
+      x-acesso: logado
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LembretesAgendadosCorpo' }
+      responses:
+        '204': { description: Lista atualizada. }
         default: { $ref: '#/components/responses/Erro' }
 
   /me/privacidade:
@@ -692,99 +799,6 @@ paths:
         '404': { $ref: '#/components/responses/Erro' }
         default: { $ref: '#/components/responses/Erro' }
 
-  # ───────────── Mensagens diretas ─────────────
-  /conversas:
-    get:
-      tags: [Mensagens]
-      operationId: mensagensConversas
-      summary: Conversas de quem está logado
-      x-acesso: logado
-      responses:
-        '200':
-          description: Conversas com as últimas mensagens.
-          content:
-            application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Conversa' }
-        default: { $ref: '#/components/responses/Erro' }
-    post:
-      tags: [Mensagens]
-      operationId: mensagensCriarConversa
-      summary: Criar conversa individual ou grupo
-      description: >-
-        Idempotente pelo `id`. Conversa individual: use o id determinístico `dm:<idA>:<idB>` (ids em ordem
-        alfabética) para os dois lados chegarem à mesma conversa.
-      x-acesso: logado
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/NovaConversaCorpo' }
-      responses:
-        '201':
-          description: Conversa criada (ou a existente).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Conversa' }
-        default: { $ref: '#/components/responses/Erro' }
-
-  /conversas/{id}/mensagens:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    get:
-      tags: [Mensagens]
-      operationId: mensagensMensagens
-      summary: Histórico paginado (só participantes)
-      x-acesso: logado
-      parameters:
-        - $ref: '#/components/parameters/Antes'
-        - $ref: '#/components/parameters/Limite'
-      responses:
-        '200':
-          description: Mensagens (mais novas primeiro).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/PaginaMensagem' }
-        default: { $ref: '#/components/responses/Erro' }
-    post:
-      tags: [Mensagens]
-      operationId: mensagensEnviar
-      summary: Enviar mensagem
-      description: Se a triagem sinalizar, a mensagem volta com `retida` e só é entregue depois da revisão humana.
-      x-acesso: logado
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/NovaMensagemCorpo' }
-      responses:
-        '201':
-          description: Mensagem enviada (ou retida).
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/Mensagem' }
-        default: { $ref: '#/components/responses/Erro' }
-
-  /conversas/{id}/leitura:
-    parameters:
-      - $ref: '#/components/parameters/Id'
-    post:
-      tags: [Mensagens]
-      operationId: mensagensMarcarLida
-      summary: Marcar mensagens recebidas como lidas
-      description: Dispara o evento `conversa.leitura` para os outros participantes (✓✓).
-      x-acesso: logado
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
-      responses:
-        '204': { description: Marcadas. }
-        default: { $ref: '#/components/responses/Erro' }
-
   # ───────────── Missões, sequência e prática ─────────────
   /missoes:
     get:
@@ -953,6 +967,28 @@ paths:
               schema: { $ref: '#/components/schemas/Pratica' }
         default: { $ref: '#/components/responses/Erro' }
 
+  /pratica/rodadas:
+    post:
+      tags: [Missões]
+      operationId: missoesIniciarRodada
+      summary: Começar uma rodada com as cartas escolhidas
+      description: Disciplina, todas ou só as erradas. O servidor confere que as cartas existem e pertencem à pessoa.
+      x-acesso: aluno
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NovaRodadaCorpo' }
+      responses:
+        '200':
+          description: Rodada iniciada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pratica' }
+        default: { $ref: '#/components/responses/Erro' }
+
   /pratica/reinicio:
     post:
       tags: [Missões]
@@ -1111,6 +1147,25 @@ paths:
               examples:
                 saldo:
                   value: { codigo: saldo_insuficiente, mensagem: Faltam 430 pontos. }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /loja/compras/{id}/entrega:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    put:
+      tags: [Loja]
+      operationId: lojaEntregar
+      summary: Marcar a recompensa como entregue
+      description: Idempotente. Só professor/secretaria e só alunas das suas turmas. A aluna é notificada.
+      x-acesso: professor
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Compra com `entregueEm`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Compra' }
         default: { $ref: '#/components/responses/Erro' }
 
   /me/compras:
@@ -2072,6 +2127,49 @@ paths:
               schema: { $ref: '#/components/schemas/Post' }
         default: { $ref: '#/components/responses/Erro' }
 
+  /professor/lembretes:
+    post:
+      tags: [Professor]
+      operationId: professorLembrarAlunos
+      summary: Avisar alunos que estão sem estudar
+      description: Trava de 12 h por aluno (quem já foi avisado nesse prazo é ignorado). Só alunos das turmas do professor.
+      x-acesso: professor
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LembrarAlunosCorpo' }
+      responses:
+        '200':
+          description: Quantos foram avisados.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LembreteEnviado' }
+        '429': { $ref: '#/components/responses/Erro' }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /professor/estatisticas:
+    get:
+      tags: [Estatísticas]
+      operationId: professorEstatisticas
+      summary: Estatísticas agregadas da turma
+      description: Engajamento, foco, desempenho, missões, ranking, campeonatos, moderação e alunos em risco. Só turmas do professor.
+      x-acesso: professor
+      parameters:
+        - { name: periodo, in: query, schema: { $ref: '#/components/schemas/PeriodoEstatisticas' } }
+        - { name: turma, in: query, schema: { type: string } }
+        - { name: disciplina, in: query, schema: { $ref: '#/components/schemas/Disciplina' } }
+      responses:
+        '200':
+          description: Estatísticas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EstatisticasProfessor' }
+        '403': { $ref: '#/components/responses/Erro' }
+        default: { $ref: '#/components/responses/Erro' }
+
   # ───────────── Moderação ─────────────
   /moderacao/posts:
     get:
@@ -2100,7 +2198,7 @@ paths:
       tags: [Moderação]
       operationId: moderacaoDecidirPost
       summary: Decisão humana sobre uma publicação
-      description: Registrada em auditoria (quem, quando, por quê). O autor é notificado. Nada é removido automaticamente.
+      description: Registrada em auditoria e no histórico (quem, quando, por quê). `observacao` (o motivo) é obrigatória ao remover e o autor a recebe na notificação. Nada é removido automaticamente.
       x-acesso: professor
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2114,12 +2212,13 @@ paths:
         '403': { $ref: '#/components/responses/Erro' }
         default: { $ref: '#/components/responses/Erro' }
 
-  /moderacao/mensagens:
+  /moderacao/salas/mensagens:
     get:
       tags: [Moderação]
-      operationId: moderacaoMensagensRetidas
-      summary: Mensagens diretas retidas pela triagem
-      x-acesso: coordenacao
+      operationId: moderacaoMensagensSalaRetidas
+      summary: Mensagens de chat de sala retidas pela triagem
+      description: Mensagens retidas (US06) não aparecem para a sala até uma pessoa decidir.
+      x-acesso: professor
       responses:
         '200':
           description: Mensagens retidas.
@@ -2127,20 +2226,25 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/MensagemRetida' }
+                items: { $ref: '#/components/schemas/MensagemSalaRetida' }
         default: { $ref: '#/components/responses/Erro' }
 
-  /moderacao/mensagens/{mensagemId}:
+  /moderacao/salas/{salaId}/mensagens/{mensagemId}:
     parameters:
+      - name: salaId
+        in: path
+        required: true
+        schema: { type: string }
       - name: mensagemId
         in: path
         required: true
         schema: { type: string }
     put:
       tags: [Moderação]
-      operationId: moderacaoDecidirMensagem
-      summary: Liberar ou remover uma mensagem retida
-      x-acesso: coordenacao
+      operationId: moderacaoDecidirMensagemSala
+      summary: Liberar ou remover uma mensagem de sala retida
+      description: Mesmas regras do post. `observacao` (motivo) é obrigatória ao remover; vai para a auditoria e para o histórico.
+      x-acesso: professor
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2150,6 +2254,24 @@ paths:
             schema: { $ref: '#/components/schemas/DecisaoCorpo' }
       responses:
         '204': { description: Decisão registrada. }
+        default: { $ref: '#/components/responses/Erro' }
+
+  /moderacao/historico:
+    get:
+      tags: [Moderação]
+      operationId: moderacaoHistorico
+      summary: Histórico das decisões de moderação
+      description: Posts e chat de sala, mais novas primeiro, com o motivo. Derivado da auditoria das decisões.
+      x-acesso: professor
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limite'
+      responses:
+        '200':
+          description: Página do histórico.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginaRegistroModeracao' }
         default: { $ref: '#/components/responses/Erro' }
 
   /moderacao/relatos:
@@ -2174,7 +2296,7 @@ paths:
     put:
       tags: [Moderação]
       operationId: moderacaoValidarRelato
-      summary: Validar relato (o aluno ganha 30 pontos, nunca XP)
+      summary: Validar ou recusar relato (se validado, o servidor credita 30 pontos, nunca XP)
       x-acesso: coordenacao
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -2246,7 +2368,7 @@ components:
       type: apiKey
       in: cookie
       name: cepi_sessao
-      description: O mesmo JWT em cookie httpOnly (Secure, SameSite=Lax) — é o que o `src/proxy.ts` deve validar.
+      description: O mesmo JWT em cookie httpOnly (Secure, SameSite=Lax) — a API valida a assinatura e o papel em cada requisição (o front só esconde rotas, em `src/lib/guarda.ts`).
 
   parameters:
     Id:
@@ -2382,7 +2504,7 @@ components:
       enum: [aprovado, removido]
     TipoNotificacao:
       type: string
-      enum: [pontos, atividade, correcao, entrega, campeonato, sala, mensagem, moderacao, sistema]
+      enum: [pontos, atividade, correcao, entrega, campeonato, sala, moderacao, sistema]
     LigaId:
       type: string
       enum: [bronze, prata, ouro, diamante]
@@ -2435,6 +2557,10 @@ components:
         dominio: { $ref: '#/components/schemas/PorDisciplina' }
         privacidade: { $ref: '#/components/schemas/Privacidade' }
         equipados: { type: array, items: { type: string } }
+        arroba: { type: string, pattern: '^[a-z0-9._]{3,24}$' }
+        bio: { type: string, maxLength: 160 }
+        foto: { type: string, description: JPEG recortado (~256 px) em dataURL. }
+        selosExibidos: { type: array, items: { type: string } }
     UsuarioSessao:
       type: object
       required: [id, nome, papel, email]
@@ -2623,48 +2749,6 @@ components:
         texto: { type: string, minLength: 1, maxLength: 2000 }
         espaco: { $ref: '#/components/schemas/EspacoId' }
 
-    # ── Mensagens ──
-    Mensagem:
-      type: object
-      required: [id, autorId, texto, criadoEm, lida]
-      properties:
-        id: { type: string }
-        autorId: { type: string }
-        texto: { type: string }
-        criadoEm: { $ref: '#/components/schemas/Instante' }
-        lida: { type: boolean, description: Lida pelo destinatário (✓✓). }
-        retida: { type: boolean, description: US06 — retida até a revisão humana. }
-    Conversa:
-      type: object
-      required: [id, participantes, mensagens, naoLidas]
-      properties:
-        id: { type: string }
-        participantes: { type: array, items: { type: string } }
-        titulo: { type: string }
-        mensagens: { type: array, items: { $ref: '#/components/schemas/Mensagem' } }
-        naoLidas: { type: integer, minimum: 0 }
-    PaginaMensagem:
-      type: object
-      required: [itens, proximoCursor]
-      properties:
-        itens: { type: array, items: { $ref: '#/components/schemas/Mensagem' } }
-        proximoCursor: { type: [string, 'null'] }
-    NovaConversaCorpo:
-      type: object
-      required: [id, participantes]
-      additionalProperties: false
-      properties:
-        id: { type: string, maxLength: 64 }
-        participantes: { type: array, minItems: 2, maxItems: 30, items: { type: string } }
-        titulo: { type: string, maxLength: 80 }
-    NovaMensagemCorpo:
-      type: object
-      required: [id, texto]
-      additionalProperties: false
-      properties:
-        id: { type: string, maxLength: 64 }
-        texto: { type: string, minLength: 1, maxLength: 2000 }
-
     # ── Missões, sequência, prática ──
     Missao:
       type: object
@@ -2807,7 +2891,9 @@ components:
         id: { type: string }
         categoria: { type: string }
         texto: { type: string }
-        status: { type: string, enum: [em análise, validado] }
+        status: { type: string, enum: [em análise, validado, recusado] }
+        decididoEm: { $ref: '#/components/schemas/Instante' }
+        decididoPor: { type: string }
         criadoEm: { $ref: '#/components/schemas/Instante' }
     NovoRelatoCorpo:
       type: object
@@ -2821,7 +2907,7 @@ components:
       type: object
       required: [status]
       properties:
-        status: { type: string, enum: [em análise, validado] }
+        status: { type: string, enum: [validado, recusado] }
         resposta: { type: string, maxLength: 1000 }
 
     # ── Loja ──
@@ -2846,6 +2932,7 @@ components:
         custo: { type: integer, minimum: 1 }
         criadoEm: { $ref: '#/components/schemas/Instante' }
         voucher: { type: string, description: Código para retirar recompensas físicas na secretaria. }
+        entregueEm: { $ref: '#/components/schemas/Instante' }
     CompraCorpo:
       type: object
       required: [id, itemId]
@@ -3363,13 +3450,267 @@ components:
       properties:
         decisao: { $ref: '#/components/schemas/DecisaoModeracao' }
         observacao: { type: string, maxLength: 1000 }
-    MensagemRetida:
+    MensagemSalaRetida:
       type: object
-      required: [conversaId, mensagem, motivo]
+      required: [salaId, mensagem, motivo]
       properties:
-        conversaId: { type: string }
-        mensagem: { $ref: '#/components/schemas/Mensagem' }
-        motivo: { type: string }
+        salaId: { type: string }
+        mensagem: { $ref: '#/components/schemas/MensagemSala' }
+        motivo: { type: string, description: Motivo da triagem (US06). }
+    RegistroModeracao:
+      type: object
+      required: [id, tipo, alvoId, decisao, decididoPor, em, autorId, texto]
+      properties:
+        id: { type: string }
+        tipo: { type: string, enum: [post, mensagem_sala] }
+        alvoId: { type: string, description: Id do post ou da mensagem de sala decidida. }
+        decisao: { $ref: '#/components/schemas/DecisaoModeracao' }
+        decididoPor: { type: string }
+        em: { $ref: '#/components/schemas/Instante' }
+        motivo: { type: string, description: Obrigatório quando a decisão é `removido`. }
+        autorId: { type: string }
+        texto: { type: string, description: Texto do conteúdo (o removido sai do feed; o histórico continua legível). }
+    PaginaRegistroModeracao:
+      type: object
+      required: [itens, proximoCursor]
+      properties:
+        itens: { type: array, items: { $ref: '#/components/schemas/RegistroModeracao' } }
+        proximoCursor: { type: [string, 'null'] }
+
+    # ── Perfil editável, lembretes, flashcards, estatísticas ──
+    EditarPerfilCorpo:
+      type: object
+      required: [nome]
+      additionalProperties: false
+      properties:
+        nome: { type: string, minLength: 2, maxLength: 120 }
+        iniciais: { type: string, maxLength: 3 }
+        arroba: { type: string, pattern: '^[a-z0-9._]{3,24}$' }
+        bio: { type: string, maxLength: 160 }
+        foto: { type: [string, 'null'], maxLength: 120000, description: 'JPEG em dataURL (data:image/jpeg;base64,…); null remove.' }
+        selosExibidos: { type: array, items: { type: string } }
+    LembreteAgendado:
+      type: object
+      required: [eventoId, titulo, inicio, disparoEm]
+      properties:
+        eventoId: { type: string }
+        titulo: { type: string }
+        inicio: { $ref: '#/components/schemas/Instante' }
+        disparoEm: { $ref: '#/components/schemas/Instante' }
+        disparado: { type: boolean }
+    LembretesAgendadosCorpo:
+      type: object
+      required: [itens]
+      additionalProperties: false
+      properties:
+        itens:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [eventoId, disparoEm]
+            properties:
+              eventoId: { type: string }
+              disparoEm: { $ref: '#/components/schemas/Instante' }
+    LembrarAlunosCorpo:
+      type: object
+      required: [alunoIds, em]
+      additionalProperties: false
+      properties:
+        alunoIds: { type: array, minItems: 1, maxItems: 200, items: { type: string } }
+        em: { $ref: '#/components/schemas/Instante' }
+    CartaPropriaCorpo:
+      type: object
+      required: [disciplina, pergunta, resposta]
+      additionalProperties: false
+      properties:
+        disciplina: { $ref: '#/components/schemas/Disciplina' }
+        pergunta: { type: string, minLength: 1, maxLength: 300 }
+        resposta: { type: string, minLength: 1, maxLength: 600 }
+    NovaRodadaCorpo:
+      type: object
+      required: [escolha, ids]
+      additionalProperties: false
+      properties:
+        escolha:
+          oneOf:
+            - $ref: '#/components/schemas/Disciplina'
+            - { type: string, enum: [Todas, Erradas] }
+        ids: { type: array, minItems: 1, maxItems: 100, items: { type: string } }
+    Flashcards:
+      type: object
+      required: [minhas, caixas, erradas]
+      properties:
+        minhas:
+          type: array
+          items:
+            type: object
+            required: [id, disciplina, pergunta, resposta]
+            properties:
+              id: { type: string }
+              disciplina: { $ref: '#/components/schemas/Disciplina' }
+              pergunta: { type: string }
+              resposta: { type: string }
+              minha: { type: boolean }
+        caixas:
+          type: object
+          description: Caixa de Leitner por id de carta (1 = nova/errou, 5 = dominada).
+          additionalProperties:
+            type: object
+            required: [caixa, proxima]
+            properties:
+              caixa: { type: integer, minimum: 1, maximum: 5 }
+              proxima: { $ref: '#/components/schemas/Instante' }
+        erradas: { type: array, items: { type: string } }
+    PeriodoEstatisticas:
+      type: string
+      enum: ['7', '30', '60', bim]
+      default: '30'
+    PontoDia:
+      type: object
+      required: [dia, minutos]
+      properties:
+        dia: { type: string, format: date }
+        minutos: { type: integer, minimum: 0 }
+        pontos: { type: integer }
+        xp: { type: integer }
+    MapaCalor:
+      type: array
+      description: Semanas x 7 dias.
+      items:
+        type: array
+        items:
+          type: object
+          required: [dia, minutos]
+          properties:
+            dia: { type: string, format: date }
+            minutos: { type: integer, minimum: 0 }
+    MinutosPorDisciplina:
+      type: array
+      items:
+        type: object
+        required: [disciplina, minutos]
+        properties:
+          disciplina: { $ref: '#/components/schemas/Disciplina' }
+          minutos: { type: integer, minimum: 0 }
+    EstatisticasAluno:
+      type: object
+      required: [periodo, minutosTotal, metaDiariaMin, diasComEstudo, porDia, porDisciplina, porHora, mapa, sequencia, notas, mediaNotas, duelos, concluidasPorSemana, medalhas]
+      properties:
+        periodo: { $ref: '#/components/schemas/PeriodoEstatisticas' }
+        minutosTotal: { type: integer, minimum: 0 }
+        metaDiariaMin: { type: integer }
+        diasComEstudo: { type: integer, minimum: 0 }
+        porDia: { type: array, items: { $ref: '#/components/schemas/PontoDia' } }
+        porDisciplina: { $ref: '#/components/schemas/MinutosPorDisciplina' }
+        porHora: { type: array, minItems: 24, maxItems: 24, items: { type: integer, minimum: 0 } }
+        mapa: { $ref: '#/components/schemas/MapaCalor' }
+        sequencia:
+          type: object
+          required: [atual, melhor]
+          properties:
+            atual: { type: integer, minimum: 0 }
+            melhor: { type: integer, minimum: 0 }
+        notas:
+          type: array
+          items:
+            type: object
+            required: [atividadeId, titulo, disciplina, nota, em]
+            properties:
+              atividadeId: { type: string }
+              titulo: { type: string }
+              disciplina: { $ref: '#/components/schemas/Disciplina' }
+              nota: { type: number, minimum: 0, maximum: 10 }
+              em: { $ref: '#/components/schemas/Instante' }
+        mediaNotas: { type: [number, 'null'] }
+        duelos:
+          type: object
+          required: [jogados, vitorias]
+          properties:
+            jogados: { type: integer, minimum: 0 }
+            vitorias: { type: integer, minimum: 0 }
+        concluidasPorSemana:
+          type: array
+          items:
+            type: object
+            required: [semana, quantidade]
+            properties:
+              semana: { type: string, format: date }
+              quantidade: { type: integer, minimum: 0 }
+        medalhas:
+          type: object
+          required: [conquistadas, total]
+          properties:
+            conquistadas: { type: integer, minimum: 0 }
+            total: { type: integer, minimum: 0 }
+    EstatisticasProfessor:
+      type: object
+      required: [periodo, turma, totalAlunos, engajamento, foco, desempenho, missoes, ranking, campeonatos, moderacao, risco]
+      properties:
+        periodo: { $ref: '#/components/schemas/PeriodoEstatisticas' }
+        turma: { type: string }
+        totalAlunos: { type: integer, minimum: 0 }
+        engajamento:
+          type: object
+          required: [ativos, minutosTotal, serie, mapa]
+          properties:
+            ativos: { type: integer, minimum: 0 }
+            minutosTotal: { type: integer, minimum: 0 }
+            serie: { type: array, items: { $ref: '#/components/schemas/PontoDia' } }
+            mapa: { $ref: '#/components/schemas/MapaCalor' }
+        foco:
+          type: object
+          required: [porHora, porDisciplina]
+          properties:
+            porHora: { type: array, minItems: 24, maxItems: 24, items: { type: integer, minimum: 0 } }
+            porDisciplina: { $ref: '#/components/schemas/MinutosPorDisciplina' }
+        desempenho:
+          type: object
+          required: [mediaNotas, entregasNoPrazo, entregasAtrasadas, pendentes]
+          properties:
+            mediaNotas: { type: [number, 'null'] }
+            entregasNoPrazo: { type: integer, minimum: 0 }
+            entregasAtrasadas: { type: integer, minimum: 0 }
+            pendentes: { type: integer, minimum: 0 }
+        missoes:
+          type: object
+          required: [concluidas, taxa]
+          properties:
+            concluidas: { type: integer, minimum: 0 }
+            taxa: { type: number, minimum: 0, maximum: 1 }
+        ranking:
+          type: array
+          description: Só da turma do professor; respeita anônimo e Modo Sombra.
+          items:
+            type: object
+            required: [alunoId, nome, xpSemana]
+            properties:
+              alunoId: { type: string }
+              nome: { type: string }
+              xpSemana: { type: integer, minimum: 0 }
+        campeonatos:
+          type: object
+          required: [ativos, participantes]
+          properties:
+            ativos: { type: integer, minimum: 0 }
+            participantes: { type: integer, minimum: 0 }
+        moderacao:
+          type: object
+          required: [pendentes, decididas, removidas]
+          properties:
+            pendentes: { type: integer, minimum: 0 }
+            decididas: { type: integer, minimum: 0 }
+            removidas: { type: integer, minimum: 0 }
+        risco:
+          type: array
+          items:
+            type: object
+            required: [alunoId, nome, motivo, diasSemEstudo]
+            properties:
+              alunoId: { type: string }
+              nome: { type: string }
+              motivo: { type: string }
+              diasSemEstudo: { type: integer, minimum: 0 }
 
     # ── Notificações ──
     Notificacao:
@@ -3395,7 +3736,7 @@ components:
     # ── Estado inicial ──
     Bootstrap:
       type: object
-      required: [usuario, pessoas, posts, missoes, coletiva, sequencia, pratica, relatos, compras, medalhas, desafiosConcluidos, lembretes, materiaisAbertos, conversas, estudos, salas, salaAtual, campeonatos, atividades, notificacoes, servidorEm]
+      required: [usuario, pessoas, posts, missoes, coletiva, sequencia, pratica, relatos, compras, medalhas, desafiosConcluidos, lembretes, materiaisAbertos, estudos, salas, salaAtual, campeonatos, atividades, notificacoes, servidorEm]
       properties:
         usuario: { $ref: '#/components/schemas/Usuario' }
         pessoas:
@@ -3412,7 +3753,10 @@ components:
         desafiosConcluidos: { type: array, items: { $ref: '#/components/schemas/Disciplina' } }
         lembretes: { type: array, items: { type: string } }
         materiaisAbertos: { type: array, items: { type: string } }
-        conversas: { type: array, items: { $ref: '#/components/schemas/Conversa' } }
+        flash: { $ref: '#/components/schemas/Flashcards' }
+        lembretesAgendados:
+          type: array
+          items: { $ref: '#/components/schemas/LembreteAgendado' }
         estudos: { $ref: '#/components/schemas/EstadoEstudos' }
         salas: { type: array, items: { $ref: '#/components/schemas/SalaEstudo' } }
         salaAtual: { type: [string, 'null'] }
@@ -3428,6 +3772,10 @@ components:
             moderacao:
               type: object
               additionalProperties: { $ref: '#/components/schemas/DecisaoModeracao' }
+            historicoModeracao:
+              type: array
+              maxItems: 300
+              items: { $ref: '#/components/schemas/RegistroModeracao' }
 
     # ── Eventos de tempo real (WebSocket /ws — ver docs/BACKEND.md) ──
     EventoEnvelope:
@@ -3437,7 +3785,7 @@ components:
       properties:
         tipo:
           type: string
-          enum: [sala.presenca, sala.mensagem, sala.fase, notificacao.nova, campeonato.atualizado, atividade.entregue, conversa.mensagem, conversa.leitura, conversa.digitando]
+          enum: [sala.presenca, sala.mensagem, sala.fase, notificacao.nova, campeonato.atualizado, atividade.entregue]
         id: { type: string }
         em: { $ref: '#/components/schemas/Instante' }
         dados: { type: object }
@@ -3482,21 +3830,3 @@ components:
         atividadeId: { type: string }
         alunoId: { type: string }
         entrega: { $ref: '#/components/schemas/Entrega' }
-    EventoConversaMensagem:
-      type: object
-      required: [conversaId, mensagem]
-      properties:
-        conversaId: { type: string }
-        mensagem: { $ref: '#/components/schemas/Mensagem' }
-    EventoConversaLeitura:
-      type: object
-      required: [conversaId, leitorId]
-      properties:
-        conversaId: { type: string }
-        leitorId: { type: string }
-    EventoConversaDigitando:
-      type: object
-      required: [conversaId, pessoaId]
-      properties:
-        conversaId: { type: string }
-        pessoaId: { type: [string, 'null'] }

@@ -10,6 +10,7 @@
  */
 import type { TipoEvento } from "@/data/calendario";
 import type { Disciplina } from "@/data/escola";
+import type { Flashcard } from "@/data/missoes";
 import type { ItemLoja } from "@/data/loja";
 import type { LigaId } from "@/data/ranking";
 import type { PapelSessao } from "@/lib/auth";
@@ -27,6 +28,7 @@ import type {
   Compra,
   DecisaoModeracao,
   Denuncia,
+  EstadoFlashcards,
   EspacoId,
   Medalha,
   MensagemSala,
@@ -565,7 +567,13 @@ export interface QueryAtribuicoes extends QueryPagina {
 /* ───────────── Moderação ───────────── */
 
 export interface ItemModeracaoDTO {
-  post: Post;
+  /** "post" (feed) ou "mensagem_sala" (mensagem do chat de uma sala retida pela triagem). */
+  tipo?: "post" | "mensagem_sala";
+  /** Presente quando `tipo` é "post" (ou omitido). */
+  post?: Post;
+  /** Presente quando `tipo` é "mensagem_sala". */
+  mensagem?: MensagemSala;
+  salaId?: string;
   /** "triagem" = sinalizado automaticamente (US06); "denuncia" = um usuário denunciou (US05). */
   origem: "triagem" | "denuncia";
   motivo: string;
@@ -576,8 +584,23 @@ export interface ItemModeracaoDTO {
 
 export interface DecisaoCorpo {
   decisao: DecisaoModeracao;
-  /** Registrada na auditoria e enviada ao autor quando a decisão é "removido". */
+  /** Motivo da decisão. Obrigatório quando "removido": vai para a auditoria, para o histórico e para o autor. */
   observacao?: string;
+}
+
+/** Linha do histórico de moderação (derivada da auditoria das decisões; posts e mensagens de sala). */
+export interface RegistroModeracaoDTO {
+  id: string;
+  tipo: "post" | "mensagem_sala";
+  /** Id do post ou da mensagem decidida. */
+  alvoId: string;
+  decisao: DecisaoModeracao;
+  decididoPor: string;
+  em: number;
+  motivo?: string;
+  autorId: string;
+  /** Texto do conteúdo (o removido sai do feed, o histórico continua legível). */
+  texto: string;
 }
 
 export interface ValidacaoRelatoCorpo {
@@ -588,3 +611,101 @@ export interface ValidacaoRelatoCorpo {
 /* ───────────── Perfil: extras ───────────── */
 
 export type MedalhaDTO = Medalha & { progresso: number; meta: number };
+
+/* ───────────── Perfil editável, loja (entrega), lembretes ───────────── */
+
+/** `PUT /me`: o que a pessoa edita no perfil. `foto` é um JPEG recortado (~256 px) em dataURL (até ~80 KB); `null` remove. */
+export interface EditarPerfilCorpo {
+  nome: string;
+  iniciais?: string;
+  /** Sem o "@", 3–24 caracteres [a-z0-9._], único (409 se já existe). */
+  arroba?: string;
+  /** Até 160 caracteres. */
+  bio?: string;
+  foto?: string | null;
+  selosExibidos?: string[];
+}
+
+/** `PUT /me/lembretes-agendados`: o servidor substitui a lista e dispara a notificação em `disparoEm` (nunca o cliente). */
+export interface LembretesAgendadosCorpo {
+  itens: { eventoId: string; disparoEm: number }[];
+}
+
+/** `POST /professor/lembretes`: avisa alunos que estão sem estudar. O servidor aplica a trava de 12 h por aluno. */
+export interface LembrarAlunosCorpo {
+  alunoIds: string[];
+  /** Instante em que o professor decidiu (auditoria). */
+  em: number;
+}
+
+/* ───────────── Flashcards próprios e Leitner ───────────── */
+
+/** `PUT /me/flashcards/{id}`: cria ou edita uma carta própria (id gerado no cliente). */
+export interface CartaPropriaCorpo {
+  disciplina: Disciplina;
+  pergunta: string;
+  resposta: string;
+}
+
+/** `POST /pratica/rodadas`: começa uma rodada com as cartas escolhidas (o servidor confere que existem e vencem hoje). */
+export interface NovaRodadaCorpo {
+  escolha: "Todas" | "Erradas" | Disciplina;
+  ids: string[];
+}
+
+/** `GET /me/flashcards`: cartas próprias + caixas de Leitner (1–5) + cartas erradas na última rodada. */
+export type FlashcardsDTO = EstadoFlashcards & { minhas: Flashcard[] };
+
+/* ───────────── Estatísticas (agregadas no servidor) ───────────── */
+
+export type PeriodoEstatisticas = "7" | "30" | "60" | "bim";
+
+export interface QueryEstatisticas {
+  periodo?: PeriodoEstatisticas;
+  disciplina?: Disciplina;
+  /** Só professor: uma das suas turmas. */
+  turma?: string;
+}
+
+export interface PontoDiaDTO {
+  /** AAAA-MM-DD no fuso America/Maceio. */
+  dia: string;
+  minutos: number;
+  pontos?: number;
+  xp?: number;
+}
+
+/** `GET /me/estatisticas`: tudo que a tela da aluna e o relatório PDF/CSV mostram. */
+export interface EstatisticasAlunoDTO {
+  periodo: PeriodoEstatisticas;
+  minutosTotal: number;
+  metaDiariaMin: number;
+  diasComEstudo: number;
+  porDia: PontoDiaDTO[];
+  porDisciplina: { disciplina: Disciplina; minutos: number }[];
+  /** 24 posições: minutos estudados em cada hora do dia. */
+  porHora: number[];
+  /** Semanas × 7 dias (mapa de calor). */
+  mapa: { dia: string; minutos: number }[][];
+  sequencia: { atual: number; melhor: number };
+  notas: { atividadeId: string; titulo: string; disciplina: Disciplina; nota: number; em: number }[];
+  mediaNotas: number | null;
+  duelos: { jogados: number; vitorias: number };
+  concluidasPorSemana: { semana: string; quantidade: number }[];
+  medalhas: { conquistadas: number; total: number };
+}
+
+/** `GET /professor/estatisticas`: agregados da turma (só turmas do professor); os alunos em risco usam os mesmos critérios do painel. */
+export interface EstatisticasProfessorDTO {
+  periodo: PeriodoEstatisticas;
+  turma: string;
+  totalAlunos: number;
+  engajamento: { ativos: number; minutosTotal: number; serie: PontoDiaDTO[]; mapa: { dia: string; minutos: number }[][] };
+  foco: { porHora: number[]; porDisciplina: { disciplina: Disciplina; minutos: number }[] };
+  desempenho: { mediaNotas: number | null; entregasNoPrazo: number; entregasAtrasadas: number; pendentes: number };
+  missoes: { concluidas: number; taxa: number };
+  ranking: { alunoId: string; nome: string; xpSemana: number }[];
+  campeonatos: { ativos: number; participantes: number };
+  moderacao: { pendentes: number; decididas: number; removidas: number };
+  risco: { alunoId: string; nome: string; motivo: string; diasSemEstudo: number }[];
+}
