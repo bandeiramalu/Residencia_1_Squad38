@@ -13,18 +13,18 @@
 <text x="108" y="138" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#0F172A" text-anchor="start">Biologia</text>
 <text x="108" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#EB6834</text>
 <text x="108" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">3,20 : 1</text>
-<rect x="192" y="76" width="76" height="44" rx="8" fill="#1BAF7A"/>
+<rect x="192" y="76" width="76" height="44" rx="8" fill="#1AA775"/>
 <text x="192" y="138" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#0F172A" text-anchor="start">História</text>
-<text x="192" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#1BAF7A</text>
-<text x="192" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">2,82 : 1</text>
-<rect x="276" y="76" width="76" height="44" rx="8" fill="#EDA100"/>
+<text x="192" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#1AA775</text>
+<text x="192" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">3,08 : 1</text>
+<rect x="276" y="76" width="76" height="44" rx="8" fill="#C68700"/>
 <text x="276" y="138" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#0F172A" text-anchor="start">Português</text>
-<text x="276" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#EDA100</text>
-<text x="276" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">2,17 : 1</text>
-<rect x="360" y="76" width="76" height="44" rx="8" fill="#E87BA4"/>
+<text x="276" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#C68700</text>
+<text x="276" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">3,06 : 1</text>
+<rect x="360" y="76" width="76" height="44" rx="8" fill="#E56A99"/>
 <text x="360" y="138" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#0F172A" text-anchor="start">Química</text>
-<text x="360" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#E87BA4</text>
-<text x="360" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">2,69 : 1</text>
+<text x="360" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#E56A99</text>
+<text x="360" y="166" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">3,06 : 1</text>
 <rect x="444" y="76" width="76" height="44" rx="8" fill="#008300"/>
 <text x="444" y="138" font-family="Geist, 'Segoe UI', system-ui, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#0F172A" text-anchor="start">Física</text>
 <text x="444" y="152" font-family="'Geist Mono', ui-monospace, Consolas, monospace" font-size="10.5" font-weight="400" fill="#475569" text-anchor="start">#008300</text>

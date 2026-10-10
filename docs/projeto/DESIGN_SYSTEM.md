@@ -148,14 +148,29 @@ A cor segue a disciplina, nunca a posição na lista: as variáveis `--disc-1` a
 |---|---|---|---|---|---|
 | Matemática | `--disc-1` | `#2A78D6` | 4,42 : 1 | `#3987E5` | 4,98 : 1 |
 | Biologia | `--disc-2` | `#EB6834` | 3,20 : 1 | `#D95926` | 4,66 : 1 |
-| História | `--disc-3` | `#1BAF7A` | 2,82 : 1 | `#199E70` | 5,32 : 1 |
-| Português | `--disc-4` | `#EDA100` | 2,17 : 1 | `#C98500` | 5,90 : 1 |
-| Química | `--disc-5` | `#E87BA4` | 2,69 : 1 | `#D55181` | 4,59 : 1 |
+| História | `--disc-3` | `#1AA775` | 3,08 : 1 | `#199E70` | 5,32 : 1 |
+| Português | `--disc-4` | `#C68700` | 3,06 : 1 | `#C98500` | 5,90 : 1 |
+| Química | `--disc-5` | `#E56A99` | 3,06 : 1 | `#D55181` | 4,59 : 1 |
 | Física | `--disc-6` | `#008300` | 4,95 : 1 | `#008300` | 3,66 : 1 |
 | Geografia | `--disc-7` | `#4A3AA7` | 8,56 : 1 | `#9085E9` | 5,79 : 1 |
 | Inglês | `--disc-8` | `#E34948` | 3,95 : 1 | `#E66767` | 5,61 : 1 |
 
-Como objeto gráfico, a meta é 3 : 1. No tema escuro as oito cores passam. No tema claro, **três ficam abaixo**: História (2,82), Química (2,69) e Português (2,17). O risco é reduzido porque o nome da disciplina sempre acompanha a cor (legenda, rótulo ou dica): a cor nunca é o único sinal.
+Como objeto gráfico (barras, fatias da rosca), a meta é 3 : 1 contra o fundo do cartão (WCAG 1.4.11). **As oito cores passam nos dois temas.** No tema claro, três ficavam abaixo e foram escurecidas só até passar, mantendo o matiz (o tom em HSL):
+
+| Disciplina | Antes (claro) | Contraste antes | Agora (claro) | Contraste agora |
+|---|---|---|---|---|
+| História | `#1BAF7A` | 2,82 : 1 | `#1AA775` | 3,08 : 1 |
+| Português | `#EDA100` | 2,17 : 1 | `#C68700` | 3,06 : 1 |
+| Química | `#E87BA4` | 2,69 : 1 | `#E56A99` | 3,06 : 1 |
+
+As outras cinco cores do tema claro e todo o tema escuro não mudaram. As oito continuam distinguíveis entre si, inclusive para daltonismo. Medida: menor distância de cor (ΔE, CIE76) entre qualquer par, sem simulação e com simulação de protanopia, deuteranopia e tritanopia.
+
+| Tema | Sem simulação | Com simulação de daltonismo |
+|---|---|---|
+| Claro | 22,0 | 9,5 a 11,3 |
+| Escuro | 20,7 | 2,5 a 7,9 (o par mais próximo é Matemática × Geografia, em protanopia) |
+
+O nome da disciplina continua acompanhando a cor (legenda, rótulo ou dica): a cor nunca é o único sinal, e é por isso que o par mais próximo do tema escuro é aceitável. A cor de disciplina só aparece nos gráficos de Estatísticas (rosca e barras horizontais de "Por disciplina", do aluno e do professor). Os tokens ficam em `globals.css`; [`lib/cores.ts`](../../src/lib/cores.ts) só aponta para as variáveis.
 
 O mapa de calor de estudo usa uma rampa de um só tom (verde), do claro ao escuro: `--calor-0` a `--calor-4` (claro: `#F1F5F9`, `#BBF7D0`, `#4ADE80`, `#16A34A`, `#166534`; escuro: `#141D2C`, `#14532D`, `#15803D`, `#22C55E`, `#86EFAC`). O valor de cada dia também está na dica e no rótulo para leitor de tela.
 
@@ -226,6 +241,7 @@ Como o botão se comporta:
 - **Desabilitado:** opacidade reduzida e cursor "não permitido".
 - **Toque:** no celular (menos de 640 px) ou com ponteiro "grosso", os tamanhos pequeno e médio ganham uma área de toque invisível de pelo menos 44 × 44 px, sem mudar o visual (utilitário `alvo-toque` de `globals.css`). O grande já tem 44 px de altura.
 - **Confirmações em modal** usam uma trava interna para que um duplo clique execute a ação uma só vez.
+- **Rótulo inteiro:** nos rodapés de modal, o botão nunca é espremido a ponto de quebrar o rótulo; quando dois botões não cabem lado a lado, eles empilham (seção [13](#13-modal-de-confirmação)).
 
 Botão primário e hover, medidos: branco sobre `#15803D` = 5,02 : 1; branco sobre `#166534` = 7,13 : 1, nos dois temas.
 
@@ -300,7 +316,7 @@ Aparecem em Missões, Perfil (nível e domínio por disciplina), Ranking (distâ
 
 ### Gráficos
 
-Os gráficos de Estatísticas são componentes leves em HTML e SVG, sem biblioteca, em [`ui/graficos.tsx`](../../src/components/ui/graficos.tsx): `Barras`, `BarrasHorizontais`, `MapaDeCalor`, `Sparkline` e `Rosca` (com legenda). Traços finos, pontas de 4 px arredondadas, 2 px de respiro entre as barras, grade discreta, dica ao passar o mouse ou tocar, e textos sempre nas cores de texto. Cada disciplina usa a sua cor fixa (seção [02](#02-paleta-de-cores)). Todo gráfico tem resumo em texto e navegação por setas (seção [16](#16-acessibilidade)).
+Os gráficos de Estatísticas são componentes leves em HTML e SVG, sem biblioteca, em [`ui/graficos.tsx`](../../src/components/ui/graficos.tsx): `Barras`, `BarrasHorizontais`, `MapaDeCalor`, `Sparkline` e `Rosca` (com legenda). Traços finos, pontas de 4 px arredondadas, 2 px de respiro entre as barras, grade discreta, dica ao passar o mouse ou tocar, e textos sempre nas cores de texto. Cada disciplina usa a sua cor fixa (seção [02](#02-paleta-de-cores)). Todo gráfico tem resumo em texto e navegação por setas (seção [16](#16-acessibilidade)). Nas barras verticais, cada barra é um botão que ocupa todo o "vão" (a barra mais metade do respiro de cada lado) e a altura inteira do gráfico, e no celular o dedo que toca ou arrasta escolhe o vão sob ele (seção [16](#alvo-de-toque-e-zoom)).
 
 ## 10 Navegação inferior
 
@@ -407,7 +423,16 @@ Como o modal se comporta (veja também a seção [16](#16-acessibilidade)):
 - Prende o Tab dentro dele, deixa o fundo inerte e trava a rolagem da página.
 - Ao fechar, o foco volta para o botão que o abriu.
 
-Telas de referência: [Wireframes](./WIREFRAMES.md), tela 45 (Confirmar troca) e tela 78 (Saldo insuficiente).
+**Rodapé com botões.** Os modais de formulário e de confirmação (Nova publicação, Remover publicação, Detalhe da medalha, Confirmar troca e outros; 26 rodapés em 22 arquivos) terminam com um rodapé fixo, o `RodapeSheet` ([`ui/RodapeSheet.tsx`](../../src/components/ui/RodapeSheet.tsx)): Cancelar (ou Fechar) e a ação principal. Cada botão tem largura mínima igual à do próprio rótulo (`min-w-fit`). Se os dois cabem lado a lado, ficam lado a lado; se não cabem (celular estreito, rótulo longo), **empilham**, cada um com a largura inteira, em vez de quebrar o texto em duas ou três linhas. Medido na demonstração (altura de 44 px nos dois casos):
+
+| Modal | 390 px | 320 px |
+|---|---|---|
+| Detalhe da medalha: "Baixar certificado (PDF)" e "Fechar" (tela 49) | lado a lado; o botão do certificado tem 228,6 px de largura e uma linha só | empilhados, 280 px cada |
+| Remover publicação: "Cancelar" e "Remover publicação" (tela 86) | lado a lado; o botão da ação tem 184,9 px de largura e uma linha só | empilhados, 280 px cada |
+
+Nenhum modal com rodapé rola na horizontal em 320, 390 ou 1280 px.
+
+Telas de referência: [Wireframes](./WIREFRAMES.md), tela 45 (Confirmar troca), tela 78 (Saldo insuficiente), tela 49 (Detalhe da medalha) e tela 86 (Remover publicação).
 
 ## 14 Espaçamento
 
@@ -485,10 +510,10 @@ A coluna "Situação" separa o que já está no protótipo do que ainda tem ress
 | [Navegação por teclado](#navegação-por-teclado) | No protótipo |
 | [Foco visível](#foco-visível) | No protótipo |
 | [Texto alternativo](#texto-alternativo) | No protótipo |
-| [Contraste](#contraste-medido) | No protótipo, com ressalvas (ajustes aplicados; 4 exceções conhecidas) |
+| [Contraste](#contraste-medido) | No protótipo (as 4 exceções foram corrigidas em 09/10/2026; resta só uma nuance no hover dos links de pessoa) |
 | [Não depender só de cor](#não-depender-só-de-cor) | No protótipo (o estado "Pontos em verificação" é só mockup) |
 | [Movimento](#movimento) | No protótipo |
-| [Alvo de toque e zoom](#alvo-de-toque-e-zoom) | No protótipo, com ressalva (as barras dos gráficos são alvos menores) |
+| [Alvo de toque e zoom](#alvo-de-toque-e-zoom) | No protótipo, com ressalva (nas séries de 30 e 60 dias dos gráficos cada barra é um vão estreito, de 5 a 11 px; o arrasto do dedo compensa) |
 
 ### Navegação por teclado
 
@@ -500,7 +525,11 @@ Todos os controles são alcançados com **Tab**, na mesma ordem em que aparecem 
 - Na demonstração, com o modal "Nova publicação" aberto, 25 Tabs seguidos ficaram sempre dentro do modal; Esc fechou; o foco voltou para o botão "Compartilhe uma dúvida ou material…" que o abriu.
 - Esc fecha só o modal do topo ([`Sheet.tsx`](../../src/components/ui/Sheet.tsx)). Menus suspensos fecham com Esc e devolvem o foco ao gatilho ([`useFecharFora.ts`](../../src/hooks/useFecharFora.ts)).
 - Os gráficos de barras são uma parada de Tab só; as setas, Home e End percorrem as barras.
-- **Ressalva:** abas, chips e controles segmentados usam `role="tab"`, mas cada um é uma parada de Tab. As setas não trocam de aba.
+- **Abas, chips e controles segmentados** (`role="tab"`) seguem o padrão ARIA de abas, com "ativação automática":
+  - Só a aba ativa entra na ordem do **Tab** (as outras ficam com `tabindex="-1"`). Se nenhuma está ativa, como num filtro ainda sem escolha (o motivo na janela "Remover publicação"), a primeira é a parada de Tab. Assim a lista inteira é uma parada só, e **Tab** sai dela.
+  - **←** e **→** movem o foco para a aba vizinha e já a selecionam; do último volta ao primeiro e vice-versa. **Home** vai à primeira e **End** à última.
+  - O visual não mudou. O código é compartilhado em [`ui/abas.ts`](../../src/components/ui/abas.ts): `aoTeclarNasAbas` vai no `onKeyDown` da lista e `abaNoTab` decide o `tabindex` (o Perfil e o painel do professor, que têm sempre uma aba ativa, usam `tabIndex={ativa ? 0 : -1}`). Usam o código [`ChipGroup`](../../src/components/ui/ChipGroup.tsx), [`Segmentado`](../../src/components/ui/Segmentado.tsx), `Abas` do feed ([`feed/Abas.tsx`](../../src/components/feed/Abas.tsx)), as abas do Perfil e as do painel do professor ([`professor/comum.tsx`](../../src/components/professor/comum.tsx)).
+  - Conferido com teclado de verdade, em 390 px e em 1280 px, em 23 listas de abas da demonstração (Feed, Estudos, Perfil, Campeonatos, Salas, Ranking, Loja, Estatísticas e as listas do professor, entre abas, filtros em pílula e controles segmentados): uma parada de Tab, →, End, volta ao início, ← no primeiro, Home e Tab saindo do grupo. A única que não responde no teste é a do feed atrás da janela "Remover publicação", que fica inerte (o foco não entra no fundo); a lista da própria janela responde.
 
 ### Foco visível
 
@@ -524,7 +553,7 @@ Botões só com ícone (curtir, salvar, compartilhar, notificações) têm rótu
 
 Combinações medidas pela fórmula da WCAG 2.1 (tabela abaixo). Meta: 4,5 : 1 para texto comum e 3 : 1 para texto grande e ícones.
 
-**Situação: ajustes aplicados, com ressalvas.** Os dois ajustes recomendados no PDF já estão no código: o botão primário usa `#15803D` (e não `#16A34A`) e o cinza `#94A3B8` não é usado em texto no tema claro. Restam quatro exceções pontuais, listadas depois da tabela.
+**Situação: ajustes aplicados.** Os dois ajustes recomendados no PDF já estão no código: o botão primário usa `#15803D` (e não `#16A34A`) e o cinza `#94A3B8` não é usado em texto no tema claro. As quatro exceções que restavam foram corrigidas em 09/10/2026 (tabela depois da tabela de combinações).
 
 ### Não depender só de cor
 
@@ -551,9 +580,23 @@ Animações curtas, só para dar continuidade (abrir modal, trocar aba, número 
 
 - A área de toque é ampliada sem mudar o visual. Controles pequenos usam o utilitário `alvo-toque` de `globals.css`: um `::after` invisível de no mínimo 44 × 44 px, centrado no controle. Onde o texto corta com reticências (e o `::after` seria recortado), o link ganha a mesma altura por preenchimento. Os campos de formulário e menus de seleção passam de 40 para 44 px (`toque:h-11`). Tudo isso vale com menos de 640 px de largura ou com ponteiro "grosso".
 - Medido na demonstração em 390 px, nas 16 telas abaixo: todos os botões, links (inclusive nomes e avatares em cards e listas), abas, campos e itens das barras têm pelo menos 44 × 44 px de área de toque.
-- **Ressalva:** as barras dos gráficos de Estatísticas (aluno e professor) são alvos estreitos, de cerca de 9 px de largura nas séries de 30 dias. O gráfico é uma parada de Tab só, percorrida com as setas, e tem resumo em texto.
+- **Ressalva:** as barras dos gráficos de Estatísticas (aluno e professor). Cada barra é um botão, e nas séries longas 30 ou 60 alvos de 24 ou 44 px não cabem na tela. O que se fez:
+  - O botão é o "vão" inteiro da barra, em toda a altura do gráfico e **sem faixa morta** entre barras. Antes, cada botão tinha 2 px de folga entre ele e o vizinho (8,6 px de largura em 390 px, 6,3 px em 320 px); agora são 10,6 px e 8,3 px, e a barra visível continua com 8,6 px, na mesma posição.
+  - No celular, tocar ou arrastar na área do gráfico escolhe o vão sob o dedo (`touch-pan-y`: arrastar na vertical ainda rola a página). A dica fica na tela depois de soltar e fecha com um toque fora.
+  - As setas, Home e End e o resumo em texto continuam como alternativa equivalente.
+  - O limite que fica está na tabela abaixo: só as séries de 30 e 60 dias do celular ficam bem abaixo de 24 px. É o limite do dado (uma barra por dia).
 - **320 px sem rolagem horizontal:** conferido em 16 telas (9 do aluno e 7 do professor), em 320 e 390 px. Nenhuma rolou na horizontal, inclusive o Painel do professor.
 - **Zoom de 200%:** em uma tela de 1280 px, equivale a 640 px de largura. Nessa largura e em 639 px, nenhuma das 16 telas rolou na horizontal.
+
+Largura do vão de cada barra, medida na demonstração (altura do gráfico inteira, de 72 a 150 px):
+
+| Gráfico | 390 px | 320 px |
+|---|---|---|
+| Séries de 7 dias, do aluno ou do professor (Tempo por dia, XP, Pontos, Alunos ativos) | 45 a 47 px | 35 a 37 px |
+| Séries de 30 dias (aluno e professor) | **10,6 a 10,9 px** | **8,3 a 8,5 px** |
+| Bimestre do aluno: 60 dias, uma barra por dia | **5,3 px** | **4,1 px** |
+| Bimestre do professor e "Concluídas por semana" do aluno (8 semanas) | 40 a 41 px | 31 a 32 px |
+| Horário de pico do aluno (24 horas) | 13,3 px | 10,3 px |
 
 ### Contraste medido
 
@@ -602,14 +645,24 @@ Outras combinações usadas no código:
 | Iniciais do avatar (tom escuro sobre tom suave) | 6,36 a 8,40 : 1 | 7,75 a 9,58 : 1 |
 | Hover antigo do botão no escuro, `#22C55E` com branco (removido) | n/d | 2,28 : 1 |
 
-**Exceções conhecidas** (texto abaixo de 4,5 : 1):
+**Exceções corrigidas em 09/10/2026** (eram textos abaixo de 4,5 : 1; razões medidas na demonstração, tema claro e escuro):
 
-| Onde | Combinação | Razão |
+| Onde | Antes | Agora |
 |---|---|---|
-| Dias passados no calendário ([`CalendarioSheet.tsx`](../../src/components/calendario/CalendarioSheet.tsx)) | `--color-texto-2` a 50% de opacidade | 1,97 : 1 no claro; 2,70 : 1 no escuro |
-| Duração no botão "Iniciar foco" ([`TimerFoco.tsx`](../../src/components/estudos/TimerFoco.tsx)) | branco a 90% sobre `#15803D` | 4,40 : 1 |
-| Hora nas mensagens minhas da sala ([`SalaChat.tsx`](../../src/components/salas/SalaChat.tsx)) | branco a 75% sobre `#15803D` | 3,53 : 1 |
-| Hora nas mensagens de sistema da sala (`SalaChat.tsx`) | `--color-texto-2` a 70% | cerca de 2,7 : 1 no claro (estimado a partir do código, sem medir na tela) |
+| Dias passados no calendário ([`CalendarioSheet.tsx`](../../src/components/calendario/CalendarioSheet.tsx)) | `--color-texto-2` a 50% de opacidade: 1,98 : 1 no claro, 2,71 : 1 no escuro | `--color-texto-2` pleno: 4,76 : 1 no claro, 7,06 : 1 no escuro |
+| Duração no botão "Iniciar foco" ([`TimerFoco.tsx`](../../src/components/estudos/TimerFoco.tsx)) | branco a 90% sobre `#15803D`: 4,41 : 1 | branco pleno sobre `#15803D`: 5,02 : 1 (7,13 : 1 no hover) |
+| Hora nas mensagens minhas da sala ([`SalaChat.tsx`](../../src/components/salas/SalaChat.tsx)) | branco a 75% sobre `#15803D`: 3,53 : 1 | branco pleno: 5,02 : 1 |
+| Hora nas mensagens de sistema da sala (`SalaChat.tsx`) | `--color-texto-2` a 70%: 2,72 : 1 no claro, 4,09 : 1 no escuro | `--color-texto-2` pleno: 4,76 : 1 no claro, 7,06 : 1 no escuro |
+
+A nova varredura (mesmo método, agora com a sala, o chat com mensagens, o foco pausado e todos os campeonatos) achou mais três textos do mesmo tipo e os corrigiu:
+
+| Onde | Antes | Agora |
+|---|---|---|
+| Contagem nos filtros de Campeonatos ([`CampeonatosView.tsx`](../../src/components/campeonatos/CampeonatosView.tsx)) | `opacity-60`: 3,35 : 1 no claro | sem opacidade (`font-normal`): 10,35 : 1 no claro |
+| Texto "restantes" do timer pausado ([`TimerFoco.tsx`](../../src/components/estudos/TimerFoco.tsx)) | a tela toda a 50% de opacidade: 1,96 : 1 no claro, 2,72 : 1 no escuro | só o anel esmaece; o texto fica em `--color-texto-2`: 4,76 : 1 no claro, 7,06 : 1 no escuro |
+| Iniciais dos avatares de quem foi eliminado no chaveamento ([`Chaveamento.tsx`](../../src/components/campeonatos/Chaveamento.tsx)) | `opacity-50`: 3,10 a 3,56 : 1 no escuro | `opacity-80` com tons de cinza (`grayscale`) |
+
+**Nuance que fica.** No hover (80% de opacidade) e no toque pressionado (70%), os links de pessoa ([`LinkPessoa`](../../src/components/ui/LinkPessoa.tsx)) esmaecem inteiros. O texto cinza (`--color-texto-2`) dentro deles cai de 4,76 : 1 para cerca de 3,25 : 1 no hover e 2,72 : 1 pressionado no tema claro (4,95 e 4,08 : 1 no escuro), só enquanto o ponteiro está em cima. Não foi mexido porque o componente é compartilhado e o conteúdo dele varia. Em repouso, nenhum texto das telas varridas fica abaixo de 4,5 : 1.
 
 Como a razão é calculada (a mesma fórmula do PDF):
 
@@ -624,7 +677,7 @@ def razao(a, b):                   # 1 a 21; texto comum pede 4,5 ou mais
     return (la + 0.05) / (lb + 0.05)
 ```
 
-Como foi verificado: uma varredura automática mediu cada texto visível (cor do texto sobre o fundo real, com transparências) em 16 telas, nos dois temas e em duas larguras (390 e 1280 px), mais 10 painéis e abas abertos (notificações, saldo, calendário, nova publicação, troca na Loja, conquistas, configurações, flashcards, menu do post). Telas de sala, duelo e chat não entraram na varredura; as exceções delas vêm da leitura do código.
+Como foi verificado: uma varredura automática mediu cada texto visível (cor do texto sobre o fundo real, com transparências) em 16 telas, nos dois temas e em duas larguras (390 e 1280 px), mais 10 painéis e abas abertos (notificações, saldo, calendário, nova publicação, troca na Loja, conquistas, configurações, flashcards, menu do post). Sala, chat, foco pausado e campeonatos entraram numa segunda varredura em 09/10/2026 (mesmo método, 390 e 1280 px, claro e escuro), sem nenhum texto abaixo de 4,5 : 1 em repouso. Não entraram o duelo de quiz nem os painéis do professor abertos.
 
 Além do texto, há um ponto de atenção sobre **bordas**: a borda fina `#E2E8F0` tem só 1,23 : 1 contra o branco. Ela separa cards e campos, mas não é o único sinal: todo campo tem rótulo e anel de foco, e o interruptor tem a posição do botão e `aria-checked`.
 
@@ -682,6 +735,7 @@ Na demonstração, nas larguras 320, 390, 639, 640, 1023, 1024, 1279 e 1280 px:
 | Painel do professor | Indicadores em 2 colunas até 1023 px; 5 em uma linha a partir de 1024 px |
 | Largura do conteúdo | 640 px no tablet; 776 px em 1024 px; 1032 px em 1280 px |
 | Rolagem horizontal | Nenhuma, em nenhuma das 8 larguras (16 telas em 320 e 390 px; Início, Loja, Estudos, Estatísticas, Ranking, Painel e Feed do professor nas demais) |
+| Rolagem horizontal, repetida após o acabamento de 09/10/2026 | Nenhuma em 108 telas e janelas (aluno e professor, calendário, foco, modal de medalha, modal "Remover publicação", campeonatos e salas) em 320, 390 e 1280 px, nos dois temas, e nenhum erro ou aviso no console |
 
 ## 18 Feedback e validação
 
@@ -746,7 +800,7 @@ Lista para a equipe atualizar o `Design_System_Squad38_1.pdf`. Os itens estão n
 2. "Verde escuro `#15803D`: hover dos botões" deixa de valer: o hover é `#166534`. O `#15803D` agora é o fundo do botão e o texto de destaque.
 3. A paleta passa a listar os nomes reais das variáveis CSS e os tokens que faltavam: `--color-acao`, `--color-acao-2`, `--color-acento`, `--color-verde-2`, `--color-superficie-2`, `--color-ouro`, `--color-ouro-claro`, `--color-sombra`.
 4. Texto âmbar usa `--color-ouro` (`#B45309`); o âmbar `#D97706` fica só para ícones e barras.
-5. Cores por disciplina: três das oito ficam abaixo de 3 : 1 sobre branco no tema claro (História 2,82, Química 2,69, Português 2,17). No escuro, todas passam. O nome da disciplina sempre acompanha a cor.
+5. Cores por disciplina: no tema claro, História (`#1AA775`), Português (`#C68700`) e Química (`#E56A99`) foram escurecidas para passar de 3 : 1 sobre branco (3,08, 3,06 e 3,06; antes 2,82, 2,17 e 2,69), mantendo o matiz. No escuro, todas já passavam e nada mudou. O nome da disciplina sempre acompanha a cor.
 
 **Seções 03 e 04: tipografia e formas**
 
@@ -777,7 +831,7 @@ Lista para a equipe atualizar o `Design_System_Squad38_1.pdf`. Os itens estão n
 
 19. A raridade do item é texto (ver 12). O card mostra "faltam N" quando o saldo não basta e "Adquirido" quando o item não está equipado. Vouchers podem ser trocados de novo.
 20. A frase de saldo insuficiente é "Saldo insuficiente: você possui X pontos e este item requer Y pontos."
-21. O modal é inferior até 1023 px (inclusive no tablet) e centralizado a partir de 1024 px. Fecha por X, fundo, Esc e arrasto; o Esc fecha só o modal do topo.
+21. O modal é inferior até 1023 px (inclusive no tablet) e centralizado a partir de 1024 px. Fecha por X, fundo, Esc e arrasto; o Esc fecha só o modal do topo. O rodapé com botões (`RodapeSheet`) empilha os dois botões, cada um com a largura inteira, quando não cabem lado a lado, em vez de quebrar o rótulo (telas 49 e 86 em 320 px).
 
 **Seção 15: tema escuro**
 
@@ -786,11 +840,11 @@ Lista para a equipe atualizar o `Design_System_Squad38_1.pdf`. Os itens estão n
 
 **Seção 16: acessibilidade**
 
-24. Navegação por teclado: de "Especificado" para **No protótipo** (link "Pular para o conteúdo", Esc só no modal do topo, foco preso e devolvido). Ressalva: abas não trocam com as setas.
+24. Navegação por teclado: de "Especificado" para **No protótipo** (link "Pular para o conteúdo", Esc só no modal do topo, foco preso e devolvido). Abas, chips e controles segmentados trocam com ← e →, Home e End (parada de Tab só na aba ativa).
 25. Texto alternativo: de "Especificado" para **No protótipo** (descrição opcional da imagem, "Imagem enviada por [nome]", resumo em texto em todos os gráficos).
-26. Contraste: os dois ajustes recomendados foram aplicados. A tabela foi recalculada: "Aviso âmbar" passa de 6,84 para 8,73 : 1 e "Etiqueta verde" passa de 6,49 para 4,79 : 1 (a etiqueta atual usa outro par de cores). Entram 4 exceções conhecidas.
+26. Contraste: os dois ajustes recomendados foram aplicados. A tabela foi recalculada: "Aviso âmbar" passa de 6,84 para 8,73 : 1 e "Etiqueta verde" passa de 6,49 para 4,79 : 1 (a etiqueta atual usa outro par de cores). As 4 exceções que entraram (calendário, "Iniciar foco", horas do chat da sala) foram corrigidas em 09/10/2026, junto com mais três do mesmo tipo. Resta só uma nuance no hover dos links de pessoa, que esmaecem a 80%.
 27. Movimento: também o número que sobe e o confete respeitam "reduzir movimento".
-28. Alvo de toque: de "Especificado" para **No protótipo** (área de toque de 44 × 44 px no celular com o utilitário `alvo-toque`, inclusive nomes e avatares em listas, e campos de 44 px). Ressalva: as barras dos gráficos são alvos estreitos. A exigência de 320 px e zoom de 200% sem rolagem horizontal foi conferida em 16 telas, sem exceção.
+28. Alvo de toque: de "Especificado" para **No protótipo** (área de toque de 44 × 44 px no celular com o utilitário `alvo-toque`, inclusive nomes e avatares em listas, e campos de 44 px). Ressalva: nas séries de 30 dias cada barra é um vão de cerca de 10 px (5 px no Bimestre do aluno, com 60 barras); o vão agora é o botão inteiro, sem faixa morta, e o arrasto do dedo escolhe a barra. A exigência de 320 px e zoom de 200% sem rolagem horizontal foi conferida em 16 telas, sem exceção.
 29. "Retida para revisão" virou "Em revisão pela coordenação". "Em verificação" continua só como mockup.
 
 **Seção 17: responsividade**
@@ -815,9 +869,8 @@ Lista para a equipe atualizar o `Design_System_Squad38_1.pdf`. Os itens estão n
 
 ### Pendências conhecidas do protótipo
 
-Itens que a equipe de código ainda pode corrigir (conferidos em 09/10/2026):
+Itens que a equipe de código ainda pode corrigir (conferidos em 09/10/2026). Já não são pendências: os quatro textos abaixo de 4,5 : 1 (seção 16), a navegação por setas nas abas (seção 16), as três cores de disciplina abaixo de 3 : 1 no tema claro (seção 02) e o alvo de toque estreito das barras, que melhorou e hoje é só o limite do dado (seção 16).
 
-1. **Quatro textos abaixo de 4,5 : 1** (tabela de exceções na seção 16).
-2. **Barras dos gráficos com alvo de toque estreito** (cerca de 9 px de largura nas séries de 30 dias). Arquivo: [`ui/graficos.tsx`](../../src/components/ui/graficos.tsx).
-3. **Abas sem navegação por setas** (`role="tab"` com uma parada de Tab por aba).
-4. **Variante de botão `rapido` sem uso**; os tons de etiqueta `verde`, `ouro` e `escuro` também não aparecem em nenhuma tela.
+1. **Variante de botão `rapido` sem uso**; os tons de etiqueta `verde`, `ouro` e `escuro` também não aparecem em nenhuma tela.
+2. **Links de pessoa no hover.** [`LinkPessoa`](../../src/components/ui/LinkPessoa.tsx) esmaece o link inteiro (80% no hover, 70% pressionado), e o texto cinza dentro dele cai abaixo de 4,5 : 1 enquanto o ponteiro está em cima (3,25 : 1 no claro). O componente é compartilhado e o conteúdo varia, então não foi alterado.
+3. **Barras de 30 e 60 dias no celular** continuam com vãos de 5 a 11 px (uma barra por dia). Se a equipe quiser um alvo maior, o caminho é agrupar o Bimestre em semanas, como o painel do professor já faz.
