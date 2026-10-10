@@ -64,6 +64,7 @@ O app também roda de dois jeitos idênticos, com as mesmas telas e regras:
 | Rotas | Pastas de `src/app` (`/feed`), 21 páginas | Tabela de rotas de [`scripts/demo/app.tsx`](../../scripts/demo/app.tsx), por hash (`#/feed`), 20 rotas: a `/` só existe no Next |
 | Peças do Next | `next/link`, `next/navigation`, `next/image`, `next/dynamic` | Trocadas por adaptadores em `scripts/demo/shims/` |
 | Guarda de rotas | [`src/lib/guarda.ts`](../../src/lib/guarda.ts) dentro do `AppShell` | A mesma função, no mesmo `AppShell` |
+| Título da aba | `metadata` de [`src/app/layout.tsx`](../../src/app/layout.tsx): "Portal do Aluno · CEPI Expansão" por padrão e "Feed · Portal CEPI Expansão" nas telas com título | Igual. O `<title>` do arquivo é gerado por `build.mjs` a partir de `ESCOLA` ([`src/data/escola.ts`](../../src/data/escola.ts), campo `curto`), a mesma fonte do Next, e o `app.tsx` troca o título a cada tela |
 
 > **O que falta no modo integrado** (detalhado em [`docs/BACKEND.md`](../BACKEND.md), seção 11): a leitura pela API (`/me/bootstrap`, `GET /posts`…) ainda não é chamada, as telas de duelo, desafio e rodada ainda jogam no navegador, o estado otimista ainda não é desfeito quando o servidor recusa um pedido, e o tempo real só cobre notificações.
 
@@ -85,7 +86,8 @@ src/
   components/             Telas e peças visuais, sem regra de negócio
     shell/                AppShell, barra lateral, cabeçalho, barra inferior, faixa de conexão,
                           limite de erro (tela "Não foi possível carregar agora"), notificações
-    ui/                   Design System: Button, Card, Sheet, Badge, Anel, gráficos
+    ui/                   Design System: Button, Card, Sheet, Badge, Anel, gráficos,
+                          abas.ts (teclado das abas: setas, Home e End)
     feed/  estudos/  salas/  campeonatos/  missoes/  loja/  perfil/  pessoas/  ranking/
     estatisticas/  atividades/  calendario/  login/  professor/
 
@@ -403,7 +405,7 @@ O que mudou entre `Arquitetura_da_Solucao_Squad38_1.pdf` e o protótipo v8, para
 **Gerais**
 
 1. As mensagens diretas foram retiradas por decisão da banca. A pasta `app/mensagens/` não existe mais e a tela de estado vazio não usa mais Mensagens como exemplo. No P05, "mensagens" significa o chat das salas coletivas.
-2. O app roda de dois jeitos idênticos: Next (`npm start`) e demonstração em HTML único (`demonstração/Portal_do_Aluno.html`, gerada por `npm run demo` a partir de `scripts/demo/`). O PDF não cita a demonstração.
+2. O app roda de dois jeitos idênticos: Next (`npm start`) e demonstração em HTML único (`demonstração/Portal_do_Aluno.html`, gerada por `npm run demo` a partir de `scripts/demo/`). O PDF não cita a demonstração. O título e a descrição do arquivo da demonstração saem de `src/data/escola.ts`, então o `<title>` estático ("Portal do Aluno · CEPI Expansão") é igual ao do Next.
 3. Novo, fora do PDF: o professor também usa `/feed` ("Feed da escola"), uma rota compartilhada. Ela entra nas rotas compartilhadas da guarda e na tabela de páginas.
 
 **01 · Visão geral**

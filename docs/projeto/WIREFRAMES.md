@@ -124,7 +124,7 @@ O seletor Liga (XP) / Foco troca a métrica. Na liga, as 3 abas (Minha liga, Min
 
 ### Campeonatos: duelos e disputas entre turmas
 
-Ficam na aba ao lado do Ranking. Reúnem mata-mata com duelos de quiz, pontos corridos e interclasses; o próximo duelo do aluno aparece em destaque no topo.
+Ficam na aba ao lado do Ranking. Reúnem mata-mata com duelos de quiz, pontos corridos (nos de quiz, uma rodada por dia, de 5 perguntas, com 10 pontos por acerto) e interclasses; o próximo duelo do aluno aparece em destaque no topo.
 
 | <img src="telas/36-campeonatos.webp" width="240" alt="36 Campeonatos"> | <img src="telas/37-campeonato-detalhe.webp" width="240" alt="37 Detalhe do campeonato"> | <img src="telas/38-chaveamento.webp" width="240" alt="38 Chaveamento"> |
 |:---:|:---:|:---:|
@@ -156,7 +156,7 @@ O perfil segue o padrão de rede social: capa, avatar, nível e números no topo
 
 | <img src="telas/49-detalhe-medalha.webp" width="240" alt="49 Detalhe da medalha"> | <img src="telas/50-estatisticas-aluno-resumo.webp" width="240" alt="50 Estatísticas (no PDF, aba Estudo)"> | <img src="telas/51-perfil-configuracoes.webp" width="240" alt="51 Configurações e privacidade"> |
 |:---:|:---:|:---:|
-| **49** Detalhe da medalha | **50** Estatísticas (no PDF, aba Estudo) | **51** Configurações e privacidade |
+| **49** Detalhe da medalha<br><sub>Critério, data e, na medalha conquistada, o botão "Baixar certificado (PDF)" ao lado de "Fechar", cada rótulo em uma linha.</sub> | **50** Estatísticas (no PDF, aba Estudo) | **51** Configurações e privacidade |
 
 ### Sobreposições do cabeçalho
 
@@ -214,7 +214,7 @@ O professor usa o mesmo feed (`/feed`), chamado "Feed da escola". Ele publica Av
 
 | <img src="telas/84-aviso-do-professor-no-feed-da-aluna.webp" width="240" alt="84 Aviso do professor no feed da aluna"> | <img src="telas/85-resposta-oficial-no-feed.webp" width="240" alt="85 Resposta oficial no feed"> | <img src="telas/86-remover-publicacao.webp" width="240" alt="86 Remover publicação (professor)"> |
 |:---:|:---:|:---:|
-| **84** Aviso do professor no feed da aluna<br><sub>A aluna da turma vê o aviso na aba Avisos e recebe uma notificação.</sub> | **85** Resposta oficial no feed<br><sub>A resposta do professor a uma dúvida é a resposta oficial: a dúvida fica Resolvida e a aluna ganha +20 pontos e +15 XP, uma vez.</sub> | **86** Remover publicação (professor)<br><sub>No menu da publicação de um aluno, Remover publicação no lugar de Denunciar. O motivo é obrigatório.</sub> |
+| **84** Aviso do professor no feed da aluna<br><sub>A aluna da turma vê o aviso na aba Avisos e recebe uma notificação.</sub> | **85** Resposta oficial no feed<br><sub>A resposta do professor a uma dúvida é a resposta oficial: a dúvida fica Resolvida e a aluna ganha +20 pontos e +15 XP, uma vez.</sub> | **86** Remover publicação (professor)<br><sub>No menu da publicação de um aluno, Remover publicação no lugar de Denunciar. O motivo é obrigatório. Cancelar e Remover publicação ficam lado a lado, cada rótulo em uma linha.</sub> |
 
 | <img src="telas/82-feed-professor-computador.webp" width="380" alt="82 Feed do professor no computador"> |
 |:---:|
@@ -417,6 +417,7 @@ Lista objetiva do que mudou entre `Wireframes_Squad38_1.pdf` e o protótipo v8, 
 
 - **Mensagens diretas retiradas** (decisão da banca, v4). Saem do cabeçalho, da barra lateral e do Perfil. As telas 52, 53 e 54 viram "retirada (decisão da banca)", sem imagem. O texto "Mensagens e sobreposições do cabeçalho" vira "Sobreposições do cabeçalho" (Calendário, Notificações, Saldo), e o "Escopo do MVP" passa a dizer que as mensagens diretas (US01, P0) foram retiradas. A retenção por moderação continua no feed e no chat das salas.
 - **Imagens refeitas na v8**, pela demonstração em HTML único (`demonstração/Portal_do_Aluno.html`), em celular 390 × 844 px e computador 1440 × 900 px, @2x, tema claro. As telas 01 a 79 mantêm a numeração do PDF; todas as capturas mostram o cabeçalho sem o ícone de mensagens. O texto da introdução não diz mais "em Next.js": o app roda no Next e na demonstração, idênticos.
+- **Capturas refeitas depois do acabamento de 09/10/2026:** as telas **15, 23, 36, 49, 55, 70, 75 e 86** foram capturadas de novo, no mesmo estado e enquadramento, depois de ajustes de contraste e de layout dos botões do rodapé. As outras 103 não mudaram de aparência: a comparação de pixels com uma captura nova só achou diferenças de relógios, contagens regressivas e animações.
 - **Telas novas, de 80 a 115** (36 telas): Feed do professor (celular e computador), publicar aviso com destino, aviso no feed da aluna, resposta oficial, remover publicação, Moderação com decisão e contestação, contestação enviada, Estatísticas do aluno e do professor, Dúvidas do professor, atalhos do Painel, Publicar aviso e Nova atividade do Painel, detalhe do aluno, perfil público, modo apresentação e "Simular falhas", rodada de flashcards, entregar atividade, editar perfil, criar campeonato, tema escuro e Ranking no computador.
 - **Introdução de 3.1.1:** o cabeçalho tem calendário, notificações e saldo (sem "mensagens"); o seletor de espaço mostra Toda a escola, 9º Ano A e os clubes.
 
@@ -430,7 +431,10 @@ Lista objetiva do que mudou entre `Wireframes_Squad38_1.pdf` e o protótipo v8, 
 - **35 a 40:** a visibilidade no ranking (Público, Anônimo, Invisível) vale para os rankings; nos campeonatos em que o aluno se inscreve, o nome aparece aos participantes (o texto está na tela).
 - **41 a 45 (Loja):** o saldo no topo mostra os pontos e o número de trocas, com o aviso de que o XP não é gasto; o XP não aparece ao lado. A Loja abre pelo atalho do Perfil ou pelo botão "Ir para a Loja" do painel de saldo.
 - **46 a 51 (Perfil):** o Perfil tem **3 abas** (Publicações, Conquistas, Configurações). A aba "Estudo" virou a tela **Estatísticas** (`/estatisticas`), aberta pelo botão "Minhas estatísticas", que é novo no topo do Perfil (tela 50). Conquistas não mostram mais o domínio por disciplina. Configurações reúne Privacidade, Personalização, Aparência e Conta (com o interruptor "Modo apresentação").
-- **55:** o número do Calendário conta os compromissos dos próximos 7 dias. Os lembretes avisam 72 h, 24 h e 2 h antes.
+- **55:** o número do Calendário conta os compromissos dos próximos 7 dias. Os lembretes avisam 72 h, 24 h e 2 h antes. Os dias que já passaram ficam em cinza pleno (`--color-texto-2`), com contraste de 4,76 : 1, em vez de esmaecidos a 50%.
+- **15, 23 e 70:** a duração no botão "Iniciar foco" (tela 15) é branca, sem transparência (5,02 : 1 sobre o verde de ação). No chat da sala (telas 23 e 70), a hora das mensagens de sistema ("Ana entrou na sala · hh:mm") usa o cinza pleno (4,76 : 1), e a hora das minhas mensagens é branca plena (não aparece nas capturas). As horas mostradas são as do momento da captura.
+- **36:** a contagem nos filtros de Campeonatos (Em andamento, Inscrições, Encerrados) não é mais esmaecida.
+- **49, 75 e 86:** o rodapé dos modais não quebra mais o rótulo do botão. Em 390 px, "Baixar certificado (PDF)", "Enviar contestação" e "Remover publicação" cabem em uma linha; em 320 px os dois botões do rodapé empilham.
 - **58, 59 e 67 (Painel do professor):** sem o gráfico de Engajamento (os gráficos ficam em Estatísticas). Indicadores Ativos hoje, Estudo por aluno, Domínio médio, Em risco e Para corrigir; bloco "Comunidade e engajamento"; "Precisa de atenção" e "Para corrigir" lado a lado no computador; Destaques da semana e Atribuições recentes.
 - **62:** "Nova atividade" é um botão no cabeçalho da lista de Atividades.
 - **65:** a Moderação tem os indicadores Na fila, Urgentes e Decisões, as abas Publicações, Relatos e Histórico, o botão "Exportar histórico (CSV)", o selo "Contestada" e as remoções feitas pelo feed.

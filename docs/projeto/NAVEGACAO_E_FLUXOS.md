@@ -22,7 +22,7 @@ Especificação completa de arquitetura de informação, componentes de interfac
 | Forma | Como abrir | Rotas |
 | --- | --- | --- |
 | Next.js | `npm run dev`, ou `npm run build` e `npm start` | Endereços normais, como `/feed`. A rota `/` só existe aqui: redireciona para o login ou para a página inicial do perfil. |
-| Demonstração em HTML único | Abrir [`demonstração/Portal_do_Aluno.html`](../../demonstração/Portal_do_Aluno.html) (por `file://`). Gerada por `npm run demo` ([`scripts/demo/`](../../scripts/demo/)). | Por hash, como `#/feed`. São 20 rotas (as mesmas do Next, sem `/`). O título da aba acompanha a tela, como no Next (ex.: "Feed · Portal CEPI Expansão"); antes de o app carregar, o arquivo mostra "Portal do Aluno · CEPI". |
+| Demonstração em HTML único | Abrir [`demonstração/Portal_do_Aluno.html`](../../demonstração/Portal_do_Aluno.html) (por `file://`). Gerada por `npm run demo` ([`scripts/demo/`](../../scripts/demo/)). | Por hash, como `#/feed`. São 20 rotas (as mesmas do Next, sem `/`). O título da aba acompanha a tela, como no Next (ex.: "Feed · Portal CEPI Expansão"). Antes de o app carregar, e em telas sem título próprio, o arquivo mostra "Portal do Aluno · CEPI Expansão", o mesmo título padrão do Next. |
 
 ---
 
@@ -72,6 +72,7 @@ flowchart LR
 | **Barra lateral do aluno** (computador) | Agrupa as áreas, com o título de cada grupo visível. **Aprender:** Início, Sala de estudos, Salas coletivas, Missões. **Competir:** Ranking, Campeonatos. **Você:** Loja, Estatísticas, Perfil. No rodapé, a conta da pessoa abre um menu com Aparência (claro, escuro ou sistema), Meu perfil e Sair. Não existe item de Mensagens. |
 | **Cabeçalho fixo** (todas as telas do aluno) | **Celular e tablet:** logo do Colégio CEPI Expansão, o texto "Portal do Aluno" e o seletor do espaço ativo (Toda a escola, 9º Ano A, Clube de Robótica, Bilíngue Cultura Inglesa). À direita: ícone de **Calendário** (com o número de compromissos dos próximos 7 dias), **Notificações** (com contador de não lidas), o avatar que abre o Perfil (de 480 a 1023 px de largura) e o indicador do **saldo** (pontos e XP). **Computador:** a logo e o nome do portal ficam na barra lateral; o cabeçalho mantém o seletor de espaço, o calendário, as notificações e o saldo. Abaixo de 400 px o XP sai do botão de saldo (continua no painel "Seu saldo"). Não há ícone de mensagens (veja 4.12). |
 | **Painel "Seu saldo"** | Abre ao tocar no saldo. Mostra **Pontos** ("Vêm de participação. Trocados na Loja.") e **XP** ("Vem de mérito. Nunca é gasto."), o nível (ex.: "Nível 3 · Estudante", com os XP que faltam), os dias seguidos de estudo e o aviso "Gastar pontos na Loja não muda seu XP nem sua posição no ranking." Botões **Ir para a Loja** e **Ver ranking**. |
+| **Teclado nas abas e filtros** | As abas (Feed, Perfil, painel do professor), os filtros em pílula e os controles segmentados seguem o padrão ARIA de abas: **Tab** para só na aba ativa, **←** e **→** movem para a aba vizinha (do último volta ao primeiro), **Home** e **End** vão às pontas. A aba que recebe o foco pelas setas já fica selecionada. Detalhes no [Design System](./DESIGN_SYSTEM.md#navegação-por-teclado). |
 
 ### Rotas e acesso por perfil
 
@@ -183,7 +184,7 @@ No modo apresentação aparecem os atalhos "+1 progresso (demonstração)" e "Ma
 | **Visibilidade no ranking** | Seletor `Público` / `Anônimo` / `Invisível`, com a prévia de como os colegas veem a pessoa. No modo Invisível, o aluno sai das listas e só ele vê a própria posição. A visibilidade vale para os rankings; nos campeonatos em que a pessoa se inscreve, o nome aparece para os participantes. |
 | **Ranking de foco** | Mesma tela, com `Minha turma` e `Escola toda`, os minutos da semana e o resumo da posição. |
 | **Campeonatos** (`/campeonatos`) | Botão `Criar campeonato` (`Criar`, no celular); o destaque do próximo duelo (ex.: "Semifinal liberada — você × Sofia Andrade" com o botão `Jogar`); filtros `Em andamento`, `Inscrições`, `Encerrados` e `Meus`; cards com formato (Mata-mata, Pontos corridos, Interclasses), métrica (Duelos de quiz, Tempo de foco, XP), tipo (Oficial, Amistoso), participantes e prêmio; e os blocos **Sua campanha** e **Como se pontua**. |
-| **Detalhe do campeonato** | Organizador, prazo, prêmio, **Chaveamento** (mata-mata), classificação ou placar das turmas, inscritos, regras, certificados e tabela (PDF e planilha) e, para quem organiza, a **Gestão** (iniciar, encerrar e premiar, excluir). Nos pontos corridos de quiz há 1 rodada por dia (5 perguntas, cada acerto vale 10 pontos). Campeonato sem pontos termina sem campeão; o empate desempata por XP. |
+| **Detalhe do campeonato** | Organizador, prazo, prêmio, **Chaveamento** (mata-mata), classificação ou placar das turmas, inscritos, regras, certificados e tabela (PDF e planilha) e, para quem organiza, a **Gestão** (iniciar, encerrar e premiar, excluir). Nos pontos corridos de quiz há 1 rodada por dia (5 perguntas, cada acerto vale 10 pontos). O texto é o mesmo em Detalhes e no aviso acima do botão `Jogar rodada`: "Uma rodada por dia, de 5 perguntas: cada acerto vale 10 pontos." Depois de jogar, o aviso passa a "Você já jogou a rodada de hoje. A próxima abre amanhã." e o botão vira "Próxima rodada amanhã" (desativado). Campeonato sem pontos termina sem campeão; o empate desempata por XP. |
 
 ### 1.5 Perfil (Publicações, Conquistas, Configurações e Loja)
 
@@ -230,7 +231,7 @@ Rota `/estatisticas` ("Estatísticas": "Seus números de estudo, evolução e de
 | **Missões e medalhas** | Concluídas por semana (missões e atividades, últimas 8 semanas) e Medalhas conquistadas. |
 | **Relatório** | O botão `Baixar relatório (PDF)` gera o PDF com as seções visíveis. |
 
-Todo gráfico tem um resumo em texto para leitores de tela.
+Todo gráfico tem um resumo em texto para leitores de tela. As barras verticais são uma parada de Tab só (as setas, Home e End percorrem as barras). No celular, tocar ou arrastar na área do gráfico escolhe a barra sob o dedo, e a dica fica na tela até o próximo toque. Em "Por disciplina", cada disciplina tem uma cor fixa, sempre junto do nome ([Design System](./DESIGN_SYSTEM.md#cores-por-disciplina)).
 
 ### 1.8 Perfil público
 
@@ -489,7 +490,7 @@ flowchart TD
 ### 4.6 Inspeção de Conquistas (Medalhas)
 
 1. Na aba Perfil, abre a aba `Conquistas` e toca em qualquer medalha da galeria.
-2. Abre a modal informando o nome da medalha, o estado (**Conquistada** / **Ainda bloqueada**), a data de conquista ou o progresso atual e o critério de desbloqueio, com o lembrete de que medalhas vêm do mérito e não podem ser compradas. Medalha conquistada oferece `Baixar certificado (PDF)`.
+2. Abre a modal informando o nome da medalha, o estado (**Conquistada** / **Ainda bloqueada**), a data de conquista ou o progresso atual e o critério de desbloqueio, com o lembrete de que medalhas vêm do mérito e não podem ser compradas. Medalha conquistada oferece `Baixar certificado (PDF)`, ao lado de `Fechar` no rodapé da janela (em celular muito estreito, de 320 px, os dois botões empilham).
 
 ### 4.7 Sessão de Foco na Sala de Estudos
 
@@ -621,7 +622,7 @@ flowchart TD
 
 1. **Abertura.** No card de uma publicação de aluno, abre "Mais opções" e toca em `Remover publicação`.
 2. **Motivo.** Na janela "Remover publicação", lê o texto, escolhe o motivo (obrigatório: Bullying ou ofensa, Assédio, Conteúdo inadequado, Spam ou golpe, Fora do contexto escolar, Outro) e, se quiser, escreve uma observação (até 200 caracteres).
-3. **Confirmação.** Clica em `Remover publicação`.
+3. **Confirmação.** Clica em `Remover publicação`, no rodapé da janela, ao lado de `Cancelar` (em celular de 320 px os dois botões empilham).
 
 **Resultado.** A publicação some do feed para todos, nas duas abas. O autor recebe a notificação "Sua publicação foi removida", com o motivo. A decisão fica registrada em Moderação › Histórico, como "Removida no feed", e conta nas **Decisões**. Publicações de professores e da coordenação não se removem por aqui. Nenhuma punição é aplicada automaticamente.
 
@@ -735,7 +736,8 @@ Lista objetiva do que mudou entre `Navegacao_e_Fluxos_Squad38_1.pdf` e o protót
 
 - Mensagens diretas retiradas (decisão da banca, v4): saem o ícone do cabeçalho, o item "Mensagens" da barra lateral (grupo Você), o atalho em Perfil → Configurações, a seção 1.6 "Mensagens", o fluxo 4.12 (vira "retirado") e a linha da tabela de escopo ("Retirada").
 - Guarda de rotas única no cliente ([`src/lib/guarda.ts`](../../src/lib/guarda.ts)), sem `proxy.ts` nem cookie de papel. Em 4.1, "redirecionado antes de a página aparecer" vira: enquanto a guarda decide, aparece o esqueleto e a página protegida nunca monta. `/feed`, `/estudos/salas`, `/campeonatos` e `/pessoas` são compartilhadas pelos dois perfis. O professor em rota inexistente vê a página 404.
-- O app roda no Next (`npm run dev` / `npm start`) e na demonstração em HTML único (`demonstração/Portal_do_Aluno.html`, gerada por `npm run demo`, rotas por hash). A rota `/` só existe no Next; na demo, o título da aba acompanha a tela (o `<title>` do arquivo, antes de o app carregar, é "Portal do Aluno · CEPI"). São 21 páginas no Next e 20 rotas na demo.
+- O app roda no Next (`npm run dev` / `npm start`) e na demonstração em HTML único (`demonstração/Portal_do_Aluno.html`, gerada por `npm run demo`, rotas por hash). A rota `/` só existe no Next; na demo, o título da aba acompanha a tela. O `<title>` do arquivo, antes de o app carregar, é "Portal do Aluno · CEPI Expansão", igual ao título padrão do Next: o gerador ([`scripts/demo/build.mjs`](../../scripts/demo/build.mjs)) lê o nome da escola de [`src/data/escola.ts`](../../src/data/escola.ts) (`ESCOLA.curto`), a mesma fonte do app. São 21 páginas no Next e 20 rotas na demo.
+- Teclado nas abas: abas, chips de filtro e controles segmentados trocam com ← e →, Home e End, e só a aba ativa entra no Tab (o PDF não tratava teclado). Rodapés de janela: os botões empilham em vez de quebrar o rótulo quando não cabem lado a lado (telas 49 e 86).
 - Sem ranking entre colégios. Os gráficos do aluno ficam em Estatísticas (`/estatisticas`) e os da turma em `/professor/estatisticas`.
 - Novas seções: Rotas e acesso por perfil, 1.7 Estatísticas do aluno, 1.8 Perfil público, 1.9 Estados de tela, 2.x numeradas para o professor.
 
@@ -776,7 +778,7 @@ Lista objetiva do que mudou entre `Navegacao_e_Fluxos_Squad38_1.pdf` e o protót
 **1.4 Ranking e campeonatos**
 
 - A visibilidade (Público/Anônimo/Invisível) vale para os rankings; nos campeonatos em que o aluno se inscreve, o nome aparece aos participantes (texto na tela).
-- Campeonatos: filtro `Meus`, detalhe com chaveamento, certificados e gestão. Pontos corridos têm 1 rodada por dia; campeonato sem pontos termina sem campeão; empate desempata por XP.
+- Campeonatos: filtro `Meus`, detalhe com chaveamento, certificados e gestão. Pontos corridos de quiz têm 1 rodada por dia, de 5 perguntas, com 10 pontos por acerto (a tela diz o mesmo em Detalhes e no aviso do botão `Jogar rodada`); campeonato sem pontos termina sem campeão; empate desempata por XP.
 
 **1.5 Perfil e Loja**
 
@@ -811,7 +813,7 @@ Lista objetiva do que mudou entre `Navegacao_e_Fluxos_Squad38_1.pdf` e o protót
 - **4.2** o card fica destacado por alguns segundos.
 - **4.3** ">15 caracteres" vira "15 ou mais"; aviso quando a IA está fora do ar; notificação ao professor.
 - **4.4** sem saldo, a frase é "Saldo insuficiente: você possui X pontos e este item requer Y pontos." e o botão fica desativado; vouchers podem ser trocados de novo.
-- **4.6** medalha conquistada oferece o certificado em PDF.
+- **4.6** medalha conquistada oferece o certificado em PDF (botão ao lado de `Fechar`).
 - **4.7** regra de saída da tela (5 min) e "Foco perdido".
 - **4.8** os minutos contam desde a entrada.
 - **4.9** "Jogar" abre o duelo direto; sair no meio conta a partida como derrota.
