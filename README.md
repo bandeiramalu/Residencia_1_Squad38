@@ -1,6 +1,28 @@
 # Portal do Aluno · CEPI Expansão
 
-Rede social educacional integrada ao portal do [Colégio CEPI Expansão](https://www.cepiexpansao.com.br) (Aracaju · SE) — projeto da **Residência de Software, Squad 38**.
+> **E se estudar fosse o momento do dia que o aluno mais quer abrir no celular?**
+
+## O problema
+
+Todo professor conhece a cena: o aluno tem o celular na mão durante horas, mas é o último lugar onde ele pensa em estudar. O feed que o prende é feito para distrair. A dúvida que ele teve às nove da noite morre sozinha, porque ninguém para perguntar no meio da aula uma coisa que "todo mundo já deve saber". O professor, por sua vez, só descobre quem estava perdido quando a nota da prova já saiu, tarde demais para ajudar. E a escola tem tudo para ser uma comunidade, mas cada turma, material e aviso mora num canto diferente.
+
+O resultado é conhecido: dúvida que não é tirada vira lacuna, lacuna vira desânimo, e desânimo vira o aluno que "não é bom em exatas". Ele não é. Faltou um lugar onde perguntar fosse fácil, estudar fosse leve e aparecer fosse recompensado.
+
+## A ideia
+
+O **Portal do Aluno** é a rede social do Colégio CEPI Expansão, mas feita para o que a escola quer ver acontecendo. Ele pega aquilo que já faz o aluno voltar todos os dias a um aplicativo (ver os amigos, subir de posição, ganhar uma conquista, ter um desafio esperando) e põe tudo a serviço do estudo.
+
+- **Perguntar deixa de dar vergonha.** A dúvida vai para o feed da escola. Antes de postar, o portal mostra se alguém já perguntou algo parecido. Colegas e professores respondem, e a melhor resposta ganha destaque e vira consulta para quem vier depois.
+- **Estudar vira hábito, não sacrifício.** O aluno liga o timer de foco, estuda em sala coletiva com os colegas "ao vivo" e vê a sequência de dias crescer. Missões e flashcards transformam a revisão em jogo. A cada passo vêm pontos, medalhas e uma loja de recompensas para gastar o que ganhou.
+- **A turma joga junto.** Campeonatos internos, duelos de quiz e ranking entre turmas dão ao aluno uma razão para provar que sabe, e uma razão para convidar o colega para estudar com ele.
+- **O professor enxerga antes de a nota cair.** Em vez de adivinhar, ele vê quem está estudando, quem sumiu, quais dúvidas estão sem resposta e em que assunto a turma toda está travada. Publica avisos e materiais direto para a turma certa, corrige atividades e premia quem merece, tudo no mesmo lugar.
+- **A escola ganha uma comunidade.** Avisos, materiais, calendário, atividades e conversas deixam de morar em cinco canais diferentes e passam a viver em um só, com moderação para manter o ambiente seguro.
+
+Para a aluna, estudar passa a render algo visível. Para o professor, o acompanhamento deixa de ser intuição e vira informação. Para a escola, o celular que sempre foi o inimigo da aula vira aliado.
+
+Projeto da **Residência de Software, Squad 38**, integrado ao portal do [Colégio CEPI Expansão](https://www.cepiexpansao.com.br) (Aracaju · SE).
+
+## O que já existe
 
 Dois perfis de acesso (**aluno** e **professor**, os dois no mesmo **feed da escola**) com **sala de estudos e métricas**, **salas coletivas**, **campeonatos internos**, **estatísticas**, feed de dúvidas com busca por conceitos e sugestão de dúvidas parecidas, missões e flashcards, loja de recompensas, **arquivos reais** (PDF, imagem e documentos), relatórios em PDF/CSV, calendário com lembretes e **tema claro/escuro**. Tudo roda no navegador com dados de demonstração, e o caminho do backend já está desenhado.
 
